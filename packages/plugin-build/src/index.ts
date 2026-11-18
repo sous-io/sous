@@ -112,7 +112,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
                 summary: "Compile this project's outputs and remove the ones its config no longer produces",
                 input: buildInputSchema,
                 cli: {
-                    examples: ["sous build", "sous build --no-prune", "sous build --rebuild", "sous build --dry-run"],
+                    examples: ["sous build", "sous build --no-prune", "sous build --rebuild", "sous build --dry-run", "sous build --keep-going"],
                     flags: { watch: { short: "w" }, changedFiles: { hidden: true }, reportRemoved: { hidden: true } },
                 },
                 agent: {

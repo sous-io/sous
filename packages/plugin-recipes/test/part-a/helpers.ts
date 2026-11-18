@@ -74,7 +74,7 @@ export function builtConfig(
 ): BuiltConfig {
     const services = serviceReader(options.services ?? {});
 
-    return {
+    const config: BuiltConfig = {
         get: ((path: string | readonly (string | number)[]) => at(data, path)) as BuiltConfig["get"],
         has: (path) => at(data, path as string) !== undefined,
         value: () => data,
@@ -88,11 +88,16 @@ export function builtConfig(
             const key = Array.isArray(path) ? path.join(".") : String(path);
 
             return (options.layers?.[key] ?? []).map(
-                (contributor): ConfigLayer => ({ contributor, plugin: "test", patch: { op: "setKey", path: "", key: "x", value: null } as never, helpers: [], applyOrder: 0, actualApplyOrder: 0 }),
+                (contributor): ConfigLayer => ({ contributor, plugin: "test", patch: { op: "setKey", path: "", key: "x", value: null } as never, helpers: [], applyOrder: 0, actualApplyOrder: 0, build: "" }),
             );
         },
         contributions: () => [],
+        harness: "",
+        harnesses: [],
+        forHarness: (id) => (id === "" ? config : undefined),
     };
+
+    return config;
 }
 
 /** An in-memory `confd.managed`: each file is a plain object. */

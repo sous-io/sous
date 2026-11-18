@@ -22,6 +22,15 @@ export const HTML_COMMENTS: CommentStyle = Object.freeze({ open: "<!--", close: 
 /** `// comment`: JavaScript, TypeScript, JSONC and the C family. */
 export const SLASH_COMMENTS: CommentStyle = Object.freeze({ open: "//" });
 
+/** `/* comment *\/`: CSS. */
+export const CSS_COMMENTS: CommentStyle = Object.freeze({ open: "/*", close: "*/" });
+
+/** `-- comment`: SQL and Lua. */
+export const DASH_COMMENTS: CommentStyle = Object.freeze({ open: "--" });
+
+/** `; comment`: INI files. */
+export const SEMICOLON_COMMENTS: CommentStyle = Object.freeze({ open: ";" });
+
 /**
  * Where a line or a block goes when it is added. `"end"` is the default. `after` and `before` name
  * a line already in the file; when it is not there, the new line goes at the end. `line` is a
@@ -139,6 +148,61 @@ export class LinesDocument {
         if (added.length > 0) {
             this.splice(this.indexFor(position), 0, added);
         }
+    }
+
+    /**
+     * Replaces `count` lines from index `start` (from 0) with `lines`. Lines outside that range
+     * keep their text and line endings byte for byte; a file with no final line break keeps having
+     * none.
+     *
+     * ```ts
+     * file.replaceLines(2, 1, []);              // removes the third line
+     * file.replaceLines(0, 0, ["# generated"]); // adds a first line
+     * ```
+     *
+     * @throws RangeError when the range is outside the file.
+     */
+    replaceLines(start: number, count: number, lines: readonly string[]): void {
+        checkLines(lines);
+
+        if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 0 || start + count > this.entries.length) {
+            throw new RangeError(`Lines ${start} to ${start + count} are outside a file of ${this.entries.length} lines.`);
+        }
+
+        if (count === 0 && lines.length === 0) {
+            return;
+        }
+
+        this.splice(start, count, [...lines]);
+    }
+
+    /**
+     * Makes the file's lines these, changing only the lines between the first and the last that
+     * differ, so every other line keeps its text and line ending byte for byte.
+     *
+     * ```ts
+     * file.setLines([...file.lines(), "dist/"]);   // the same as file.insert("dist/")
+     * ```
+     */
+    setLines(lines: readonly string[]): void {
+        const current = this.lines();
+        let prefix = 0;
+
+        while (prefix < current.length && prefix < lines.length && current[prefix] === lines[prefix]) {
+            prefix++;
+        }
+
+        let suffix = 0;
+
+        while (
+            suffix < current.length - prefix
+            && suffix < lines.length - prefix
+            && current[current.length - 1 - suffix] === lines[lines.length - 1 - suffix]
+        ) {
+            suffix++;
+        }
+
+        this.replaceLines(prefix, current.length - prefix - suffix, lines.slice(prefix, lines.length - suffix));
     }
 
     /** Removes every line equal to this one. Returns how many it removed. */

@@ -6,7 +6,11 @@ import { initPlugin, PLUGIN_NAME } from "../src/index.js";
 async function register(): Promise<IntentDefinition[]> {
     const intents: IntentDefinition[] = [];
 
-    await initPlugin.register({ plugin: { name: PLUGIN_NAME }, intents: { add: (definition: IntentDefinition) => void intents.push(definition) } } as unknown as Sous);
+    await initPlugin.register({
+        plugin: { name: PLUGIN_NAME },
+        intents: { add: (definition: IntentDefinition) => void intents.push(definition) },
+        entities: { add: () => {} },
+    } as unknown as Sous);
 
     return intents;
 }

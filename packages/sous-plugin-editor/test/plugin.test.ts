@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect as check, it } from "vitest";
 import { BufferedReporter, definePlugin, jsonSchema, type ConfigBuilder, type PluginDefinition } from "@sous-io/plugin-api";
 import { createEngine } from "@sous-io/core";
+import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import editorPlugin, { editor, expect } from "../src/index.js";
 import type { EditorApplyResult } from "../src/types.js";
 import { makeTmpDir, read, write } from "./helpers.js";
@@ -53,7 +54,7 @@ function makeEngine(...plugins: PluginDefinition[]) {
     fs.mkdirSync(sousDir, { recursive: true });
 
     const engine = createEngine({
-        builtIns: [...standIns, editorPlugin, runner, ...plugins],
+        builtIns: [...standIns, doctorPlugin, editorPlugin, runner, ...plugins],
         reporter,
         project: { root: tmp.path, sousDir, configPath: undefined, confDir: path.join(sousDir, "conf.d") },
         cwd: tmp.path,
@@ -182,5 +183,155 @@ describe("editor.apply", () => {
 
         check(read(tmp.path, ".claude/settings.json")).not.toContain("MODE");
         check(read(tmp.path, ".claude/settings.json")).toMatch(/"allow": \[\s*"x"\s*\]/);
+    });
+
+    /**
+     * A project set up before the editor existed has no history line in `.sous/.gitignore`'s
+     * managed block: the first run that applies an edit adds it and `backups/`; a dry run, and a
+     * project that declares no edit and has no history, gain nothing.
+     *
+     * editor.apply with one entry -> host.gitignore.add(".sous/.gitignore", ["sous.edits.json", "backups/"])
+     */
+    it("should add the history file and backups/ to .sous/.gitignore once the editor writes", async () => {
+        const added: Array<{ file: string; lines: readonly string[] }> = [];
+        const host = definePlugin({
+            name: "test-host",
+            version: "1.0.0",
+            register(sous) {
+                sous.services.add("host.gitignore", () => ({ add: async (file: string, lines: readonly string[]) => void added.push({ file, lines }) }) as never, {
+                    lifetime: "singleton",
+                });
+            },
+        });
+        let declare = false;
+        const { engine } = makeEngine(
+            host,
+            plugin("sous-plugin-lines", (config) => {
+                if (declare) config.atPath("editor.edits").appendValue({ file: "a.json", set: { path: "a", value: 1 } });
+            }),
+        );
+
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: {} });
+        check(added).toEqual([]);
+
+        declare = true;
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: { dryRun: true } });
+        check(added).toEqual([]);
+
+        await engine.submit({ intent: "test.apply", input: {} });
+        check(added).toEqual([{ file: path.join(tmp.path, ".sous", ".gitignore"), lines: ["sous.edits.json", "backups/"] }]);
+    });
+
+    /**
+     * A YAML file, a Markdown file's frontmatter and a .gitignore are each edited through the
+     * document library: the edit changes only what it names, every other byte stays (comments,
+     * the Markdown body, a CRLF line), and undoing puts each file back byte for byte.
+     *
+     * .pre-commit-config.yaml   set default_stages: [pre-commit]
+     * .claude/agents/review.md  set model: opus (frontmatter)
+     * .gitignore                ensureLine "dist/", ensureBlock "kw"
+     */
+    it("should edit YAML, frontmatter and a .gitignore through the library, keeping untouched bytes", async () => {
+        const yaml = "# hooks for this repo\nrepos:\n  - repo: local   # ours\n    hooks: []\n";
+        const markdown = "---\nname: review\nmodel: sonnet # cheap\n---\n# Review\n\nKeep  this   body\r\nexactly.\n";
+        const ignore = "node_modules/\r\n# local files\n.env.local";
+
+        write(tmp.path, ".pre-commit-config.yaml", yaml);
+        write(tmp.path, ".claude/agents/review.md", markdown);
+        write(tmp.path, ".gitignore", ignore);
+
+        let declare = true;
+        const { engine } = makeEngine(
+            plugin("sous-plugin-formats", (config) => {
+                if (!declare) return;
+
+                config.atPath("editor.edits").appendValue({ file: ".pre-commit-config.yaml", set: { path: "default_stages", value: ["pre-commit"] } });
+                config.atPath("editor.edits").appendValue({ file: ".claude/agents/review.md", set: { path: "model", value: "opus" } });
+                config.atPath("editor.edits").appendValue({
+                    file: ".gitignore",
+                    ensureLine: { line: "dist/", position: { after: "node_modules/" } },
+                    ensureBlock: { name: "kw", content: "docs/context/.kw-session-*" },
+                });
+            }),
+        );
+
+        await engine.buildConfig();
+
+        const result = (await engine.submit({ intent: "test.apply", input: {} })).toPlain() as unknown as EditorApplyResult;
+
+        check(result.ok).toBe(true);
+        check(read(tmp.path, ".pre-commit-config.yaml")).toBe(`${yaml}default_stages:\n  - pre-commit\n`);
+        check(read(tmp.path, ".claude/agents/review.md")).toBe("---\nname: review\nmodel: opus # cheap\n---\n# Review\n\nKeep  this   body\r\nexactly.\n");
+        check(read(tmp.path, ".gitignore")).toBe(
+            [
+                "node_modules/\r\n",
+                "dist/\r\n",
+                "# local files\n",
+                ".env.local\r\n",
+                "\r\n",
+                "# >>> sous managed: kw (do not edit between these markers)\r\n",
+                "docs/context/.kw-session-*\r\n",
+                "# <<< sous managed: kw",
+            ].join(""),
+        );
+
+        // A second run changes nothing.
+        const again = (await engine.submit({ intent: "test.apply", input: {} })).toPlain() as unknown as EditorApplyResult;
+
+        check(again.files.every((file) => file.action === "unchanged")).toBe(true);
+
+        declare = false;
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: {} });
+
+        check(read(tmp.path, ".pre-commit-config.yaml")).toBe(yaml);
+        check(read(tmp.path, ".claude/agents/review.md")).toBe(markdown);
+        check(read(tmp.path, ".gitignore")).toBe(ignore);
+    });
+});
+
+describe("the assertions doctor check", () => {
+    /**
+     * `sous doctor --only assertions` works out the edits and checks every assertion without
+     * writing: a failed assertion at level error is a problem, and the files stay as they were.
+     *
+     * assert a.json includes "x" (it does not) -> problem; a.json unchanged
+     */
+    it("should report a failing assertion as a problem without writing anything", async () => {
+        write(tmp.path, "a.json", '{ "list": [] }\n');
+
+        let holds = false;
+        const { engine } = makeEngine(
+            plugin("sous-plugin-asserts", (config) => {
+                config.atPath("editor.edits").appendValue({ file: "a.json", set: { path: "other", value: 1 } });
+                config.atPath("editor.edits").appendValue({ file: "a.json", assert: { path: "list", includes: "x", message: "x must be listed." } });
+
+                if (holds) config.atPath("editor.edits").appendValue({ file: "a.json", ensureIncludes: { path: "list", items: ["x"] } });
+            }),
+        );
+
+        await engine.buildConfig();
+
+        const report = (await engine.submit({ intent: "doctor", input: { only: ["assertions"], dryRun: true } })).toPlain() as unknown as {
+            checks: Array<{ id: string; found: { status: string; details?: string[] } }>;
+        };
+
+        check(report.checks).toHaveLength(1);
+        check(report.checks[0]!.found.status).toBe("problem");
+        check(report.checks[0]!.found.details?.[0]).toContain("a.json");
+        check(read(tmp.path, "a.json")).toBe('{ "list": [] }\n');
+        check(fs.existsSync(path.join(tmp.path, ".sous", "sous.edits.json"))).toBe(false);
+
+        holds = true;
+        await engine.buildConfig();
+
+        const fixed = (await engine.submit({ intent: "doctor", input: { only: ["assertions"], dryRun: true } })).toPlain() as unknown as {
+            checks: Array<{ found: { status: string } }>;
+        };
+
+        check(fixed.checks[0]!.found.status).toBe("ok");
+        check(read(tmp.path, "a.json")).toBe('{ "list": [] }\n');
     });
 });

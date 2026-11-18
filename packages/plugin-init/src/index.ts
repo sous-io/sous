@@ -8,6 +8,7 @@ import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin
 import type {} from "@sous-io/plugin-build/types";
 import type {} from "@sous-io/plugin-config-files/types";
 import type {} from "@sous-io/plugin-host/types";
+import { gitHooksCheck } from "./doctor-check.js";
 import type { InitHooksInput, InitInput } from "./types.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -55,9 +56,12 @@ export const initPlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-config-files": `^${packageJson.version}`,
         "@sous-io/plugin-host": `^${packageJson.version}`,
         "@sous-io/plugin-update": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 
     register(sous) {
+        sous.entities.add("doctor-check", gitHooksCheck);
+
         sous.intents.add({
             intent: "init",
             summary: "Set a project up for sous: import its agent files into a new .sous/ directory, install the git hooks, then run the first build",

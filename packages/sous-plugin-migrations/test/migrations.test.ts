@@ -1,4 +1,4 @@
-import { IntentOutputs, scriptedPrompter, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, scriptedPrompter, SousError, type Context } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import type { MigrationDefinition, MigrationsRunResult } from "../src/types.js";
 import { emptyLock, engineWith, type LockState } from "./helpers.js";
@@ -274,5 +274,29 @@ describe("the doctor check for migrations", () => {
         expect(result.problems).toBe(0);
         expect(result.checks[0]?.found.status).toBe("pending");
         expect(result.checks[0]?.found.details).toEqual([`${whereQuestion.message} Answer it with --answer memories.location=<move|keep> (--yes takes move).`]);
+    });
+
+    /**
+     * A config that does not load may be what a migration repairs (an option a newer sous
+     * removed): sous doctor still finds and runs the pending migrations, and migrations.run runs
+     * in spite of the config error.
+     *
+     * config fails; sous doctor --only migrations  // -> the migration runs
+     */
+    it("should run pending migrations when the config does not load", async () => {
+        const log: string[] = [];
+        const lock: LockState = { lockfile: emptyLock("1.0.0") };
+        const failing = (sous: Parameters<NonNullable<Parameters<typeof engineWith>[0]["extra"]>>[0]) =>
+            sous.config.contribute({
+                id: "removed-option",
+                contribute() {
+                    throw new ConfigError("compilation.targets[0].outputs[0]._if: '_if' was removed.");
+                },
+            });
+        const { submit } = await engineWith({ lock, migrations: [recording(log, "1.1.0")], extra: failing, configFails: true });
+        const result = (await submit("doctor", { only: ["migrations"] })).toPlain() as { checks: Array<{ id: string; fix?: { result: string } }> };
+
+        expect(log).toEqual(["1.1.0"]);
+        expect(result.checks[0]).toMatchObject({ id: "migrations", fix: { result: "applied" } });
     });
 });

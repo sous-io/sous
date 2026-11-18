@@ -75,11 +75,19 @@ export const migrationsCheck: DoctorCheckEntity = {
     description: "Every migration for this version of sous has run",
     confirm: false,
     check(ctx, run) {
-        if (run.configFailed) {
-            return { status: "skipped", summary: "Skipped: the config did not load." };
-        }
+        // A config that does not load may be what a migration repairs (an option a newer sous
+        // removed), so the check still looks; only when the lockfile cannot be read does it skip.
+        let pending: MigrationEntity[];
 
-        const pending = (ctx.services.get("migrations") as MigrationsService).pending();
+        try {
+            pending = (ctx.services.get("migrations") as MigrationsService).pending();
+        } catch (error) {
+            if (run.configFailed) {
+                return { status: "skipped", summary: "Skipped: the config did not load." };
+            }
+
+            throw error;
+        }
 
         if (pending.length === 0) {
             return { status: "ok" };
@@ -170,6 +178,8 @@ export const migrationsPlugin: PluginDefinition = definePlugin({
             summary: "Run the migrations from newer versions of sous that this project has not run",
             input: runInput,
             requiresProject: true,
+            // A migration may be what makes the config load again (an option a newer sous removed).
+            toleratesConfigErrors: true,
             cli: {
                 command: ["migrations", "run"],
                 // `sous upgrade` runs it in the new copy, and `sous doctor` runs it here; people use `sous doctor`.

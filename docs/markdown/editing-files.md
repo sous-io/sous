@@ -69,8 +69,9 @@ order, or one operation more than once, use an `operations` list:
 
 ## What Sous does on each build
 
-- **It applies every declared edit**, after compiling. If someone changed a value Sous sets, Sous puts
-  it back; to keep a different value, declare it in the project's own config, which comes after every
+- **It applies every declared edit**, after compiling and pruning (so a recipe can edit a file the
+  compiler writes), and before the recipes' `afterBuild` handlers. If someone changed a value Sous
+  sets, Sous puts it back; to keep a different value, declare it in the project's own config, which comes after every
   recipe's and so wins.
 - **It undoes an edit that is no longer declared:** the recipe was unsubscribed, the plugin removed, a
   condition stopped matching. A value Sous set goes back to what it was before; an item Sous added to
@@ -80,6 +81,8 @@ order, or one operation more than once, use an `operations` list:
   when nothing declares it any more.
 - **A file Sous cannot parse is skipped** with a warning and left exactly as it is.
 - **It says what it did only in debug output** (`--log-level debug`). Ordinary builds stay quiet.
+- **`sous build --dry-run`** works out every edit and checks every assertion, and writes nothing.
+  `sous doctor` checks the assertions the same way.
 
 The record of what Sous applied is `.sous/sous.edits.json`, and backups go to
 `.sous/backups/<date>/<time>/<path>`. Both stay out of git.
@@ -134,6 +137,7 @@ action once, when the entry is first applied.
 | 25 | `replaceWhere`, `updateWhere`, `mergeWhere` | `where`, `item` or `value` | |
 | 30 | `upsertWhere` | `match`, `item` | `ensureItemWhere` |
 | 40 | `ensureIncludes` | `items` (or `item`), `position` | `appendIfMissing`, `union`; `ensureFirst`, `ensureLast`, `ensureAt` (with `index`) |
+| 40 | `prependIfMissing` | `items` (or `item`) | |
 | 40 | `append` (action) | `item` or `items`, `position` | `prepend`, `insertAt` (with `index`), `insertBefore`, `insertAfter` |
 | 50 | `remove` | `values` or `where` | `removeValues`, `ensureExcludes`, `removeValue`; `removeWhere`, `ensureNoItemWhere` |
 | 50 | `removeAt` (action) | `index` | |
@@ -148,6 +152,8 @@ action once, when the entry is first applied.
 | 80 | `dedupe` | `by` | `ensureUnique`, `dedupeBy` |
 | 90 | `sort` | `by`, `descending` | `ensureSorted`, `sortBy` |
 | 95 | `sortKeys` | | |
+| 95 | `moveKeyBefore`, `moveKeyAfter` | `key`, `anchor` | |
+| 95 | `moveKeyFirst`, `moveKeyLast` | `key` | |
 
 Every name in the last column is the same operation with an option set, so these two entries mean
 the same thing:
@@ -170,7 +176,13 @@ the same thing:
 moving it if needed. For `ensureLine` a position only says where a missing line goes; a line already
 anywhere in the file is left alone, and an `after` or `before` line that is not found means the end.
 
-`ensureBlock` keeps a block between two marker lines, written in the file's comment style:
+`prependIfMissing` puts each missing item at the start, in the order given; an item already in the
+list stays where it is (`ensureFirst` would move it). The key moves (`moveKeyFirst` and the others)
+change nothing when the key or the anchor is missing. Like `sortKeys`, they are not undone when the
+entry goes away, since an order is not a value.
+
+`ensureBlock` keeps a block between two marker lines, written in the file's comment style (`#`,
+`//`, `<!-- -->`, `/* */`, `--` or `;`, from the file's name, or `comment` to choose):
 
 ```text
 # >>> sous managed: kw (do not edit between these markers)
@@ -178,9 +190,14 @@ docs/context/.kw-session-*
 # <<< sous managed: kw
 ```
 
-**Formats:** JSON, JSONC (comments, key order and layout are kept), YAML, the YAML frontmatter of a
-Markdown file (the body is kept as it is), and any other file as plain text lines. TOML files are
-skipped with a warning for now.
+A block added at the end of a file gets a blank line before it. If a marker line is missing or
+appears twice, Sous does not guess where the block ends: it skips the edit with a warning, and the
+block's assertion fails.
+
+**Formats:** JSON, JSONC (comments, key order and layout are kept; a `tsconfig*.json` or a `.json`
+file in `.vscode/` is read as JSONC), YAML (comments are kept), the YAML frontmatter of a Markdown
+file (the body is kept byte for byte), and any other file as plain text lines, each keeping its own
+line ending. TOML files are skipped with a warning for now.
 
 ## Assertions
 
@@ -202,9 +219,12 @@ edits:
       message: Codex cuts project instructions off at 32 KiB.
 ```
 
-- `level: warn` prints a warning instead of failing. `--ignore-failed-assertions` lets a build
-  finish in spite of failed assertions, still printing each as a warning.
-- When an assertion fails, the file is not written, and Sous shows what changed the value:
+- `level: warn` prints a warning instead of failing. `sous build --ignore-failed-assertions` (or
+  `--keep-going`, which also covers failed checks) lets a build finish in spite of failed
+  assertions, still printing each as a warning, and the build ends as successful. There is no
+  setting that makes this permanent.
+- When an assertion at level error fails, that file is not written; every other file is, and the
+  build then ends with exit code 1. Sous shows what changed the value:
 
 ```text
 Assertion failed in .claude/settings.json at permissions.allow

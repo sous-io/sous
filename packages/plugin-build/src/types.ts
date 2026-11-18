@@ -10,6 +10,8 @@
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
 import type { LockDiff, RestoreReport, SkippedRecipe } from "@sous-io/plugin-recipes/types";
+import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
+import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 
 // ---------------------------------------------------------------------------------------------
 // Config keys: watch, runtimeContext
@@ -150,6 +152,12 @@ export interface BuildInput {
      * partial rebuild). Agent addition: watch mode needs a way to ask for one.
      */
     changedFiles?: string[];
+    /** A failed assertion at level error is printed as a warning, and the build ends as successful. */
+    ignoreFailedAssertions?: boolean;
+    /** An error a `check` handler reports is printed as a warning, and the build goes on. */
+    ignoreFailedChecks?: boolean;
+    /** Both of the above. */
+    keepGoing?: boolean;
 }
 
 /** The result of `build`. */
@@ -159,6 +167,13 @@ export interface BuildResult {
     readonly compiled?: CompileResult;
     readonly pruned?: CompilerPruneResult;
     readonly runtimeContext?: WrittenFile;
+    /** What the `check` handlers found, when they ran. */
+    readonly checks?: HandlerRunResult;
+    /** What the `beforeBuild` and `afterBuild` handlers reported, when they ran. */
+    readonly beforeBuild?: HandlerRunResult;
+    readonly afterBuild?: HandlerRunResult;
+    /** What `editor.apply` did, when it ran. */
+    readonly edits?: EditorApplyResult;
     readonly dryRun: boolean;
     /** True when watch mode was started. */
     readonly watching: boolean;
@@ -215,6 +230,8 @@ export interface BuildWatchInput {
     rebuild?: boolean;
     noPrune?: boolean;
     dryRun?: boolean;
+    ignoreFailedAssertions?: boolean;
+    ignoreFailedChecks?: boolean;
 }
 
 /** The result of `build.watch`, when it stops. */

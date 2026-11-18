@@ -250,6 +250,33 @@ reported; the removal stands. A recipe or plugin removed by hand gets no call:
 
 ## Changes
 
+### 2026-11-18: The build order, as built
+
+The `build` intent (`plugin-build`) now runs the purposes in the order above. What the agent decided
+while joining the pieces, not yet reviewed by Luke:
+
+- The `check` handlers run after the recipes are prepared (pinned, fetched, restored), since a
+  recipe's handlers are in its fetched files, and before anything in the project is written:
+  preparing writes only the lockfile and the store.
+- `--dry-run` runs the `check` handlers, which only report, and no `beforeBuild` or `afterBuild`
+  handler, which act; `editor.apply` runs with `dryRun`.
+- A compile error skips `editor.apply` and `afterBuild` (as it already skipped the prune).
+- `sous prune` (a build that compiles nothing) runs no handler and no edit.
+- Watch mode runs every step on each rebuild, a partial one included, with the flags it started
+  with. A partial rebuild may rewrite a file a recipe edits, so the editor must run after it.
+- The handlers and the editor run only when their plugins are loaded: `plugin-build` asks whether
+  the intent exists, so a build without them is the compiler alone.
+- The flags `--ignore-failed-checks`, `--ignore-failed-assertions` and `--keep-going` are on
+  `sous build` only. The other commands that build (`init`, `launch`, `subscription add`) pass none,
+  so a failed check stops them too. No other command shares the build's flag set in the code.
+
+### 2026-11-18: `sous doctor` runs the check handlers
+
+The handlers plugin adds the `doctor-check` `check-handlers` (order 600), which runs the `check`
+handlers with nothing printed and reports their errors as a problem and their warnings as a
+warning, one line each. It has no fix. The plugin now depends on `sous-plugin-doctor`, since an
+entity of a kind no plugin defines is warned about. The agent's choice of form.
+
 ### 2026-11-18: Written
 
 The specification of the handlers, from the working spec Luke settled on 2026-11-17

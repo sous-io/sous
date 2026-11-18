@@ -104,12 +104,17 @@ export class ServiceContainer implements ServiceReader {
         this.creating.add(provider.name);
 
         try {
+            const host = this.host;
+            // `project` is read when used, not when the service is made: a singleton made before
+            // `sous init` wrote the project must see the project `ctx.refreshConfig` then found.
             const context = (plugin: string): ServiceContext => ({
                 plugin,
                 config: this.scope.config,
                 services: this,
                 entities: this.scope.entities,
-                project: this.host.project,
+                get project() {
+                    return host.project;
+                },
                 env: this.host.env,
                 cwd: this.host.cwd,
             });

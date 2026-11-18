@@ -966,7 +966,11 @@ export class Engine {
             isActive: { value: (plugin: string) => plugin === CORE_PLUGIN || this.plugins.get(plugin) !== undefined },
         }) as BuiltConfigImpl;
 
-        return new ServiceContainer({ ...this.serviceHost, building: () => true }, { config, entities: this.current.entities });
+        // Object.create, not a spread: a spread would copy `project` as it is now, and a singleton
+        // made here must see the project `ctx.refreshConfig` finds later (`sous init`).
+        const host = Object.create(this.serviceHost, { building: { value: () => true } }) as ServiceHost;
+
+        return new ServiceContainer(host, { config, entities: this.current.entities });
     }
 
     private kindNames(): string[] {

@@ -320,7 +320,8 @@ describe("lines and blocks", () => {
         const done = run("a\n", "text", "ensureBlock", { name: "kw", content: "one\ntwo" }, "/x/.gitignore");
 
         expect(done.text).toBe(
-            "a\n# >>> sous managed: kw (do not edit between these markers)\none\ntwo\n# <<< sous managed: kw\n",
+            // A blank line separates a block added at the end from the line before it.
+            "a\n\n# >>> sous managed: kw (do not edit between these markers)\none\ntwo\n# <<< sous managed: kw\n",
         );
         expect(done.undo()).toBe("a\n");
 
@@ -382,5 +383,54 @@ describe("the rest of the list", () => {
         for (const entry of ALIASES.values()) {
             expect(OPERATIONS.has(entry.target), entry.name).toBe(true);
         }
+    });
+});
+
+describe("the operations the document library made cheap", () => {
+    /**
+     * moveKeyBefore, moveKeyAfter, moveKeyFirst and moveKeyLast move one key of an object and keep
+     * its text; a missing key or anchor changes nothing.
+     *
+     * moveKeyFirst { key: "model" } on { name, model } -> { model, name }
+     */
+    it("should move a key before, after, first and last, keeping the rest of the text", () => {
+        const text = '{\n  "name": "x",\n  "model": "y",\n  "tools": []\n}\n';
+        const keysAfter = (operation: string, params: Record<string, string>) => Object.keys(parse(run(text, "jsonc", operation, params).text));
+
+        expect(keysAfter("moveKeyFirst", { key: "model" })).toEqual(["model", "name", "tools"]);
+        expect(keysAfter("moveKeyLast", { key: "name" })).toEqual(["model", "tools", "name"]);
+        expect(keysAfter("moveKeyBefore", { key: "tools", anchor: "name" })).toEqual(["tools", "name", "model"]);
+        expect(keysAfter("moveKeyAfter", { key: "name", anchor: "tools" })).toEqual(["model", "tools", "name"]);
+        expect(run(text, "jsonc", "moveKeyFirst", { key: "missing" }).text).toBe(text);
+        expect(run(text, "jsonc", "moveKeyBefore", { key: "name", anchor: "missing" }).text).toBe(text);
+        expect(run("name: x\nmodel: y\n", "yaml", "moveKeyFirst", { key: "model" }).text).toBe("model: y\nname: x\n");
+    });
+
+    /**
+     * prependIfMissing puts the missing items first, in the order given, leaves an item already
+     * there where it is, and its undo removes only what it added.
+     *
+     * prependIfMissing { items: ["a", "b"] } on ["c", "b"] -> ["a", "c", "b"]
+     */
+    it("should put missing items first, and undo only those", () => {
+        const done = run(json({ l: ["c", "b"] }), "json", "prependIfMissing", { path: "l", items: ["a", "b"] });
+
+        expect(parse(done.text)).toEqual({ l: ["a", "c", "b"] });
+        expect(parse(done.undo())).toEqual({ l: ["c", "b"] });
+        expect(parse(run(json({}), "json", "prependIfMissing", { path: "l", items: ["x", "y"] }).text)).toEqual({ l: ["x", "y"] });
+    });
+
+    /**
+     * A plain text file keeps every line it does not touch, its line endings included, and a
+     * damaged managed block is skipped, never guessed at.
+     *
+     * ensureLine "dist/" on "a\r\nb" -> "a\r\nb\r\ndist/"
+     */
+    it("should keep each untouched line's ending, and skip a damaged block", () => {
+        expect(run("a\r\nb", "text", "ensureLine", { line: "dist/" }).text).toBe("a\r\nb\r\ndist/");
+        expect(run("a\r\nb\n", "text", "ensureLine", { line: "x", position: { after: "a" } }).text).toBe("a\r\nx\r\nb\n");
+        expect(() =>
+            run("# >>> sous managed: kw (do not edit between these markers)\nx\n", "text", "ensureBlock", { name: "kw", content: "y" }, "/x/.gitignore"),
+        ).toThrow(/damaged/);
     });
 });

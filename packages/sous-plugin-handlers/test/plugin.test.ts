@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { IntentOutputs, jsonSchema } from "@sous-io/plugin-api";
+import type { DoctorCheckResult } from "@sous-io/sous-plugin-doctor";
+import { checkHandlersCheck } from "../src/doctor-check.js";
 import type { HandlerRunResult } from "../src/types.js";
 import { diff, makeEngine, makeTmpDir, plugin, recipe, run, write, type RecipesState } from "./stand-ins.js";
 
@@ -390,5 +393,54 @@ describe("migrate, uninstall and check on subscribing", () => {
         await run(engine, reporter, "subscription.add", { noBuild: true });
 
         expect(reporter.at("warning")).toContain("checked on subscribing");
+    });
+});
+
+describe("the check handlers doctor check", () => {
+    /** A plugin whose intent runs the doctor check, as `sous doctor` would. */
+    const doctor = plugin("test-doctor", (sous) => {
+        sous.intents.add({
+            intent: "test.doctor",
+            input: jsonSchema({ type: "object" }),
+            handle: async (input, ctx) =>
+                IntentOutputs.of((await checkHandlersCheck.check(ctx, { dryRun: true, yes: false, answers: [], configFailed: (input as { configFailed?: boolean }).configFailed === true })) as never),
+        });
+    });
+
+    /**
+     * The check runs the check handlers without printing, and reports their errors as a problem and
+     * their warnings as a warning, one line each.
+     *
+     * check: a (error), b (warn)  // -> problem, details ["a/needs-jq: ran a/needs-jq", "a/likes-pandoc: ..."]
+     */
+    it("should report errors as a problem and warnings as a warning, printing nothing", async () => {
+        const { engine, reporter } = makeEngine(tmp.path, state, [
+            reporting("sous-plugin-a", [
+                { purpose: "check", id: "a/needs-jq", level: "error" },
+                { purpose: "check", id: "a/likes-pandoc", level: "warn" },
+            ]),
+            doctor,
+        ]);
+        await engine.buildConfig();
+
+        const found = await run<DoctorCheckResult>(engine, reporter, "test.doctor");
+
+        expect(found).toMatchObject({ status: "problem", details: ["a/needs-jq: ran a/needs-jq", "a/likes-pandoc: ran a/likes-pandoc"] });
+        expect(reporter.at("error")).toEqual([]);
+        expect(reporter.at("warning")).toEqual([]);
+    });
+
+    /**
+     * Only warnings is a warning; no check handler, or a config that did not load, is said plainly.
+     */
+    it("should report a warning, nothing to run, and a config that did not load", async () => {
+        const warned = makeEngine(tmp.path, state, [reporting("sous-plugin-a", [{ purpose: "check", id: "a/likes-pandoc", level: "warn" }]), doctor]);
+        await warned.engine.buildConfig();
+        expect(await run<DoctorCheckResult>(warned.engine, warned.reporter, "test.doctor")).toMatchObject({ status: "warning" });
+
+        const none = makeEngine(tmp.path, state, [doctor]);
+        await none.engine.buildConfig();
+        expect(await run<DoctorCheckResult>(none.engine, none.reporter, "test.doctor")).toMatchObject({ status: "ok" });
+        expect(await run<DoctorCheckResult>(none.engine, none.reporter, "test.doctor", { configFailed: true })).toMatchObject({ status: "skipped" });
     });
 });

@@ -70,7 +70,8 @@ async function startWatch(input: Record<string, unknown> = {}, setUp?: (world: W
     });
     const done = h.engine.submit({ intent: "build.watch", input }, { reporter: h.reporter }).then((outputs) => outputs.toPlain() as unknown as BuildWatchResult);
 
-    await vi.waitFor(() => expect(rig.sessions).toHaveLength(1));
+    // The first start imports watch mode and the build (with the handlers and editor it runs) cold.
+    await vi.waitFor(() => expect(rig.sessions).toHaveLength(1), { timeout: 10_000 });
 
     return { ...rig, h, root, done, session: rig.sessions[0]! };
 }

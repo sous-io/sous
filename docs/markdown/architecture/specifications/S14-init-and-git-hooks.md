@@ -261,4 +261,14 @@ fi
 
 ## Changes
 
-None yet.
+### 2026-11-18: How `sous doctor` tells that a project was set up with hooks
+
+Nothing records the choice, so the `git-hooks` doctor check (order 500, in `plugin-init`) reads what
+`sous init hooks` committed: a file in `.husky/` holding Sous's marked block. The hooks are on in a
+clone when git's hooks folder (`git rev-parse --git-path hooks`) is Husky's `.husky/_` and it exists,
+which Husky's own command sets up when the package script runs it during an install. A fresh clone
+whose install has not run has the files and not the folder: a problem, whose fix runs `init.hooks`
+with `install: true`, keeping the pull hooks when `.husky/post-merge` or `post-rewrite` holds the
+block. Without a `package.json` the hook is in git's own folder, never committed: found there it is
+ok; missing, the check says it cannot tell and offers nothing. The agent's choice; not yet reviewed
+by Luke.

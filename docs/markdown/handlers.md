@@ -19,8 +19,20 @@ The set is fixed for now. Each purpose takes a list, and the handlers run in a p
 recipe's in the order its manifest lists them, recipes in the lockfile's order; a plugin's in the order
 it registered them, plugins in the order they loaded. Plugins' handlers run before recipes'.
 
+### Where they run in a build
+
+`sous build` runs, in this order: the `check` handlers; the `beforeBuild` handlers; the compiler and its
+prune; the declared edits to files sous does not own, with their assertions; the `afterBuild` handlers. A
+`check` error stops the build there, before anything in the project is written, and the build ends with exit
+code 1, naming each handler that failed. A compile error skips the edits and `afterBuild`.
+
+`sous build --dry-run` runs the `check` handlers, which only report, and no `beforeBuild` or `afterBuild`
+handler, which act. Watch mode runs them on every rebuild. `sous prune` runs none. `sous doctor` runs the
+`check` handlers too, and reports their errors and warnings without building.
+
 ?> To build past failed checks, pass `--ignore-failed-checks` (or `--keep-going`, which also covers
-failed assertions). The failures are still printed, as warnings, and the build ends as successful.
+failed assertions). The failures are still printed, as warnings, and the build ends as successful. There is no
+setting that makes this permanent.
 
 ## In a recipe
 

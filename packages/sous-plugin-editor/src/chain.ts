@@ -92,6 +92,10 @@ export interface ValueOperations<R> {
     deleteKeys(keys: string | string[]): R;
     keepOnlyKeys(keys: string | string[]): R;
     sortKeys(): R;
+    moveKeyBefore(key: string, anchor: string): R;
+    moveKeyAfter(key: string, anchor: string): R;
+    moveKeyFirst(key: string): R;
+    moveKeyLast(key: string): R;
     // Structure
     ensureObject(): R;
     ensureList(): R;
@@ -100,6 +104,7 @@ export interface ValueOperations<R> {
     // Lists
     ensureIncludes(items: unknown, options?: { position?: EditPosition }): R;
     appendIfMissing(items: unknown): R;
+    prependIfMissing(items: unknown): R;
     union(items: unknown[]): R;
     ensureFirst(item: unknown): R;
     ensureLast(item: unknown): R;

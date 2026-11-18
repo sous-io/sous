@@ -129,6 +129,12 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-editor':
+        specifier: workspace:*
+        version: link:../sous-plugin-editor
+      '@sous-io/sous-plugin-handlers':
+        specifier: workspace:*
+        version: link:../sous-plugin-handlers
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -180,6 +186,9 @@ importers:
 
   packages/plugin-compiler:
     dependencies:
+      '@sous-io/documents':
+        specifier: workspace:*
+        version: link:../documents
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -195,6 +204,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-migrations':
+        specifier: workspace:*
+        version: link:../sous-plugin-migrations
       liquidjs:
         specifier: ^10.25.0
         version: 10.25.0
@@ -430,6 +442,9 @@ importers:
       '@sous-io/plugin-update':
         specifier: workspace:*
         version: link:../plugin-update
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -949,9 +964,15 @@ importers:
       '@sous-io/plugin-compiler':
         specifier: workspace:*
         version: link:../plugin-compiler
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -980,6 +1001,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*

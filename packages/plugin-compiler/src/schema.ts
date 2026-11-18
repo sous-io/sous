@@ -8,6 +8,7 @@ import type { ConfigKeyEntity } from "@sous-io/plugin-api";
 import { z } from "zod";
 import { compilePatternList } from "@sous-io/plugin-host";
 import { isReservedAliasName } from "./aliases.js";
+import { ifExpression } from "./if-migration.js";
 
 /** Where the state file goes when the config says nothing. */
 export const DEFAULT_STATE_FILE = "${sousDir}/sous.state.json";
@@ -24,16 +25,8 @@ const varsSchema = z.record(z.string(), z.string());
  */
 export function ifReplacement(output: Record<string, unknown>): string {
     const { _if: conditions, ...rest } = output;
-    const tests =
-        conditions !== null && typeof conditions === "object"
-            ? Object.entries(conditions as Record<string, unknown>).map(([name, condition]) => {
-                  const value = (condition as { eq?: unknown } | null)?.eq;
 
-                  return `${name} == '${String(value).replace(/'/g, "\\'")}'`;
-              })
-            : [];
-
-    return `{ "$if": { "expr": ${JSON.stringify(tests.join(" and ") || "true")}, "then": ${JSON.stringify(rest)} } }`;
+    return `{ "$if": { "expr": ${JSON.stringify(ifExpression(conditions))}, "then": ${JSON.stringify(rest)} } }`;
 }
 
 const outputSchema = z

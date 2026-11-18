@@ -103,7 +103,10 @@ rebuilds the config when it sees one.
 
 To write an output only under a condition, put a [config expression](#config-expressions) on the output
 itself. The output setting `_if` was removed; a config that still uses it is refused with the `$if` to write
-instead:
+instead. `sous doctor` (and `sous upgrade`) runs a migration that rewrites it for you in a `.json`, `.jsonc` or
+`.yaml` config file, changing only that output; for a config written as JavaScript or TypeScript it lists each
+`_if` with its line and the expression to write. An `_if` on a variable named `env` or `host` is left for you,
+since an expression reads those names as sous's own values:
 
 ```jsonc
 "outputs": [
