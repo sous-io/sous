@@ -228,7 +228,12 @@ The format comes from the file's name, through `@sous-io/sous-lib-documents` (`f
 whose body is kept byte for byte), and anything else as plain text, a list of lines. The editor
 is a thin layer over that library: it parses, edits and writes every format, and a plain text
 file's lines keep their own line endings. Edits to JSON and JSONC keep comments, key order,
-indentation and line endings. TOML is recognized and skipped with a warning until the document
+indentation and line endings, and an object or list written beside one-line neighbours (in a
+one-line container, in place of a one-line value, or in a list beside a one-line item) goes on one
+line. In YAML a string keeps the quoting or block style its author chose, but not one its old value
+only needed (`">> x"` must be quoted), and a text of several lines is written as a block. A key or
+item that moves takes its own lines and the comment at their end; a comment on a line of its own
+stays where it is. TOML is recognized and skipped with a warning until the document
 library edits it. The text operations (`ensureLine`, `removeLine`, `ensureBlock`, `appendText`,
 `prependText`, `replaceText`, `replacePattern`) act on the file's whole text when they have no
 `path`, and on a string value when they do.
@@ -421,6 +426,14 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 
 - The merge of the per-harness config builds must carry entries limited to one harness; the merge
   rule was written for compile outputs, and an edit is not an output.
+- A key Sous deleted comes back at the end of its object, not in its old place. Putting it back in
+  place means moving every key after it, and a comment on a line of its own does not move with its
+  key, so it would end up beside the wrong key. The document library would need to know which
+  comment lines belong to a key.
+- A value put back is written in the library's layout for a new value: an inline JSONC list that
+  `unwrapList` made a plain value comes back spread over lines.
+- The `expect` chain has no method for `includesBlock`, `directoryExists` or
+  `directoryDoesNotExist`; a plugin writes those in the data form.
 
 ## Changes
 
@@ -433,7 +446,8 @@ gone. What changed for a person: each line of a plain text file keeps its own li
 added at the end of a file gets a blank line before it, as `sous init`'s blocks do; and a damaged
 block is skipped instead of a second one being added. The operations the library made cheap were
 built: `prependIfMissing`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst` and `moveKeyLast`.
-`sortKeys` now moves each key with its comments. The agent's work while joining the merged pieces;
+`sortKeys` now moves each key with its own lines and the comment at their end (a comment on a line
+of its own stays where it is). The agent's work while joining the merged pieces;
 not yet reviewed by Luke.
 
 ### 2026-11-18: The history and backups are ignored in a project set up before the editor
@@ -473,3 +487,14 @@ own text. Found by running every operation through `editor.apply`; the agent's f
 it now records the text before its last replacement and the text it left, and `down` puts the
 first back only while the text is still the second: a change someone made since is never undone
 with it. Found by running every operation through `editor.apply`; the agent's fix.
+
+### 2026-11-18: Every operation and check runs through `editor.apply` in a test
+
+Every operation and every other name is now applied by `editor.apply` to real JSONC, YAML and text
+files, applied again, and undeclared, with the exact text checked each time; every check holds and
+fails at level error and at level warn; silencing and the `expect` forms run the same way. What
+those tests found was fixed where it was cheap: `removeLine` undone into an emptied text, or one
+with CRLF line breaks, now puts back exactly the text there was; a YAML string no longer keeps a
+quoting or block style its old value only needed; a JSONC object among one-line neighbours is
+written on one line; and orders and `replacePattern` are undone (above). What was not fixed is in
+Open Questions. The agent's work.
