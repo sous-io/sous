@@ -59,7 +59,14 @@ function adderPlugin(migrations: readonly MigrationDefinition[], extra?: (sous: 
 }
 
 /** An engine running sous `version`, with the migrations given. */
-export async function engineWith(options: { version?: string; lock: LockState; migrations: readonly MigrationDefinition[]; extra?: (sous: Sous) => void }) {
+export async function engineWith(options: {
+    version?: string;
+    lock: LockState;
+    migrations: readonly MigrationDefinition[];
+    extra?: (sous: Sous) => void;
+    /** The config fails to build (as one using an option a newer sous removed does); the engine keeps going, as the CLI does. */
+    configFails?: boolean;
+}) {
     const reporter = new BufferedReporter();
     const engine = createEngine({
         builtIns: [doctorPlugin, migrationsPlugin, lockPlugin(options.lock), adderPlugin(options.migrations, options.extra)],
@@ -68,7 +75,11 @@ export async function engineWith(options: { version?: string; lock: LockState; m
         reporter,
     });
 
-    await engine.buildConfig();
+    await engine.buildConfig().catch((error: unknown) => {
+        if (options.configFails !== true) {
+            throw error;
+        }
+    });
 
     return {
         engine,
