@@ -30,10 +30,9 @@ import { EditNotPossible, OperationParamsError, type OperationContext, type Oper
 /** An operation as `define` in `operations.ts` takes it. */
 export type OperationDraft = Omit<OperationDefinition, "normalize"> & { normalize?: (raw: JsonObject) => JsonObject };
 
-
 /** The comment operations, for `operations.ts` to define. */
 export function commentOperations(): OperationDraft[] {
-    return [setCommentOperation("before"), setCommentOperation("after")];
+    return [setCommentOperation("before"), setCommentOperation("after"), removeCommentOperation()];
 }
 
 /** `setCommentBefore` or `setCommentAfter`: the comment there reads `text`. */
@@ -88,6 +87,79 @@ function setCommentOperation(place: CommentPlace): OperationDraft {
         },
         mergeRecords: keepEarlier,
         // No check reads comments, and an assertion that cannot fail says nothing: none is implied.
+        assertions: () => [],
+    };
+}
+
+/** `removeComment`: the key or list item has no comment before it, after it, or either. */
+function removeCommentOperation(): OperationDraft {
+    const name = "removeComment";
+    const placesOf = (params: JsonObject): CommentPlace[] => {
+        const neither = params.before === undefined && params.after === undefined;
+
+        return (["before", "after"] as const).filter((place) => neither || params[place] === true);
+    };
+
+    return {
+        name,
+        order: 100,
+        scope: "document",
+        summary: "The key or list item at `path` has no comment: before it (`before: true`), after it (`after: true`), or, with neither, both.",
+        params: ["before", "after"],
+        args: [],
+        normalize(raw) {
+            commentPath(raw, name);
+
+            for (const place of ["before", "after"]) {
+                if (raw[place] !== undefined && typeof raw[place] !== "boolean") {
+                    throw new OperationParamsError(`'${name}': '${place}' must be true or false.`);
+                }
+            }
+
+            if (raw.before === false && raw.after === false) {
+                throw new OperationParamsError(`'${name}' with before and after both false removes nothing.`);
+            }
+
+            return raw;
+        },
+        up(ctx, params): JsonValue {
+            const comments = commentsOf(ctx, params, name);
+
+            return onComment(name, (): JsonValue => {
+                const removed: JsonObject = {};
+
+                for (const place of placesOf(params)) {
+                    if (comments.comment(ctx.path, place) !== undefined) {
+                        removed[place] = comments.commentSource(ctx.path, place);
+                        comments.removeComment(ctx.path, place);
+                    }
+                }
+
+                return Object.keys(removed).length === 0 ? { changed: false } : { changed: true, ...removed };
+            });
+        },
+        down(ctx, params, record) {
+            if (!isJsonObject(record) || record.changed !== true) {
+                return;
+            }
+
+            const comments = commentsOf(ctx, params, name);
+
+            for (const place of ["before", "after"] as const) {
+                const source = record[place];
+
+                if (typeof source === "string") {
+                    onComment(name, () => comments.restoreCommentSource(ctx.path, place, source));
+                }
+            }
+        },
+        // A comment removed in an earlier run is kept; one added since and removed now joins it.
+        mergeRecords(previous, next) {
+            if (!isJsonObject(previous) || previous.changed !== true) return next;
+            if (!isJsonObject(next) || next.changed !== true) return previous;
+
+            return { ...next, ...previous };
+        },
         assertions: () => [],
     };
 }

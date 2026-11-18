@@ -186,3 +186,56 @@ describe("setCommentAfter", () => {
         ]);
     });
 });
+
+describe("removeComment", () => {
+    /**
+     * removeComment with neither switch should remove the comments before and after a key; removing
+     * the declaration puts both back byte for byte.
+     *
+     * # The model\nmodel: sonnet # for now   removeComment { path: model }   -> model: sonnet
+     */
+    it("should remove both comments of a key and undo it", async () => {
+        const text = AGENT.replace("model: sonnet", "#   The model, oddly spaced\nmodel: sonnet");
+
+        await roundTrip(
+            ".claude/agents/reviewer.md",
+            text,
+            [{ entry: { file: ".claude/agents/reviewer.md", removeComment: { path: "model" } } }],
+            AGENT.replace("model: sonnet # for now", "model: sonnet"),
+        );
+    });
+
+    /**
+     * `before: true` or `after: true` removes only that one; a multi-line JSONC comment goes whole.
+     */
+    it("should remove only the comment named, in a CRLF JSONC file", async () => {
+        const crlf = SETTINGS.replace("    // Editor settings\n", "    // Editor\n    // settings\n").replace(/\n/g, "\r\n");
+
+        await roundTrip(
+            ".vscode/settings.json",
+            crlf,
+            [{ entry: { file: ".vscode/settings.json", removeComment: { path: "tabSize", before: true } } }],
+            crlf.replace("    // Editor\r\n    // settings\r\n", ""),
+        );
+
+        await roundTrip(
+            ".claude/agents/reviewer.md",
+            AGENT,
+            [{ entry: { file: ".claude/agents/reviewer.md", removeComment: { path: "model", after: true } } }],
+            AGENT.replace(" # for now", ""),
+        );
+    });
+
+    /**
+     * A key with no comment is left alone, and nothing is recorded to undo.
+     */
+    it("should leave a key with no comment as it is", async () => {
+        write(tmp.path, "ci.yml", "a: 1\n");
+
+        const { result } = await apply(tmp.path, [{ entry: { file: "ci.yml", removeComment: { path: "a" } } }]);
+
+        expect(result.files[0]!.action).toBe("unchanged");
+        expect(() => resolveOperation("removeComment", { path: "a", before: false, after: false })).toThrow(/removes nothing/);
+        expect(() => resolveOperation("removeComment", { path: "a", before: "yes" })).toThrow(/true or false/);
+    });
+});
