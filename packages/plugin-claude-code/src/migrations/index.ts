@@ -13,7 +13,7 @@ import { toolsKeyMigration } from "./tools.js";
  * `claude-code` and `.claude/rules/SOUS-MEMORIES.md`. A project migrated to an earlier version runs
  * them.
  */
-export const MIGRATIONS_VERSION = "1.1.0";
+export const MIGRATIONS_VERSION = "1.0.20";
 
 /** Adds both migrations. */
 export function registerMigrations(sous: Pick<Sous, "migrations">): void {

@@ -1,5 +1,5 @@
 /**
- * The memories migration (1.1.0; spec 19, "the first migration"). Before 1.1.0, sous compiled the
+ * The memories migration (1.0.20; spec 19, "the first migration"). Before 1.0.20, sous compiled the
  * recipes' memories into the root `CLAUDE.md`; now they go to `.claude/rules/SOUS-MEMORIES.md`,
  * which Claude Code loads beside any `CLAUDE.md`. A project upgraded from the old default would get
  * its memories twice, so the migration asks:

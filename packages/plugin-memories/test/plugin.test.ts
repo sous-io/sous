@@ -42,7 +42,7 @@ describe("memory targets", () => {
      * output is the target's `outputPath`, marked with its harness.
      *
      * claude-code -> { id: "memories/claude-code",
-     * //   content: "@${sousDir}/memories/**\/*.md\n\n@.../a/one/memories/m.md\n\n@.../b/two/memories/m.md",
+     * //   content: "@<project>/.sous/memories/**\/*.md\n\n@.../a/one/memories/m.md\n\n@.../b/two/memories/m.md",
      * //   transforms: ["memories/skip-empty"],
      * //   outputs: [{ destinationFile: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md", harness: "claude-code", backupExisting: true }] }
      */
@@ -62,7 +62,7 @@ describe("memory targets", () => {
         expect(compilationTargets(await engine.buildConfig())).toEqual([
             {
                 id: "memories/claude-code",
-                content: `@\${sousDir}/memories/**/*.md\n\n@${path.join(one.dir, "memories/m.md")}\n\n@${path.join(two.dir, "memories/m.md")}`,
+                content: `@${path.join(project, ".sous", "memories")}/**/*.md\n\n@${path.join(one.dir, "memories/m.md")}\n\n@${path.join(two.dir, "memories/m.md")}`,
                 transforms: ["memories/skip-empty"],
                 origin: { plugin: "@sous-io/plugin-memories" },
                 outputs: [{ destinationFile: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md", harness: "claude-code", backupExisting: true }],
@@ -72,10 +72,10 @@ describe("memory targets", () => {
 
     /**
      * `.sous/MEMORIES.tpl.md`, when it exists, is the whole source; a `prependWith` file that exists
-     * comes first. A variable path is kept as written.
+     * comes first. Both are included by their absolute paths.
      *
      * MEMORIES.tpl.md and AGENTS.md exist, prependWith "AGENTS.md", outputPath "${projectRoot}/AGENTS.override.md"
-     * // -> content "@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md"
+     * // -> content "@<project>/AGENTS.md\n\n@<project>/.sous/MEMORIES.tpl.md"
      */
     it("should use .sous/MEMORIES.tpl.md as the source, after the file to prepend", async () => {
         const project = path.join(tmp.path, "project");
@@ -90,7 +90,7 @@ describe("memory targets", () => {
         );
         const [target] = compilationTargets(await engine.buildConfig());
 
-        expect(target?.content).toBe("@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md");
+        expect(target?.content).toBe(`@${path.join(project, "AGENTS.md")}\n\n@${path.join(project, ".sous", "MEMORIES.tpl.md")}`);
         expect(target?.outputs).toEqual([{ destinationFile: "${projectRoot}/AGENTS.override.md", harness: "codex" }]);
     });
 

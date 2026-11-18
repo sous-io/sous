@@ -1,5 +1,5 @@
 /**
- * The migration for the harness id's rename (1.1.0): `tools.claude` becomes `tools.claude-code`.
+ * The migration for the harness id's rename (1.0.20): `tools.claude` becomes `tools.claude-code`.
  *
  * In a project's JSON, JSONC and YAML config files (the main `sous.config.*` and every `conf.d`
  * file), the key is renamed surgically, so comments, key order and formatting stay. A file that is

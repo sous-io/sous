@@ -4,7 +4,7 @@
  * The user's settings are `tools.claude-code` (`command`, `args`, `promptFile`, `headless`), read
  * when a method runs. With nothing set, the command is `claude`.
  *
- * The id was `claude` before 1.1.0. It names the tool, not the company or the command, so a later
+ * The id was `claude` before 1.0.20. It names the tool, not the company or the command, so a later
  * harness for another Claude product cannot be confused with it ("its better to be overly verbose
  * than regret inspecificity later"; Luke, 2026-11-17).
  */

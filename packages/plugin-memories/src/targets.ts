@@ -125,15 +125,16 @@ export interface MemoriesSource {
 
 /**
  * The template content for one memory target, or `undefined` when nothing could be in it (no
- * source file, no file to prepend, no project memories and no recipe memories).
+ * source file, no file to prepend, no project memories and no recipe memories). Every path is
+ * written absolute, as found on disk, so the include reads the file this check found.
  *
  * ```ts
- * // no .sous/MEMORIES.tpl.md; .sous/memories/project.tpl.md; recipe memory /store/a/one/memories/m.md
+ * // project /p, no .sous/MEMORIES.tpl.md; .sous/memories/project.tpl.md; recipe memory /store/a/one/memories/m.md
  * memoriesContent({ id: "claude-code", outputPath: ".claude/rules/SOUS-MEMORIES.md" }, source);
- * // -> "@${sousDir}/memories/**\/*.md\n\n@/store/a/one/memories/m.md"
+ * // -> "@/p/.sous/memories/**\/*.md\n\n@/store/a/one/memories/m.md"
  *
  * // with .sous/MEMORIES.tpl.md, and prependWith "AGENTS.md", which exists
- * // -> "@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md"
+ * // -> "@/p/AGENTS.md\n\n@/p/.sous/MEMORIES.tpl.md"
  * ```
  */
 export function memoriesContent(target: Pick<MemoryTargetEntity, "prependWith">, source: MemoriesSource): string | undefined {
@@ -144,15 +145,15 @@ export function memoriesContent(target: Pick<MemoryTargetEntity, "prependWith">,
         const file = diskPath(target.prependWith, source.project);
 
         if (file !== undefined && exists(file)) {
-            parts.push(`@${configPath(target.prependWith)}`);
+            parts.push(`@${file}`);
         }
     }
 
     if (exists(path.join(source.project.sousDir, MEMORIES_SOURCE))) {
-        parts.push(`@\${sousDir}/${MEMORIES_SOURCE}`);
+        parts.push(`@${path.join(source.project.sousDir, MEMORIES_SOURCE)}`);
     } else {
         if (holdsMarkdown(path.join(source.project.sousDir, PROJECT_MEMORIES_DIR))) {
-            parts.push(`@\${sousDir}/${PROJECT_MEMORIES_DIR}/**/*.md`);
+            parts.push(`@${path.join(source.project.sousDir, PROJECT_MEMORIES_DIR)}/**/*.md`);
         }
 
         if (source.selected.length > 0) {
