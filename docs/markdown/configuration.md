@@ -65,6 +65,92 @@ without it is never rendered, however much it looks like a template, even when a
 convention applies to `entryPoint` and `entryGlob` targets alike, and to the files a recipe brings into your
 project.
 
+A file that is not a template and includes nothing is copied byte for byte, so an image or any other binary
+file reaches the project unchanged. A source file that is executable gives an executable output, templated or
+not (`probe-info.tpl.py` as well as `run.sh`).
+
+## Outputs and the files a build writes
+
+Each output of a target writes one file per source: `destinationFile` names it, or `destinationDir` mirrors
+the source's path under the glob's base (or `globBase`) inside it. An output may also say which harness it
+belongs to, with `harness` (`"claude-code"`, `"codex"`); a template reads it as `harness.id`. The plugins that
+write a harness's skills and memories set it.
+
+Sous lists every file a build writes while it builds the config, matching each `entryGlob` against the disk
+then, and keeps the list under `compilation.files`, one entry per output of each source. The compiler writes
+exactly what that list holds, so `sous config get compilation.files` shows what a build will write, and
+`--layers` names the `compiler.files` contributor that listed them:
+
+```jsonc
+// sous config get compilation.files (excerpt)
+[
+    {
+        "target": "1",
+        "targetIndex": 1,
+        "source": "/home/me/app/prompts/skills/review/SKILL.tpl.md",
+        "output": 0,
+        "destination": "/home/me/app/.claude/skills/review/SKILL.md"
+    }
+]
+```
+
+Sous sets `compilation.files` and `compilation.listing` (what went wrong listing them, such as a glob that
+matched nothing, reported when a build runs); anything written there in a config file is replaced. A file
+added or removed under a glob target's folder is picked up by the next command, and `sous build --watch`
+rebuilds the config when it sees one.
+
+To write an output only under a condition, put a [config expression](#config-expressions) on the output
+itself. The output setting `_if` was removed; a config that still uses it is refused with the `$if` to write
+instead:
+
+```jsonc
+"outputs": [
+    {
+        "$if": {
+            "expr": "stage == 'prod'",
+            "then": { "destinationFile": "${projectRoot}/prod.md" }
+        }
+    }
+]
+```
+
+### Variables by output path
+
+`compilation.varOverrides` sets variables for every output whose path matches a pattern, including outputs a
+plugin or a recipe adds. Each rule has `match`, an optional `exclude`, and `_vars`. `match` and `exclude` each
+take one entry or a list, and an entry is a glob, or a regular expression when written between two slashes
+(the convention `recipes.memories.first` uses):
+
+```js
+compilation: {
+    varOverrides: [
+        {
+            match: "${projectRoot}/.claude/**",
+            exclude: [
+                "${projectRoot}/.claude/desktop.md",
+                "/\\.local\\./",
+            ],
+            _vars: { tool: "claude" },
+        },
+        {
+            match: "${projectRoot}/.codex/**",
+            _vars: { tool: "codex" },
+        },
+    ],
+},
+```
+
+- A rule's variables win over the output's own `_vars`, so a project can change a variable on outputs it did
+  not write.
+- When several rules match one output, a later rule wins for a variable both set; a variable only one rule
+  sets is kept. Your own config files apply after plugins and recipes, so your rules win over theirs.
+- A rule matches the path Sous planned to write. A transform (a function a plugin attaches to an output) runs
+  after rendering and may rename the file; the rule still matched the path from before it.
+- A glob is matched against the absolute path, and a relative one is relative to the project root. A regular
+  expression is tested against the absolute path, written with `/`.
+
+The variables a rule set show on each matching entry of `compilation.files`, as its `_vars`.
+
 ## Include syntax
 
 Sous reads `@path` the way Claude Code reads an import, and puts the file's text where the name stands. An

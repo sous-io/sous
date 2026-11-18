@@ -146,6 +146,29 @@ describe("build.watch", () => {
     });
 
     /**
+     * A file added under a glob target changes the files the config lists, so the config is
+     * rebuilt and every output compiled, as for a config change, with a reason naming the file.
+     *
+     * add <root>/skills/new/SKILL.md; // -> new config build, full build, a second watcher
+     */
+    it("should rebuild the config when a file is added under a glob target", async () => {
+        const { current, watchers, timers, root, h, session, done } = await startWatch();
+        const before = h.engine.config.buildNumber;
+        const added = path.join(root, "skills", "new", "SKILL.md");
+
+        current().emit("add", added);
+        timers.fire();
+
+        await vi.waitFor(() => expect(watchers).toHaveLength(2));
+        expect(h.engine.config.buildNumber).toBeGreaterThan(before);
+        expect(h.world.compileCalls).toEqual([{ reportEnd: false }]);
+        expect(h.reporter.at("notice").join("\n")).toContain(`Files were added or removed where a compilation target's glob looks (${added})`);
+
+        await session.stop();
+        await done;
+    });
+
+    /**
      * A failing build is counted and reported; the watch keeps going.
      *
      * compile throws; // -> "Rebuild failed: ..."; result.failed 1

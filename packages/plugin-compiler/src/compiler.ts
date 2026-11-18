@@ -5,6 +5,7 @@
  * an output whose target had an error is not written, and its previous copy stays.
  */
 
+import { isUtf8 } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import type { Liquid } from "liquidjs";
@@ -26,6 +27,9 @@ import type {
     TransformFile,
 } from "./types.js";
 
+/** One output as the writer gets it: text, or bytes copied unchanged. */
+type OutputFile = Omit<TransformFile, "content"> & { content: string | Uint8Array };
+
 /**
  * One piece of a read file: a piece of its own text, or a file it includes. The pieces join with
  * nothing between them. An include inside a line (`inline`) is trimmed when it is put in place.
@@ -41,6 +45,10 @@ interface FileNode {
     /** False for a `content` source, which is not on disk. */
     real: boolean;
     parts: Part[];
+    /** The file as read, for a real file that is not a template: what an output copies unchanged. */
+    bytes?: Buffer;
+    /** True when the bytes are not UTF-8 text (an image, say): its includes are not looked for. */
+    binary?: boolean;
 }
 
 /** How to make a Liquid engine for one render. */
@@ -74,6 +82,8 @@ export interface CompileDependencies {
     readonly refsParser?: RefsParser;
     /** Writes `<!-- from: -->` comments relative to it. */
     readonly projectRoot: string;
+    /** What templates read as `host.platform`. Default: Node's `process.platform`; only tests pass another. */
+    readonly platform?: string;
 }
 
 /** How a run behaves. */
@@ -108,6 +118,8 @@ export class CompileRun extends Reporting(Object) {
     private includeStack: string[] = [];
     private sourceComments = false;
     private unit: CompileUnit | undefined;
+    /** The output being rendered. */
+    private output: UnitOutput | undefined;
     private errorCount = 0;
 
     constructor(
@@ -226,12 +238,12 @@ export class CompileRun extends Reporting(Object) {
         const contentHash = hashContent(
             JSON.stringify([
                 this.sourceComments,
-                graph.map((node) => [path.relative(root, node.path), node.content]),
+                graph.map((node) => [path.relative(root, node.path), node.binary ? hashContent(node.bytes!) : node.content]),
                 ...(unit.transforms.length > 0 ? [unit.transforms] : []),
             ]),
         );
         const rendersAnything = graph.some((node) => node.isTpl);
-        const sourceMode = !entry.isTpl && entry.real ? modeOf(unit.source) : undefined;
+        const sourceMode = entry.real ? outputModeOf(entry) : undefined;
 
         for (const output of unit.outputs) {
             if (!assembled) {
@@ -254,10 +266,12 @@ export class CompileRun extends Reporting(Object) {
         const transforms = [...unit.transforms, ...output.transforms];
         // A rendered output depends on its variables as much as on its source, so they are part of
         // its source hash; so are the secret names, which decide what a scope-dumping tag hides.
+        // The values sous gives every template (the platform, the output's harness) count too.
         const sourceHash = rendersAnything
             ? hashContent(
                   `${contentHash}\n${stableVarsFingerprint(output.vars)}\n` +
-                      `secrets:${JSON.stringify([...this.deps.secretNames].sort())}` +
+                      `secrets:${JSON.stringify([...this.deps.secretNames].sort())}\n` +
+                      `globals:${JSON.stringify(this.templateGlobals(output))}` +
                       (output.transforms.length > 0 ? `\ntransforms:${JSON.stringify(output.transforms)}` : ""),
               )
             : output.transforms.length > 0
@@ -271,19 +285,35 @@ export class CompileRun extends Reporting(Object) {
         };
 
         if (!this.options.rebuild && transforms.length === 0 && tracked?.srcHash === sourceHash) {
-            const existing = readText(output.destination);
+            const existing = readBytes(output.destination);
 
             // Written again unchanged, which records the target and origin of an older entry. An
             // output edited by hand since is compiled again instead, so the edit is backed up and
             // replaced rather than recorded as sous's own.
             if (existing !== undefined && hashContent(existing) === tracked.destHash) {
-                await this.write({ source: unit.label, destination: output.destination, content: existing }, sourceHash, base, undefined);
+                await this.write({ source: unit.label, destination: output.destination, content: existing }, sourceHash, base, sourceMode);
 
                 return;
             }
         }
 
+        const entry = this.nodes.get(unit.source);
+
+        // A file that is not a template and includes nothing is copied byte for byte, so a binary
+        // file is not corrupted by being read as text. (An include that found nothing to include
+        // leaves no part of its own, so the parts must also still be the file's text.)
+        if (entry?.bytes !== undefined && transforms.length === 0 && entry.parts.every((part) => typeof part === "string") && entry.parts.join("\n") === entry.content) {
+            await this.write({ source: unit.label, destination: output.destination, content: entry.bytes }, sourceHash, base, sourceMode);
+
+            return;
+        }
+
         const errorsBefore = this.errorCount;
+
+        // What `sousOutputPath`, `sousOutputDir` and `harness.id` read while this output renders,
+        // in its own file and in every file it includes.
+        this.output = output;
+
         const content = await this.expand(unit.source, output.vars, root);
 
         if (this.errorCount > errorsBefore) {
@@ -330,7 +360,7 @@ export class CompileRun extends Reporting(Object) {
     }
 
     private async write(
-        file: TransformFile,
+        file: OutputFile,
         sourceHash: string,
         base: Pick<CompiledOutput, "source" | "target" | "origin">,
         mode: number | undefined,
@@ -347,7 +377,8 @@ export class CompileRun extends Reporting(Object) {
                 ...(this.options.run === undefined ? {} : { run: this.options.run }),
             });
             const counted = written.action === "created" || written.action === "updated";
-            const tokens = counted && this.deps.countTokens ? this.deps.countTokens(file.content) : undefined;
+            const text = typeof file.content === "string" ? file.content : isUtf8(file.content) ? Buffer.from(file.content).toString("utf8") : undefined;
+            const tokens = counted && this.deps.countTokens && text !== undefined ? this.deps.countTokens(text) : undefined;
 
             this.outputs.push({ ...base, ...written, ...(tokens === undefined ? {} : { tokens }) });
 
@@ -416,12 +447,15 @@ export class CompileRun extends Reporting(Object) {
         this.includeStack.push(file);
 
         try {
-            const content = fs.readFileSync(file, "utf8");
-            const node: FileNode = { path: file, content, isTpl: path.basename(file).includes(".tpl."), real: true, parts: [] };
+            const bytes = fs.readFileSync(file);
+            const content = bytes.toString("utf8");
+            const isTpl = path.basename(file).includes(".tpl.");
+            const binary = !isTpl && !isUtf8(bytes);
+            const node: FileNode = { path: file, content, isTpl, real: true, parts: [], ...(isTpl ? {} : { bytes }), ...(binary ? { binary } : {}) };
 
             // Kept before its includes are read, so the graph lists parents first.
             this.nodes.set(file, node);
-            node.parts = this.processIncludes(content, path.dirname(file), file, file, included);
+            node.parts = binary ? [content] : this.processIncludes(content, path.dirname(file), file, file, included);
 
             return node;
         } catch (error) {
@@ -637,7 +671,7 @@ export class CompileRun extends Reporting(Object) {
         if (node.isTpl) {
             const dir = path.dirname(node.path);
 
-            text = await this.render(text, { ...vars, sousTemplatePath: node.path, sousTemplateDir: dir }, [...new Set([dir, entryDir])], node.path);
+            text = await this.render(text, { ...vars, sousTemplatePath: node.path, sousTemplateDir: dir, ...this.outputPathVars() }, [...new Set([dir, entryDir])], node.path);
         }
 
         for (const [marker, child] of markers) {
@@ -657,11 +691,32 @@ export class CompileRun extends Reporting(Object) {
         return text;
     }
 
+    /**
+     * `sousOutputPath` and `sousOutputDir`: the file the output being rendered is written to, and its
+     * directory, from before any transform. An included file sees the output it is included into.
+     */
+    private outputPathVars(): Record<string, string> {
+        if (this.output === undefined) {
+            return {};
+        }
+
+        return { sousOutputPath: this.output.destination, sousOutputDir: path.dirname(this.output.destination) };
+    }
+
+    /**
+     * The objects every template can read: `host.platform` (the value config expressions read) and
+     * `harness.id` (the harness the output belongs to, or `""`). A variable of the same name the
+     * project sets wins over them.
+     */
+    private templateGlobals(output: UnitOutput | undefined = this.output): { host: { platform: string }; harness: { id: string } } {
+        return { host: { platform: this.deps.platform ?? process.platform }, harness: { id: output?.harness ?? "" } };
+    }
+
     private async render(content: string, vars: VarScope, roots: string[], fromFile: string): Promise<string> {
         try {
             const engine = this.deps.createEngine({ roots, scope: { ...(this.unit?.scope ?? {}), ...vars }, fromFile });
 
-            return (await engine.parseAndRender(content, vars)) as string;
+            return (await engine.parseAndRender(content, { ...this.templateGlobals(), ...vars })) as string;
         } catch (error) {
             this.recordError("Template rendering error", { file: fromFile }, { subject: fromFile, cause: messageOf(error) });
 
@@ -674,9 +729,9 @@ function messageOf(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-function readText(file: string): string | undefined {
+function readBytes(file: string): Buffer | undefined {
     try {
-        return fs.readFileSync(file, "utf8");
+        return fs.readFileSync(file);
     } catch {
         return undefined;
     }
@@ -722,6 +777,21 @@ function modeOf(file: string): number | undefined {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * The mode an output of a source file gets: an untemplated file keeps its source's mode, and a
+ * template's output keeps its source's mode only when the source is executable, so a templated
+ * script stays executable whatever its name. Otherwise the writer decides (`.sh` is executable).
+ */
+function outputModeOf(entry: FileNode): number | undefined {
+    const mode = modeOf(entry.path);
+
+    if (!entry.isTpl || mode === undefined) {
+        return mode;
+    }
+
+    return (mode & 0o111) !== 0 ? mode : undefined;
 }
 
 /** A problem as plain text: the summary, then its cause and hint. */

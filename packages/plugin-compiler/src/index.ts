@@ -8,6 +8,8 @@
 
 import { definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
 import { AliasService } from "./aliases.js";
+import { filesContributor } from "./files.js";
+import { varOverridesContributor } from "./var-overrides.js";
 import { IncludeService } from "./includes.js";
 import { compile, prune } from "./intents.js";
 import { BUILT_IN_FILTERS, BUILT_IN_TAGS } from "./liquid/tags.js";
@@ -90,6 +92,11 @@ export const compilerPlugin: PluginDefinition = definePlugin({
         for (const filter of BUILT_IN_FILTERS) {
             sous.entities.add("liquid-filter", filter);
         }
+
+        // Every file a build writes, listed while the config is built (globs matched here).
+        sous.config.contribute(filesContributor({ plugin: PLUGIN_NAME, services: sous.services }));
+        // compilation.varOverrides: variables for the listed files, by path.
+        sous.config.contribute(varOverridesContributor({ services: sous.services }));
 
         sous.services.add("compiler.aliases", (_config, ctx) => new AliasService(runtimes.for(ctx).aliases()), { lifetime: "config" });
         sous.services.add("compiler.includes", (_config, ctx) => new IncludeService(runtimes.for(ctx).includeEnvironment()), { lifetime: "config" });

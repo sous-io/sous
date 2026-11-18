@@ -370,6 +370,10 @@ The user's ruling on what a later stage is for:
 >
 >   -- **Luke Chavers** in an agent session (2026-10-29)
 
+Sous's own use of a later stage: the compiler lists every file a build writes (`compilation.files`)
+and applies `compilation.varOverrides` in stage 1, because both must see every target that stage 0
+adds (S6, "Compiler"). A target added in a later stage is never listed, and a build says so.
+
 ### Plugins load inside the loop
 
 The plugins to load are an ordinary config key (`plugins`, S1). After each pass, the engine loads
@@ -511,6 +515,10 @@ root _vars
 An expression sees the `_vars` of every level that contains it, and no others. An expression under
 `subscriptions`, `repos` or any other top-level key sees only the root `_vars`. Recipe outputs also
 get a scope per recipe, holding that recipe's answers.
+
+When a file renders, the `_vars` of every `compilation.varOverrides` rule whose pattern matches its
+path are laid over the output's scope, so a rule wins over the output's own `_vars`. They are set on
+the file's entry in `compilation.files` in config stage 1, so no expression reads them.
 
 ### Recipe answers
 
@@ -854,6 +862,22 @@ only the values it was told to change, and leaves every other byte of the file a
 CI files, agent files' frontmatter, `.gitignore`), and a committed file should show only the line
 that changed. The operations that state what must be true (`ensureIncludes`, `ensureLine` and the
 rest) belong to the editor plugin that composes them from these.
+### 2026-11-18: The compiler lists output files in stage 1; variables by output path
+
+Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18:
+
+> "So issue 2 should include moving the glob expansion out to a contributor, with glob-based variable
+> overrides becoming a little added bonus."
+
+**What changed.** "Order and stages" names Sous's first use of a later stage: the compiler's
+`compiler.files` and `compiler.var-overrides` contributors run in stage 1, after every target is
+added (S6, "Compiler"). In stage 0 the listing ran on every pass in which a target changed, and its
+result made the user's config files, which watch the whole config, run again; in stage 1 it runs
+once. "Variable scopes" adds the level `compilation.varOverrides` sets, which wins over an output's
+own `_vars`. Config building now reads the disk for each glob target, which it did not before. Both
+contributors are timed as every contributor is (L5); on Sous's own repository the listing takes about
+30 ms of the 100 ms a contributor may take, and on a project with 1000 files under one glob about
+35 ms (G9).
 
 ### 2026-10-30: Walk of apply order; same base name fails in one directory
 

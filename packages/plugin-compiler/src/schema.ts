@@ -6,6 +6,7 @@
 
 import type { ConfigKeyEntity } from "@sous-io/plugin-api";
 import { z } from "zod";
+import { compilePatternList } from "@sous-io/plugin-host";
 import { isReservedAliasName } from "./aliases.js";
 
 /** Where the state file goes when the config says nothing. */
@@ -13,15 +14,58 @@ export const DEFAULT_STATE_FILE = "${sousDir}/sous.state.json";
 
 const varsSchema = z.record(z.string(), z.string());
 
+/**
+ * What to write instead of an output's removed `_if`: the same output under a config expression.
+ *
+ * ```ts
+ * ifReplacement({ _if: { env: { eq: "prod" } }, destinationFile: "prod.md" });
+ * // -> '{ "$if": { "expr": "env == \'prod\'", "then": { "destinationFile": "prod.md" } } }'
+ * ```
+ */
+export function ifReplacement(output: Record<string, unknown>): string {
+    const { _if: conditions, ...rest } = output;
+    const tests =
+        conditions !== null && typeof conditions === "object"
+            ? Object.entries(conditions as Record<string, unknown>).map(([name, condition]) => {
+                  const value = (condition as { eq?: unknown } | null)?.eq;
+
+                  return `${name} == '${String(value).replace(/'/g, "\\'")}'`;
+              })
+            : [];
+
+    return `{ "$if": { "expr": ${JSON.stringify(tests.join(" and ") || "true")}, "then": ${JSON.stringify(rest)} } }`;
+}
+
 const outputSchema = z
     .object({
-        _if: z.record(z.string(), z.object({ eq: z.string() }).strict()).optional(),
+        /** Removed; kept only to say what to write instead (see `ifReplacement`). */
+        _if: z.unknown().optional().describe("Removed. Write the condition as a config expression on the output: { \"$if\": { \"expr\": \"...\", \"then\": { ...the output... } } }."),
         _vars: varsSchema.optional(),
         destinationFile: z.string().optional(),
         destinationDir: z.string().optional(),
         transforms: z.array(z.string()).optional(),
+        harness: z.string().min(1).optional().describe("The harness this output belongs to (claude-code, codex). Templates read it as harness.id."),
     })
-    .strict();
+    .strict()
+    .superRefine((output, ctx) => {
+        if (output._if === undefined) {
+            return;
+        }
+
+        const names = output._if !== null && typeof output._if === "object" ? Object.keys(output._if) : [];
+        const shadowed = names.filter((name) => name === "env" || name === "host");
+
+        ctx.addIssue({
+            code: "custom",
+            path: ["_if"],
+            message:
+                `'_if' was removed; a config expression on the output replaces it. Write the output as ` +
+                `${ifReplacement(output)}. The expression reads variables by their bare name, as every config expression does.` +
+                (shadowed.length > 0
+                    ? ` An expression reads ${shadowed.map((name) => `'${name}'`).join(" and ")} as sous's own value (the environment, the machine), so rename that variable first.`
+                    : ""),
+        });
+    });
 
 const originSchema = z
     .object({
@@ -59,10 +103,73 @@ export const targetSchema = z
         }
     });
 
+/** One entry of `compilation.files`, which the `compiler.files` contributor sets. */
+const fileSchema = z
+    .object({
+        target: z.string(),
+        targetIndex: z.number().int().min(0),
+        source: z.string(),
+        output: z.number().int().min(0),
+        destination: z.string(),
+        harness: z.string().optional(),
+        _vars: varsSchema.optional(),
+    })
+    .strict();
+
+const listingSchema = z
+    .object({
+        targets: z.number().int().min(0),
+        problems: z.array(
+            z
+                .object({
+                    level: z.enum(["error", "warning"]),
+                    message: z.string(),
+                    target: z.string().optional(),
+                    file: z.string().optional(),
+                    line: z.number().optional(),
+                    targetIndex: z.number().int().min(0).optional(),
+                })
+                .strict(),
+        ),
+    })
+    .strict();
+
+/** One pattern or several: each a glob, or a regular expression written `/.../`. */
+const patternsSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
+
+/** One rule of `compilation.varOverrides`. A `/.../` entry that is not a valid regular expression is refused. */
+const varOverrideSchema = z
+    .object({
+        match: patternsSchema.describe("The output paths the rule applies to: a glob, or a regular expression written /.../, or a list of them."),
+        exclude: patternsSchema.optional().describe("Output paths the rule leaves out, though match takes them."),
+        _vars: varsSchema.describe("The variables to set. They win over the output's own _vars; a later rule wins over an earlier one."),
+    })
+    .strict()
+    .superRefine((rule, ctx) => {
+        for (const key of ["match", "exclude"] as const) {
+            const value = rule[key];
+            const entries = value === undefined ? [] : typeof value === "string" ? [value] : value;
+
+            entries.forEach((entry, index) => {
+                try {
+                    compilePatternList([entry], typeof value === "string" ? key : `${key}[${index}]`, () => false);
+                } catch (error) {
+                    ctx.addIssue({ code: "custom", path: typeof value === "string" ? [key] : [key, index], message: error instanceof Error ? error.message : String(error) });
+                }
+            });
+        }
+    });
+
 /** The `compilation` key. */
 export const compilationSchema = z
     .object({
         _vars: varsSchema.optional(),
+        varOverrides: z
+            .array(varOverrideSchema)
+            .default([])
+            .describe("Variables for every output whose path matches a pattern, outputs a plugin or a recipe added included. A rule wins over the output's own _vars."),
+        files: z.array(fileSchema).optional().describe("Every file a build writes, listed while the config is built. Set by sous; anything written here is replaced."),
+        listing: listingSchema.optional().describe("What listing compilation.files found. Set by sous."),
         includeSourceComments: z.boolean().default(false),
         overwriteUntracked: z
             .boolean()

@@ -136,7 +136,8 @@ sous init --dry-run
 ### `sous build`
 
 Compiles the project's outputs, then removes the ones the config no longer produces. It is the command you want
-almost always. `-w, --watch` rebuilds on every change to a source file, a config file or a linked checkout;
+almost always. `-w, --watch` rebuilds on every change to a source file, a config file or a linked checkout,
+and reloads the config when a file is added to or removed from a glob target's folder;
 `--rebuild` ignores cached hashes and reprocesses everything; `--strict` makes compile warnings fail the build.
 
 Before it compiles, a build prepares the project's recipes: it pins any new subscription, restores whatever this

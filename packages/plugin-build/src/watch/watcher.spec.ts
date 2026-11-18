@@ -51,10 +51,42 @@ describe("ChangeBatcher", () => {
 
         b.handle("change", "/project/AGENTS.md");
         b.handle("change", "/project/AGENTS.md");
-        b.handle("add", "/project/skills/a/SKILL.md");
+        b.handle("change", "/project/skills/a/SKILL.md");
         expect(timers.pending.size).toBe(1);
         timers.fire();
         expect(batches).toEqual([{ files: ["/project/AGENTS.md", "/project/skills/a/SKILL.md"], full: false }]);
+    });
+
+    /**
+     * A file added to or removed from a glob target's folder changes the files the config lists, so
+     * the batch is full (the config is rebuilt), with a reason naming the files.
+     *
+     * handle("add", "/project/skills/a/SKILL.md"); fire(); // -> { full: true, reason: "Files were added or removed ..." }
+     */
+    it("should make the batch full when a file is added or removed under a glob target", () => {
+        const { batches, timers, batcher: b } = batcher();
+
+        b.handle("change", "/project/AGENTS.md");
+        b.handle("add", "/project/skills/a/SKILL.md");
+        timers.fire();
+        b.handle("unlink", "/project/skills/b/SKILL.md");
+        timers.fire();
+
+        expect(batches).toEqual([
+            { files: ["/project/AGENTS.md", "/project/skills/a/SKILL.md"], full: true, reason: expect.stringContaining("(/project/skills/a/SKILL.md)") },
+            { files: ["/project/skills/b/SKILL.md"], full: true, reason: expect.stringContaining("added or removed") },
+        ]);
+    });
+
+    /** A config change in the same batch keeps the usual message: no listing reason. */
+    it("should give no listing reason when the config changed too", () => {
+        const { batches, timers, batcher: b } = batcher();
+
+        b.handle("add", "/project/skills/a/SKILL.md");
+        b.handle("change", "/project/.sous/sous.config.ts");
+        timers.fire();
+
+        expect(batches).toEqual([{ files: ["/project/skills/a/SKILL.md", "/project/.sous/sous.config.ts"], full: true }]);
     });
 
     /**
@@ -82,9 +114,12 @@ describe("ChangeBatcher", () => {
 
         b.handle("unlink", "/project/AGENTS.md");
         timers.fire();
-        b.handle("add", "/project/skills/b/SKILL.md");
+        b.handle("add", "/project/AGENTS.md");
         timers.fire();
-        expect(batches).toHaveLength(2);
+        expect(batches).toEqual([
+            { files: ["/project/AGENTS.md"], full: false },
+            { files: ["/project/AGENTS.md"], full: false },
+        ]);
     });
 
     /**

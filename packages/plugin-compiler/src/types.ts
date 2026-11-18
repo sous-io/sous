@@ -29,8 +29,6 @@ export interface CompilationOrigin {
 
 /** One output of a target. */
 export interface CompilationOutput {
-    /** Writes only when every named variable equals the value. */
-    _if?: Record<string, { eq: string }>;
     /** Variables of this output's scope. */
     _vars?: Record<string, string>;
     /** Where a single output goes. One of `destinationFile` and `destinationDir`. */
@@ -39,6 +37,12 @@ export interface CompilationOutput {
     destinationDir?: string;
     /** `compilation-transform` ids applied to this output, after the target's own. */
     transforms?: string[];
+    /**
+     * The harness this output belongs to (`claude-code`, `codex`): set by the contributors that
+     * write a harness's skills or memories. Templates read it as `harness.id`, which is `""` for an
+     * output that belongs to none.
+     */
+    harness?: string;
 }
 
 /**
@@ -69,10 +73,90 @@ export interface CompilationTarget {
     outputs: CompilationOutput[];
 }
 
+/**
+ * One file a build writes: one output of one source of one target. Sous lists them while it builds
+ * the config (the `compiler.files` contributor matches each `entryGlob` against the disk then), so
+ * the config says which files a build writes, and the compiler reads these instead of matching
+ * globs itself.
+ *
+ * ```jsonc
+ * // sous config get compilation.files
+ * [{ "target": "projectSkills", "targetIndex": 0, "source": "/p/.sous/skills/review/SKILL.tpl.md",
+ *    "output": 0, "destination": "/p/.claude/skills/review/SKILL.md" }]
+ * ```
+ */
+export interface CompilationFile {
+    /** The target's name: its id, or its index as text. */
+    target: string;
+    /** The target's index in `compilation.targets`. */
+    targetIndex: number;
+    /** The source file, absolute; for a `content` target, a path named after its id under the project root. */
+    source: string;
+    /** The output's index in the target's `outputs`. */
+    output: number;
+    /** The file it writes, absolute, from before any transform. */
+    destination: string;
+    /** The output's harness, when it has one. */
+    harness?: string;
+    /**
+     * Variables `compilation.varOverrides` sets for this file (the `compiler.var-overrides`
+     * contributor). They win over the output's own `_vars`.
+     */
+    _vars?: Record<string, string>;
+}
+
+/** A problem found while listing the files, reported when a build runs. */
+export interface CompilationFileProblem extends CompileProblem {
+    /** The target's index, when the problem belongs to one. */
+    readonly targetIndex?: number;
+}
+
+/** What listing the files of the targets found, beside the files themselves. */
+export interface CompilationListing {
+    /**
+     * How many targets were listed. A target at a later index was added after the listing (by a
+     * contributor in a later config stage), so it has no files, and a build says so.
+     */
+    targets: number;
+    /** What went wrong: a variable no one sets, a glob that matched nothing. */
+    problems: CompilationFileProblem[];
+}
+
+/**
+ * One rule of `compilation.varOverrides`: variables for every file whose path matches. Each of
+ * `match` and `exclude` is one entry or a list; an entry is a glob, or a regular expression when
+ * written between two slashes. A rule's variables win over the output's own; a later rule wins over
+ * an earlier one for a name both set. The path matched is the one Sous planned to write, before
+ * any transform.
+ *
+ * ```js
+ * compilation: {
+ *     varOverrides: [
+ *         {
+ *             match: "${projectRoot}/.claude/**",
+ *             exclude: ["/\\.local\\./"],
+ *             _vars: { tool: "claude" },
+ *         },
+ *     ],
+ * },
+ * ```
+ */
+export interface CompilationVarOverride {
+    match: string | string[];
+    exclude?: string | string[];
+    _vars: Record<string, string>;
+}
+
 /** The `compilation` config key, with its defaults filled in. */
 export interface CompilationSettings {
     /** Variables of the compilation scope. */
     _vars?: Record<string, string>;
+    /** Variables by output path. Default `[]`. */
+    varOverrides?: CompilationVarOverride[];
+    /** Every file a build writes, listed while the config is built. Set by Sous. */
+    files?: CompilationFile[];
+    /** What listing the files found. Set by Sous. */
+    listing?: CompilationListing;
     /** Default `false`. */
     includeSourceComments: boolean;
     /** Overwrites files the compiler did not write, taking ownership. Default `true`; `false` opts out. */
@@ -303,7 +387,10 @@ export interface WriteOptions {
     dryRun?: boolean;
     /** Writes even when the content is unchanged. */
     force?: boolean;
-    /** The file mode to give it (a copied source's own). Default: `0o755` for `.sh`, otherwise left as it is. */
+    /**
+     * The file mode to give it: an untemplated source's own, or, for a template whose source is
+     * executable, the source's. Default: `0o755` for `.sh`, otherwise left as it is.
+     */
     mode?: number;
     /** Which run the write belongs to (the chain's id): every backup of one run goes in one timestamp folder. */
     run?: number;
@@ -333,7 +420,8 @@ export interface RemovedFiles {
  * output edited by hand since it wrote it), it copies the file to `<sousDir>/backups/`.
  */
 export interface CompilerWriter {
-    write(file: string, content: string, options: WriteOptions): Promise<WrittenFile>;
+    /** Writes text as UTF-8, and bytes as they are (a binary file copied unchanged). */
+    write(file: string, content: string | Uint8Array, options: WriteOptions): Promise<WrittenFile>;
     /** Removes files the compiler wrote, and directories it created that are left empty. */
     remove(files: readonly string[], options?: RemoveOptions): Promise<RemovedFiles>;
     /** Saves the state file after a run. */

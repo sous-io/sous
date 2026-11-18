@@ -63,3 +63,4 @@
   - [0034: Handlers](adrs/0034-handlers.md)
   - [0026: Declared edits to files Sous does not own](adrs/0026-declared-edits-to-files-sous-does-not-own.md)
   - [0027: Assertions on edited files](adrs/0027-assertions-on-edited-files.md)
+  - [0029: Every output file is a config entry, and variables by output path](adrs/0029-outputs-are-config-entries-and-var-overrides.md)

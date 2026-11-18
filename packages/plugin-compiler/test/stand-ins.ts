@@ -152,9 +152,11 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
             sous.entities.add("config-key", { id: "_vars", schema: jsonSchema({ type: "object" }) });
             sous.entities.add("config-key", { id: "_env", schema: jsonSchema({ type: "object" }) });
             sous.entities.add("config-key", { id: "_recipeVars", schema: jsonSchema({ type: "object" }) });
+            // A singleton, as the real one is, so the compiler's contributor can use it while the
+            // config is built: `scopeIn` reads through the view it is given (a builder, or a config).
             sous.services.add(
                 "variables.resolver",
-                (config, ctx): VariablesResolver => {
+                (_config, ctx): VariablesResolver => {
                     const auto = {
                         projectRoot: ctx.project?.root ?? "",
                         sousDir: ctx.project?.sousDir ?? "",
@@ -165,7 +167,8 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
                         sousVersion: VERSION,
                     };
                     const block = (value: unknown) => (value && typeof value === "object" ? (value as Record<string, string>) : {});
-                    const scope = (request: ScopeRequest = {}): VarScope => {
+                    const scopeOver = (view: { get(path: (string | number)[] | string): unknown }, request: ScopeRequest = {}): VarScope => {
+                        const config = view;
                         let out: VarScope = resolveBlock(block(config.get("_vars")), auto);
                         const level = request.level ?? "root";
 
@@ -188,6 +191,13 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
 
                         return { ...out, ...(request.extra ?? {}) };
                     };
+                    type View = { get(path: (string | number)[] | string): unknown };
+                    const viewOf = (config: unknown): View => {
+                        const builder = config as { atPath?: (path: unknown) => { get(): unknown } };
+
+                        return typeof builder.atPath === "function" ? { get: (at) => builder.atPath!(at).get() } : (config as View);
+                    };
+                    const scope = (request: ScopeRequest = {}): VarScope => scopeOver(viewOf(sous.engine.config), request);
                     const resolver: VariablesResolver = {
                         substitute,
                         substituteStrict(text, inScope, context) {
@@ -212,7 +222,7 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
                         autoVariables: () => auto,
                         isAutoVariable: (name): name is keyof typeof auto => name in auto,
                         scope,
-                        scopeIn: (_config, request) => scope(request),
+                        scopeIn: (config, request) => scopeOver(viewOf(config), request),
                         origins: () => ({}),
                         originsIn: () => ({}),
                         requestAt: () => ({}),
@@ -220,7 +230,7 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
 
                     return resolver;
                 },
-                { lifetime: "config" },
+                { lifetime: "singleton" },
             );
             sous.services.add("variables.secrets", () => testSecrets(options.secrets ?? []), { lifetime: "config" });
         },

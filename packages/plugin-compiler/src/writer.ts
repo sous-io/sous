@@ -36,9 +36,11 @@ export class WriterService implements CompilerWriter {
         this.backups = settings.backups ?? new Backups(path.join(path.dirname(store.file), "backups"), store.projectRoot);
     }
 
-    async write(file: string, content: string, options: WriteOptions): Promise<WrittenFile> {
+    async write(file: string, content: string | Uint8Array, options: WriteOptions): Promise<WrittenFile> {
         const dest = path.resolve(file);
-        const bytes = Buffer.byteLength(content, "utf8");
+        // Bytes are written as they are, so a binary file reaches the project unchanged; text is UTF-8.
+        const data = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content.buffer, content.byteOffset, content.byteLength);
+        const bytes = data.byteLength;
         const tracked = this.store.entry(dest);
         const exists = fs.existsSync(dest);
         const base = {
@@ -47,8 +49,8 @@ export class WriterService implements CompilerWriter {
             ...(options.target === undefined ? {} : { target: options.target }),
             ...(options.origin === undefined ? {} : { origin: options.origin }),
         };
-        const current = exists ? readText(dest) : undefined;
-        const sameContent = current !== undefined && current === content;
+        const current = exists ? readBytes(dest) : undefined;
+        const sameContent = current !== undefined && current.equals(data);
 
         // A file the compiler did not write is left alone when the user said so, even when its
         // content already matches: taking it over would let a later prune delete it.
@@ -68,7 +70,7 @@ export class WriterService implements CompilerWriter {
         const entry = {
             dest,
             srcHash: options.sourceHash ?? hashContent(options.source),
-            destHash: hashContent(content),
+            destHash: hashContent(data),
             size: bytes,
             builtAt: new Date().toISOString(),
             ...(options.target === undefined ? {} : { target: options.target }),
@@ -77,6 +79,7 @@ export class WriterService implements CompilerWriter {
 
         if (sameContent && !options.force) {
             this.store.record(tracked === undefined ? entry : { ...entry, builtAt: tracked.builtAt });
+            this.applyMode(dest, options.mode);
 
             return { ...base, action: "unchanged" };
         }
@@ -84,14 +87,10 @@ export class WriterService implements CompilerWriter {
         const backup = backUp ? this.backups.copy(dest, options.run) : undefined;
 
         this.ensureDir(path.dirname(dest));
-        fs.writeFileSync(dest, content, "utf8");
+        fs.writeFileSync(dest, data);
 
         if (options.mode !== undefined) {
-            try {
-                fs.chmodSync(dest, options.mode);
-            } catch {
-                // Some platforms cannot change modes; the content is what matters.
-            }
+            this.applyMode(dest, options.mode);
         } else if (dest.endsWith(".sh")) {
             fs.chmodSync(dest, 0o755);
         }
@@ -99,6 +98,21 @@ export class WriterService implements CompilerWriter {
         this.store.record(entry);
 
         return { ...base, action: exists ? "updated" : "created", ...(backup === undefined ? {} : { backup }) };
+    }
+
+    /** Gives a written file the mode asked for, when it differs. */
+    private applyMode(dest: string, mode: number | undefined): void {
+        if (mode === undefined) {
+            return;
+        }
+
+        try {
+            if ((fs.statSync(dest).mode & 0o7777) !== (mode & 0o7777)) {
+                fs.chmodSync(dest, mode & 0o7777);
+            }
+        } catch {
+            // Some platforms cannot change modes; the content is what matters.
+        }
     }
 
     async remove(files: readonly string[], options: RemoveOptions = {}): Promise<RemovedFiles> {
@@ -116,7 +130,7 @@ export class WriterService implements CompilerWriter {
             removed.push(dest);
 
             // An output edited by hand since sous wrote it is copied away before it is removed.
-            const current = fs.existsSync(dest) ? readText(dest) : undefined;
+            const current = fs.existsSync(dest) ? readBytes(dest) : undefined;
             const backUp = current !== undefined && !isOwnContent(current, tracked);
 
             if (options.dryRun) {
@@ -200,13 +214,13 @@ export class WriterService implements CompilerWriter {
 }
 
 /** Whether a file's content is what sous wrote there: the file is tracked and its hash is the one recorded. */
-function isOwnContent(current: string, tracked: StateFileEntry | undefined): boolean {
+function isOwnContent(current: Uint8Array, tracked: StateFileEntry | undefined): boolean {
     return tracked !== undefined && hashContent(current) === tracked.destHash;
 }
 
-function readText(file: string): string | undefined {
+function readBytes(file: string): Buffer | undefined {
     try {
-        return fs.readFileSync(file, "utf8");
+        return fs.readFileSync(file);
     } catch {
         return undefined;
     }

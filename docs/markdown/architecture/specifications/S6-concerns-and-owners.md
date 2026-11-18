@@ -486,6 +486,8 @@ the editor (below) edits files Sous does not own. See "Changes".
 | Concern | Owner | Kind |
 | --- | --- | --- |
 | Compiling every target's templates into outputs | `compiler.compile` | intent, internal |
+| Listing every file a build writes (`compilation.files`), the one place a target's `entryGlob` is matched against the disk | `compiler.files` | contributor, config stage 1 |
+| Variables by output path (`compilation.varOverrides`), set on the listed files | `compiler.var-overrides` | contributor, config stage 1 |
 | Include resolution: include lines and `{% render %}` paths, `@`, `~` and `#` | `compiler.includes` | service, config |
 | Aliases | `compiler.aliases` | service, config |
 | Compilation settings: targets, entry globs, `content` targets, outputs, runtime context | the `compilation` config key | `config-key` entity |
@@ -530,6 +532,42 @@ assertions (S9, the editor).
 | Applying the list, undoing what is no longer declared, the assertions | `editor.apply` | intent, internal; run by `build` after the compiler |
 | Editing one file directly | `editor` | service, config |
 | The record of applied edits | `.sous/sous.edits.json` | file, git-ignored |
+Every output file is its own entry in the config (law L8, goal G10). The `compiler.files` contributor
+runs in config stage 1, after stage 0 has added every target, matches each target's `entryGlob`
+against the disk, and sets `compilation.files`: one entry per output of each source, with its source
+and its destination from before any transform. The compiler compiles those entries and never matches a
+glob itself. The targets stay in the config as written. What listing found wrong (a variable no one
+sets, a glob that matches nothing) is kept under `compilation.listing` and reported when a build runs,
+not on every command. A target a later stage adds has no entries, and the build reports it as never
+listed.
+
+```jsonc
+// sous config get compilation.files (excerpt)
+[
+    {
+        "target": "projectSkills",
+        "targetIndex": 0,
+        "source": "/home/luke/code/acme/.sous/skills/review/SKILL.tpl.md",
+        "output": 0,
+        "destination": "/home/luke/code/acme/.claude/skills/review/SKILL.md",
+        "_vars": { "tool": "claude" }
+    }
+]
+```
+
+The `compiler.var-overrides` contributor then applies `compilation.varOverrides`: each rule's `match`
+and `exclude` (one entry or a list; a glob, or a regular expression written between two slashes, as
+`recipes.memories.first` takes them) is matched against each entry's destination, and the matching
+rules' `_vars` are set on the entry, a later rule winning for a name both set. The compiler lays an
+entry's `_vars` over the output's own scope, so a rule wins over the output's `_vars`. Matching a glob
+or a regular expression list is one implementation, in `plugin-host` (`compilePatternList`), used here
+and by `plugin-memories`.
+
+While a template renders, it reads `sousOutputPath` and `sousOutputDir` (the output's destination and
+its directory, from before any transform; a file included into the output sees the same),
+`host.platform`, and `harness.id` (the output's `harness`, or `""`). An output's `_if` is removed in
+favor of config expressions. A file that is not a template and includes nothing is copied byte for
+byte, and an executable source gives an executable output, templated or not.
 
 ### Build: `plugin-build`
 
@@ -1022,6 +1060,33 @@ one nothing produces any more; the editor changes only the values it was told to
 the project or another tool owns, and undoes exactly that. Other plugins still add compilation
 targets for files Sous owns, and add entries to `editor.edits` for files it does not. Approved by
 Luke on 2026-11-17, when he agreed a separate plugin carries out declared edits.
+### 2026-11-18: Outputs are config entries; variables by output path; what templates read
+
+Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18.
+
+> "So issue 2 should include moving the glob expansion out to a contributor, with glob-based variable
+> overrides becoming a little added bonus."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-16)
+
+> "I'm definitely wanting to drop that `_if` logic in favor of conditionals"
+>
+>   -- **Luke Chavers** in an agent session (2026-11-18)
+
+**What changed.** The compiler gains two contributors, `compiler.files` and `compiler.var-overrides`,
+both in config stage 1. Matching a target's `entryGlob` moves from the compile to config building
+(the concern keeps its owner, L1; only the time changes), so every output file is an entry under
+`compilation.files` and the compiler compiles those entries. `compilation.varOverrides` sets variables
+by output path; a rule wins over the output's own `_vars`, and a later rule wins over an earlier one.
+The glob-or-regular-expression list matcher moves from `plugin-memories` to `plugin-host`, so both
+plugins use one implementation. An output may carry `harness`; templates read `harness.id`,
+`host.platform`, `sousOutputPath` and `sousOutputDir`. An output's `_if` is removed. Files that need no
+rendering are copied as bytes, and an executable source stays executable. In watch mode, a file added
+to or removed from a glob target's folder rebuilds the config.
+
+**Why stage 1.** Listing must see every target, and in stage 0 it ran on every pass in which a target
+changed (three times on this repository) and its result made the user's config files, which watch the
+whole config, run again. In stage 1 it runs once.
 
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 

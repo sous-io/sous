@@ -13,7 +13,7 @@ import { CompileRun, type EngineRequest } from "./compiler.js";
 import { createRenderFs } from "./liquid/render-fs.js";
 import type { CompilerRuntime } from "./runtime.js";
 import { isProtectedPath } from "./state.js";
-import { expandTargets, targetName, type CompileUnit } from "./targets.js";
+import { targetName, unitsOf, type CompileUnit } from "./targets.js";
 import { createTokenCounter } from "./tokens.js";
 import type {
     CompileInput,
@@ -121,11 +121,7 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
 
     const selectionProblems: CompileProblem[] = [];
     const only = selectTargets(runtime, input.targets, selectionProblems);
-    const expanded = expandTargets(
-        runtime.settings(),
-        { resolver: runtime.resolver(), aliases: runtime.aliases(), globs: runtime.globs(), projectRoot: runtime.projectRoot() },
-        only,
-    );
+    const expanded = unitsOf(runtime.settings(), { resolver: runtime.resolver(), projectRoot: runtime.projectRoot() }, only);
     const problems = [...reportExpansion(selectionProblems, false, ctx.reporter), ...reportExpansion(expanded.problems, strict, ctx.reporter)];
     const { deps, counter, counterError } = await runDependencies(runtime, ctx, ctx.reporter, true);
 
@@ -188,12 +184,7 @@ async function producedNow(runtime: CompilerRuntime, ctx: Context): Promise<Read
         return runtime.produced;
     }
 
-    const expanded = expandTargets(runtime.settings(), {
-        resolver: runtime.resolver(),
-        aliases: runtime.aliases(),
-        globs: runtime.globs(),
-        projectRoot: runtime.projectRoot(),
-    });
+    const expanded = unitsOf(runtime.settings(), { resolver: runtime.resolver(), projectRoot: runtime.projectRoot() });
     const { deps } = await runDependencies(runtime, ctx, nullReporter, false);
     const result = await new CompileRun(deps, { dryRun: true }).run(expanded.units);
 
