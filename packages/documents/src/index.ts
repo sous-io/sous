@@ -11,5 +11,6 @@ export { DocNode, type ItemPredicate } from "./node.js";
 export { BaseDocument } from "./document.js";
 export { ValueDocument, createDocument } from "./value-document.js";
 export { TextDocument, parseDocument } from "./text-document.js";
+export { splitFrontmatter, joinFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 export { serializePatchSet, deserializePatchSet, parsePatch, parsePatchFile, PatchFormatError } from "./serialize.js";
 export { describePatch, describePatchSet } from "./describe.js";

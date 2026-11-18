@@ -1,10 +1,11 @@
 /**
- * Documents edited as text: JSON, JSONC and YAML files, changed surgically so every line an edit
- * does not touch stays as it was.
+ * Documents edited as text: JSON, JSONC and YAML files, and the YAML frontmatter of Markdown
+ * files, changed surgically so every line an edit does not touch stays as it was.
  */
 import { parseDocument as parseYamlModel } from "yaml";
 import { applyPatch } from "./apply.js";
 import { BaseDocument } from "./document.js";
+import { joinFrontmatter, splitFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 import { getAtPath } from "./json.js";
 import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
 import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
@@ -20,13 +21,24 @@ import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from
  * doc.atPath(["subscriptions", "workflow/x", "enabled"]).set(false);
  * fs.writeFileSync(file, doc.toString());   // comments and layout kept
  * ```
+ *
+ * A `markdown` document is the YAML frontmatter of a Markdown file; the body is never changed:
+ *
+ * ```ts
+ * const doc = parseDocument("---\nmodel: sonnet\n---\n# Reviewer\n", "markdown");
+ *
+ * doc.atPath("model").set("opus");
+ * doc.toString();   // "---\nmodel: opus\n---\n# Reviewer\n"
+ * ```
  */
 export class TextDocument extends BaseDocument {
     private current: JsonValue;
+    /** The text being edited: the whole file, or a Markdown file's frontmatter YAML. */
     private text: string;
     private readonly original: string;
     private readonly layout: TextLayout;
     private readonly yamlStyle: YamlStyle | undefined;
+    private readonly frontmatter: FrontmatterParts | undefined;
     /** The text of keys and items YAML edits removed, reused when the same value is put back. */
     private readonly removed: RemovedText[] = [];
     private readonly removedJsonc: RemovedJsoncText[] = [];
@@ -37,12 +49,19 @@ export class TextDocument extends BaseDocument {
         super();
         this.original = text;
 
-        this.text = text;
-        this.layout = detectLayout(text);
+        if (format === "markdown") {
+            this.frontmatter = splitFrontmatter(text);
+            this.text = this.frontmatter.yaml ?? "";
+        } else {
+            this.frontmatter = undefined;
+            this.text = text;
+        }
 
-        if (format === "yaml") {
-            this.current = yamlValue(parseYamlText(text));
-            this.yamlStyle = detectYamlStyle(text);
+        this.layout = detectLayout(this.text);
+
+        if (format === "yaml" || format === "markdown") {
+            this.current = yamlValue(parseYamlText(this.text));
+            this.yamlStyle = detectYamlStyle(this.frontmatter === undefined ? this.text : this.frontmatter.yaml ?? this.frontmatter.body);
         } else {
             this.current = parseJsoncText(text);
             this.yamlStyle = undefined;
@@ -60,7 +79,7 @@ export class TextDocument extends BaseDocument {
             return this.original;
         }
 
-        return this.text;
+        return this.frontmatter === undefined ? this.text : joinFrontmatter(this.frontmatter, this.text);
     }
 
     /**
@@ -126,7 +145,8 @@ function readsAs(text: string, value: JsonValue): boolean {
 }
 
 /**
- * Parses JSON, JSONC or YAML text into a document to edit surgically. Empty text is `{}`.
+ * Parses JSON, JSONC, YAML, or the YAML frontmatter of a Markdown file, into a document to edit
+ * surgically. Empty text, and a Markdown file with no frontmatter, is `{}`.
  *
  * @throws Error when the text cannot be parsed, naming where.
  */
