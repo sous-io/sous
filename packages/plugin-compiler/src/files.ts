@@ -5,10 +5,11 @@
  * reads those entries instead of matching globs itself (law L8: declarations as config). It is the
  * one place a target's glob is matched.
  *
- * It runs after every other contributor (`after: ["*"]`), so it sees every target, and re-runs
- * whenever a target, a variable or an alias it read changes. What goes wrong (a variable no one
- * sets, a glob that matches nothing) is kept under `compilation.listing` and reported when a build
- * runs, as it was before, not on every command.
+ * It runs in a config stage of its own, after stage 0 has settled, so it sees every target the
+ * plugins, the recipes and the user's files add, and it runs once instead of on every pass in which
+ * a target changes (and the user's files, which re-run on any change, are not made to run again by
+ * its result). What goes wrong (a variable no one sets, a glob that matches nothing) is kept under
+ * `compilation.listing` and reported when a build runs, as it was before, not on every command.
  */
 
 import fs from "node:fs";
@@ -23,6 +24,13 @@ import type { AliasesSettings, CompilationFile, CompilationFileProblem, Compilat
 
 /** The contributor's id. */
 export const FILES_CONTRIBUTOR = "compiler.files";
+
+/**
+ * The config stage the files are listed in, and `compilation.varOverrides` applied: after stage 0,
+ * where every target is added. A contributor that adds a target in a later stage still can; the
+ * build then reports that target's files were never listed.
+ */
+export const LISTING_STAGE = 1;
 
 /** A target's name: its id, or its index. */
 export function targetName(target: Pick<CompilationTarget, "id">, index: number): string {
@@ -180,6 +188,7 @@ export interface FilesContributorOptions {
 export function filesContributor(options: FilesContributorOptions): ContributorDefinition {
     return {
         id: FILES_CONTRIBUTOR,
+        stage: LISTING_STAGE,
         after: ["*"],
         contribute(config) {
             const targets = config.atPath(["compilation", "targets"]).get<CompilationTarget[]>();

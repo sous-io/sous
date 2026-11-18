@@ -15,7 +15,7 @@ import path from "node:path";
 import type { ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
 import { compilePatternList } from "@sous-io/plugin-host";
 import type { VarScope, VariablesResolver } from "@sous-io/plugin-variables/types";
-import { FILES_CONTRIBUTOR } from "./files.js";
+import { FILES_CONTRIBUTOR, LISTING_STAGE } from "./files.js";
 import type { CompilationFile, CompilationFileProblem, CompilationVarOverride } from "./types.js";
 
 /** The contributor's id. */
@@ -125,6 +125,7 @@ export function applyOverrides(rules: readonly CompilationVarOverride[], files: 
 export function varOverridesContributor(options: { readonly services: ServiceReader }): ContributorDefinition {
     return {
         id: VAR_OVERRIDES_CONTRIBUTOR,
+        stage: LISTING_STAGE,
         after: ["*", FILES_CONTRIBUTOR],
         contribute(config) {
             const rules = config.atPath(["compilation", "varOverrides"]).get<CompilationVarOverride[]>();
