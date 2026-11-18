@@ -779,7 +779,7 @@ describe("subscription.list", () => {
     });
 });
 
-describe("update.plan and update", () => {
+describe("recipe.plan-update and update", () => {
     const data = { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": {}, core: { range: "0.2.34", addedBy: "sous" }, gone: { enabled: false } } };
 
     /** A plan says what the lockfile would become, writing nothing. */
@@ -851,7 +851,7 @@ describe("update.plan and update", () => {
         const { config, lock } = setup({ data, lock: pinned });
         const ctx = context(config, { intents: ["build"] });
 
-        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "update.plan" ? IntentOutputs.of(await planUpdate(input as never, ctx)) : IntentOutputs.of({ ran: intent })));
+        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "recipe.plan-update" ? IntentOutputs.of(await planUpdate(input as never, ctx)) : IntentOutputs.of({ ran: intent })));
 
         const result = await updateSubscriptions({ yes: true }, ctx);
 
@@ -985,7 +985,7 @@ describe("the update command's registration", () => {
      * `sous recipe update` are the same command, and the plan is internal.
      *
      * update       -> aliases: subscription update, recipe update
-     * update.plan  -> internal, no command
+     * recipe.plan-update  -> internal, no command
      */
     it("should register update with both old spellings as aliases, and keep the plan internal", () => {
         const intents = registered();
@@ -997,7 +997,7 @@ describe("the update command's registration", () => {
             ],
             positional: ["ref"],
         });
-        expect(intents.get("update.plan")?.internal).toBe(true);
+        expect(intents.get("recipe.plan-update")?.internal).toBe(true);
         expect(intents.has("subscription.update")).toBe(false);
         expect(intents.has("recipe.update")).toBe(false);
     });

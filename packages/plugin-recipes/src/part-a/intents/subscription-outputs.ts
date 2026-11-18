@@ -1,5 +1,5 @@
 /**
- * The outputs of `subscription.add`, `.remove`, `.enable`, `.disable`, `update` and `update.plan`.
+ * The outputs of `subscription.add`, `.remove`, `.enable`, `.disable`, `update` and `recipe.plan-update`.
  *
  * The handlers already report some of this as they work: `subscription.add` and `.remove` note
  * their plan and what stays before they ask, and `update` reports its plan before its
@@ -253,7 +253,7 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
     return finish(outputs, plainResult(result), { after: built.outputs, ...(built.failed ? { exitCode: 1 } : {}) });
 }
 
-// --- update.plan ----------------------------------------------------------------------------------
+// --- recipe.plan-update ---------------------------------------------------------------------------
 
 /**
  * The note for a built-in subscription whose pins an update moves, saying why.
@@ -346,7 +346,7 @@ export function updatePlanOutputs(plan: RecipeUpdatePlan): IntentOutput[] {
     return outputs;
 }
 
-/** The outputs of `update.plan`: the plan, and that nothing was written. */
+/** The outputs of `recipe.plan-update`: the plan, and that nothing was written. */
 export function recipeUpdateOutputs(plan: RecipeUpdatePlan) {
     return finish(underHeading("Update plan", [...updatePlanOutputs(plan), dryRunOutput("Nothing was written. Run 'sous update' to apply it.")]), plan);
 }

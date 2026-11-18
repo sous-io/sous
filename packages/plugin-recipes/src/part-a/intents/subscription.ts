@@ -1,7 +1,7 @@
 /**
  * The subscription intents: `subscription.add`, `.remove`, `.enable`, `.disable`, `.list`, then
  * `update` (`sous update`, also `sous subscription update` and `sous recipe update`), which moves
- * pinned versions forward, and the internal `update.plan`, which plans that and writes nothing
+ * pinned versions forward, and the internal `recipe.plan-update`, which plans that and writes nothing
  * (ported from `subscription-service.ts` and `src/commands/subscription/`).
  *
  * Subscribing asks nothing about variables itself: it subscribes, then runs `vars.ask` and `build`
@@ -799,10 +799,10 @@ function plannedRecipes(lockfile: Lockfile, keys: readonly string[]): ResolvedRe
     });
 }
 
-/** `update` (`sous update`): plans with `update.plan`, asks once, trusts what a newer version needs, then writes the lockfile. */
+/** `update` (`sous update`): plans with `recipe.plan-update`, asks once, trusts what a newer version needs, then writes the lockfile. */
 export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: Context): Promise<SubscriptionUpdateResult> {
     const planInput: RecipeUpdateInput = { ...(input.ref === undefined ? {} : { ref: input.ref }), ...(input.acceptFirst === undefined ? {} : { acceptFirst: input.acceptFirst }) };
-    let plan = (await ctx.run("update.plan", planInput)).toPlain();
+    let plan = (await ctx.run("recipe.plan-update", planInput)).toPlain();
     const base = { trusted: [] as string[], dryRun: input.dryRun === true };
     const tried = new Set<string>();
 
@@ -868,7 +868,7 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
     };
 }
 
-/** Registers the subscription intents, `update` and `update.plan`. */
+/** Registers the subscription intents, `update` and `recipe.plan-update`. */
 export function registerSubscriptionIntents(sous: Sous): void {
     const ref = { type: "string", description: "A namespace or a recipe: 'namespace', 'namespace/recipe', either with '@<range>' or as 'repository:ref'" } as const;
     const toggleInput = inputSchema<SubscriptionToggleInput>({ ref, dryRun, noBuild }, ["ref"]);
@@ -970,7 +970,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
     });
 
     sous.intents.add({
-        intent: "update.plan",
+        intent: "recipe.plan-update",
         requiresProject: true,
         summary: "Plan an update of pinned versions, writing nothing",
         input: inputSchema<RecipeUpdateInput>({ ref: { type: "string", description: "Only this repository, namespace or recipe" }, acceptFirst }),

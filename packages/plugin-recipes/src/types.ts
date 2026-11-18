@@ -1247,7 +1247,7 @@ export type RecipeUpdateScope =
     | { kind: "namespace"; repo: string; namespace: string }
     | { kind: "recipe"; repo: string; key: string };
 
-/** `update.plan` (internal): plans an update of pinned versions, writing nothing. */
+/** `recipe.plan-update` (internal): plans an update of pinned versions, writing nothing. */
 export interface RecipeUpdateInput {
     /** A recipe, namespace or repository; default everything. */
     ref?: string;
@@ -1277,7 +1277,7 @@ export interface RecipeUpdatePlan {
     readonly cycles: string[][];
 }
 
-/** `update` (`sous update`): plans with `update.plan`, then applies. */
+/** `update` (`sous update`): plans with `recipe.plan-update`, then applies. */
 export interface SubscriptionUpdateInput extends RecipeChangeFlags, AnswerFlags {
     ref?: string;
     yes?: boolean;
@@ -1466,7 +1466,7 @@ declare module "@sous-io/plugin-api" {
         "subscription.disable": { input: SubscriptionToggleInput; result: SubscriptionToggleResult };
         "subscription.list": { input: BrowsingFlags; result: SubscriptionListResult };
         update: { input: SubscriptionUpdateInput; result: SubscriptionUpdateResult };
-        "update.plan": { input: RecipeUpdateInput; result: RecipeUpdatePlan };
+        "recipe.plan-update": { input: RecipeUpdateInput; result: RecipeUpdatePlan };
         "lock.rebuild": { input: LockRebuildInput; result: LockRebuildResult };
         "lock.show": { input: Record<string, never>; result: LockShowResult };
         "namespace.list": { input: BrowsingFlags; result: NamespaceListResult };
