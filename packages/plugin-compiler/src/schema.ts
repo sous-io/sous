@@ -13,16 +13,58 @@ export const DEFAULT_STATE_FILE = "${sousDir}/sous.state.json";
 
 const varsSchema = z.record(z.string(), z.string());
 
+/**
+ * What to write instead of an output's removed `_if`: the same output under a config expression.
+ *
+ * ```ts
+ * ifReplacement({ _if: { env: { eq: "prod" } }, destinationFile: "prod.md" });
+ * // -> '{ "$if": { "expr": "env == \'prod\'", "then": { "destinationFile": "prod.md" } } }'
+ * ```
+ */
+export function ifReplacement(output: Record<string, unknown>): string {
+    const { _if: conditions, ...rest } = output;
+    const tests =
+        conditions !== null && typeof conditions === "object"
+            ? Object.entries(conditions as Record<string, unknown>).map(([name, condition]) => {
+                  const value = (condition as { eq?: unknown } | null)?.eq;
+
+                  return `${name} == '${String(value).replace(/'/g, "\\'")}'`;
+              })
+            : [];
+
+    return `{ "$if": { "expr": ${JSON.stringify(tests.join(" and ") || "true")}, "then": ${JSON.stringify(rest)} } }`;
+}
+
 const outputSchema = z
     .object({
-        _if: z.record(z.string(), z.object({ eq: z.string() }).strict()).optional(),
+        /** Removed; kept only to say what to write instead (see `ifReplacement`). */
+        _if: z.unknown().optional(),
         _vars: varsSchema.optional(),
         destinationFile: z.string().optional(),
         destinationDir: z.string().optional(),
         transforms: z.array(z.string()).optional(),
         harness: z.string().min(1).optional().describe("The harness this output belongs to (claude-code, codex). Templates read it as harness.id."),
     })
-    .strict();
+    .strict()
+    .superRefine((output, ctx) => {
+        if (output._if === undefined) {
+            return;
+        }
+
+        const names = output._if !== null && typeof output._if === "object" ? Object.keys(output._if) : [];
+        const shadowed = names.filter((name) => name === "env" || name === "host");
+
+        ctx.addIssue({
+            code: "custom",
+            path: ["_if"],
+            message:
+                `'_if' was removed; a config expression on the output replaces it. Write the output as ` +
+                `${ifReplacement(output)}. The expression reads variables by their bare name, as every config expression does.` +
+                (shadowed.length > 0
+                    ? ` An expression reads ${shadowed.map((name) => `'${name}'`).join(" and ")} as sous's own value (the environment, the machine), so rename that variable first.`
+                    : ""),
+        });
+    });
 
 const originSchema = z
     .object({

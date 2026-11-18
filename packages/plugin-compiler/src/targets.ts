@@ -1,7 +1,7 @@
 /**
  * Turning the config's compilation targets into units to compile: one per source file (an
  * `entryGlob` target gives one per file it matches), each with its outputs resolved, `${var}`
- * substituted and `_if` conditions applied. Reads the disk only to expand globs.
+ * substituted. Reads the disk only to expand globs.
  */
 
 import fs from "node:fs";
@@ -215,7 +215,7 @@ function expandTarget(
 }
 
 /**
- * A target's outputs for one source: `_if` applied, destinations substituted. When several outputs
+ * A target's outputs for one source, destinations substituted. When several outputs
  * resolve to the same file, the first one is kept; a dropped one that has different transforms is
  * reported as a warning in `problems`, so it is never lost silently.
  */
@@ -233,10 +233,6 @@ export function resolveOutputs(
     target.outputs.forEach((output, index) => {
         const vars = env.resolver.scope({ level: "output", target: targetIndex, output: index, ...(scopeKey === undefined ? {} : { scopeKey }) });
         const where = `compilation.targets[${targetIndex}].outputs[${index}]`;
-
-        if (output._if && !Object.entries(output._if).every(([name, condition]) => vars[name] === condition.eq)) {
-            return;
-        }
 
         const resolved = {
             ...(output.destinationFile === undefined ? {} : { destinationFile: toPath(output.destinationFile, `${where}.destinationFile`, vars) }),

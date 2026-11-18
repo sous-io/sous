@@ -1,6 +1,6 @@
 /**
  * Compilation targets as the config holds them: entry globs and aliases (ported from today's
- * `entry-glob-aliases.test.ts`), `_if` and `${var}` in outputs (from `resolveCompilation()` in
+ * `entry-glob-aliases.test.ts`), `${var}` in outputs, the removed `_if` (from `resolveCompilation()` in
  * today's `settings.spec.ts`), `content` targets a plugin adds, transforms, choosing
  * targets, and watch mode's partial rebuild.
  */
@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin, type JsonObject } from "@sous-io/plugin-api";
 import type { CompilationTarget, CompilationTransformEntity } from "../src/types.js";
 import { compileOnce, errorsOf, makeCompiler, makeProject, type TestProject } from "./helpers.js";
 
@@ -155,34 +155,23 @@ describe("outputs", () => {
         expect(project.exists("ok.md")).toBe(true);
     });
 
-    /** `_if` keeps an output only when every named variable equals its value. */
-    it("should include an output whose _if matches and leave out one that does not", async () => {
+    /**
+     * `_if` on an output was removed in favor of config expressions: a config that still uses it is
+     * refused, naming the output and showing the `$if` to write instead.
+     */
+    it("should refuse an output's _if and show the $if that replaces it", async () => {
         project = makeProject();
         const entry = project.write("a.md", "A");
-        const { result } = await compileOnce(
-            project,
-            {
-                targets: [
-                    {
-                        entryPoint: entry,
-                        outputs: [
-                            { _if: { env: { eq: "prod" } }, destinationFile: project.at("prod.md") },
-                            { _if: { env: { eq: "dev" } }, destinationFile: project.at("dev.md") },
-                            { _if: { env: { eq: "dev" } }, _vars: { env: "dev" }, destinationFile: project.at("local.md") },
-                            { destinationFile: project.at("always.md") },
-                        ],
-                    },
-                ],
-            },
-            {},
-            { config: { _vars: { env: "prod" } } },
-        );
+        const config: JsonObject = {
+            compilation: { targets: [{ entryPoint: entry, outputs: [{ destinationFile: "always.md" }, { _if: { stage: { eq: "prod" }, tier: { eq: "web" } }, destinationFile: "prod.md" }] }] },
+        };
 
-        expect(result.ok).toBe(true);
-        expect(project.exists("prod.md")).toBe(true);
-        expect(project.exists("dev.md")).toBe(false);
-        expect(project.exists("local.md")).toBe(true);
-        expect(project.exists("always.md")).toBe(true);
+        await expect(makeCompiler(project, { config })).rejects.toMatchObject({
+            details: [expect.stringContaining("compilation.targets[0].outputs[1]._if")],
+        });
+        await expect(makeCompiler(project, { config })).rejects.toMatchObject({
+            details: [expect.stringContaining(`{ "$if": { "expr": "stage == 'prod' and tier == 'web'", "then": {"destinationFile":"prod.md"} } }`)],
+        });
     });
 
     /** A target with both or neither of its sources is refused when the config is checked. */

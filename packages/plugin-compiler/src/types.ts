@@ -29,8 +29,6 @@ export interface CompilationOrigin {
 
 /** One output of a target. */
 export interface CompilationOutput {
-    /** Writes only when every named variable equals the value. */
-    _if?: Record<string, { eq: string }>;
     /** Variables of this output's scope. */
     _vars?: Record<string, string>;
     /** Where a single output goes. One of `destinationFile` and `destinationDir`. */
