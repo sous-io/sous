@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin, IntentOutputs, jsonSchema, scriptedPrompter, type Context } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs, jsonSchema, scriptedPrompter, type Context, type SousError } from "@sous-io/plugin-api";
 import type { PluginsInstallInput } from "@sous-io/plugin-update/types";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeRecipe, type FakeRepo } from "../part-b/helpers.js";
 import { ensureRequiredPlugins, unmetRequirements, type RequirementFlags } from "../../src/part-a/required-plugins.js";
@@ -50,7 +50,7 @@ beforeEach(() => {
 afterEach(() => cleanTemp());
 
 /** An engine with a test intent that runs the check, and a stand-in `plugins.install`. */
-async function engineWith(extraPlugins: Array<{ name: string; version: string }> = []) {
+async function engineWith(extraPlugins: Array<{ name: string; version: string }> = [], installExitCode = 0) {
     const harness = definePlugin({
         name: "test-requirements",
         register(sous) {
@@ -67,7 +67,14 @@ async function engineWith(extraPlugins: Array<{ name: string; version: string }>
                 handle: async (input: unknown) => {
                     installs.push(input as PluginsInstallInput);
 
-                    return IntentOutputs.of({ manager: "npm", command: { command: "npm", args: ["install"] }, installed: [], declined: false, dryRun: false });
+                    return IntentOutputs.of({
+                        manager: "npm",
+                        command: { command: "npm", args: ["install"] },
+                        installed: [],
+                        declined: false,
+                        dryRun: false,
+                        ...(installExitCode === 0 ? {} : { exitCode: installExitCode }),
+                    });
                 },
             } as never);
         },
@@ -99,6 +106,15 @@ describe("ensureRequiredPlugins()", () => {
 
         expect(installs).toEqual([{ plugins: ["sous-plugin-extra@^1.2.0"], yes: true }]);
         expect(result.intent).toBe("plugins.install");
+    });
+
+    /** A failed npm install adds the hint: the plugin may ship inside a recipe, which has no npm name. */
+    it("should say the plugin may ship as part of a recipe when installing it fails", async () => {
+        const { engine } = await engineWith([], 1);
+        const failure = await engine.handle.submit({ intent: "test.requirements" as never, input: { installPlugins: true } as never }).catch((error: unknown) => error as SousError);
+
+        expect((failure as SousError).message).toContain("Sous could not install sous-plugin-extra@^1.2.0");
+        expect((failure as SousError).details).toContain("Perhaps the required plugin ships as part of a recipe?");
     });
 
     it("should offer to install when run interactively", async () => {
