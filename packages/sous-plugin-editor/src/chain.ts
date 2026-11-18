@@ -146,6 +146,7 @@ export interface ValueOperations<R> {
     toggle(): R;
     // Comments
     setCommentBefore(text: string): R;
+    setCommentAfter(text: string): R;
 }
 
 /** One value inside a file: every operation, recorded at its path. */

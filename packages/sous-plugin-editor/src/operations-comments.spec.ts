@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { apply, makeTmpDir, read, write, type TestEntry } from "../test/helpers.js";
+import { createDocument } from "@sous-io/sous-lib-documents";
+import type { ConfigBuilder } from "@sous-io/sous-plugin-api";
+import { editor } from "./chain.js";
+import { EDITS_KEY } from "./entries.js";
 import { resolveOperation } from "./operations.js";
 
 let tmp: { path: string; cleanup(): void };
@@ -116,5 +120,69 @@ describe("setCommentBefore", () => {
         expect(() => resolveOperation("setCommentBefore", { text: "x" })).toThrow(/needs the 'path'/);
         expect(() => resolveOperation("setCommentBefore", { path: "a" })).toThrow(/needs 'text'/);
         expect(resolveOperation("setCommentBefore", { path: "a", text: "x" }).definition.assertions({ path: "a", text: "x" }, "a")).toEqual([]);
+    });
+});
+
+describe("setCommentAfter", () => {
+    /**
+     * setCommentAfter should replace the comment at the end of a key's line, keeping the spacing
+     * before it; removing the declaration gives the file back byte for byte.
+     *
+     * model: sonnet # for now   setCommentAfter { path: model, text: pinned }
+     * // -> model: sonnet # pinned
+     */
+    it("should replace a frontmatter comment after a key and undo it", async () => {
+        await roundTrip(
+            ".claude/agents/reviewer.md",
+            AGENT,
+            [{ entry: { file: ".claude/agents/reviewer.md", setCommentAfter: { path: "model", text: "pinned" } } }],
+            AGENT.replace("# for now", "# pinned"),
+        );
+    });
+
+    /**
+     * A line with no comment gets one, on the last key of a block and on a list item; the line's
+     * trailing spaces, and its CRLF ending, come back on undo.
+     */
+    it("should add a comment after the last key of a block and after a list item", async () => {
+        await roundTrip(
+            ".vscode/settings.json",
+            SETTINGS.replace('"**/.git": true', '"**/.git": true  '),
+            [{ entry: { file: ".vscode/settings.json", setCommentAfter: { path: '"files.exclude"."**/.git"', text: "hidden" } } }],
+            SETTINGS.replace('"**/.git": true', '"**/.git": true // hidden'),
+        );
+
+        await roundTrip(
+            "ci.yml",
+            "on: push\r\nsteps:\r\n  - checkout\r\n  - test\r\n",
+            [{ entry: { file: "ci.yml", setCommentAfter: { path: "steps[1]", text: "slow" } } }],
+            "on: push\r\nsteps:\r\n  - checkout\r\n  - test # slow\r\n",
+        );
+    });
+
+    /**
+     * A comment after a value is one line.
+     */
+    it("should refuse a comment of several lines", () => {
+        expect(() => resolveOperation("setCommentAfter", { path: "a", text: "one\ntwo" })).toThrow(/one line/);
+    });
+
+    /**
+     * The chain records each comment operation as an entry, like the other operations.
+     *
+     * editor(config).file("ci.yml").at("on").setCommentAfter("x");
+     * // -> { file: "ci.yml", setCommentAfter: { path: "on", text: "x" } }
+     */
+    it("should be recorded by the chain", () => {
+        const config = createDocument({});
+        const file = editor(config as unknown as ConfigBuilder).file("ci.yml");
+
+        file.at("on").setCommentAfter("x");
+        file.at("on").setCommentBefore("y");
+
+        expect(config.atPath(EDITS_KEY).get()).toEqual([
+            { file: "ci.yml", setCommentAfter: { path: "on", text: "x" } },
+            { file: "ci.yml", setCommentBefore: { path: "on", text: "y" } },
+        ]);
     });
 });

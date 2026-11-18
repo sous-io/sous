@@ -33,7 +33,7 @@ export type OperationDraft = Omit<OperationDefinition, "normalize"> & { normaliz
 
 /** The comment operations, for `operations.ts` to define. */
 export function commentOperations(): OperationDraft[] {
-    return [setCommentOperation("before")];
+    return [setCommentOperation("before"), setCommentOperation("after")];
 }
 
 /** `setCommentBefore` or `setCommentAfter`: the comment there reads `text`. */
