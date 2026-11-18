@@ -4,7 +4,7 @@
  */
 export type * from "./types.js";
 export { parsePath, formatPath, isPathPrefix, pathsOverlap, PathSyntaxError } from "./path.js";
-export { toPlainJson, deepEqual, stableStringify, deepFreeze, getAtPath, isJsonObject, typeOfValue } from "./json.js";
+export { toPlainJson, deepEqual, compareValues, stableStringify, deepFreeze, getAtPath, isJsonObject, typeOfValue } from "./json.js";
 export { applyPatch, applyPatches } from "./apply.js";
 export { flattenPatchSet, isPatch, isPatchSet, countPatches, PatchRecorder, PATCH_OPS } from "./patch-set.js";
 export { DocNode, type ItemPredicate } from "./node.js";
