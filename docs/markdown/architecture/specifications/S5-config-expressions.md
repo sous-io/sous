@@ -625,22 +625,29 @@ None.
 ### 2026-11-18: Expressions read `harness.id`
 
 "What an Expression Can Read" gains `harness.id`, from Luke's accepted design for one config build
-per harness (S8): "I accept your recommendations" (2026-11-16). The evaluator keeps each build's
-records apart, since the builds run side by side; `evaluations(file, harness)` takes the build
-(default `""`), and an expression still unknown once the config settles names the harness build it
-was in.
-- **2026-11-18: `$file` added to the reserved keys**, by Luke's ruling (2026-11-17): "`b with the
-  general $include` is my answer", renamed: "Sure, we can use $file instead. Seems better, anyway."
-  Reason: a large value (a list of permission rules, a server definition) is easier to keep in a
-  file of its own format, and a recipe's manifest is now evaluated as config (S12). Its content is
-  not interpolated, as Luke ruled: "if a file contains `.tpl.`, its processed as a liquid template.
-  Otherwise, its not interpolated at all."
-- **2026-11-18: `$${` writes a literal `${`.** Luke asked for "a way to escape variables in
-  interpolation operations" (2026-11-17); the agent chose `$${`, the escape Docker Compose and
-  Terraform use, because a backslash must itself be escaped in JSON. Reason: a value such as a hook
-  command holds `${CLAUDE_PLUGIN_ROOT}`, which another tool fills in.
-- **2026-11-18: `harness.id` can be read**, the empty string when no harness is known (the build
-  contracts of the 2026-11-18 build; the per-harness builds set it).
-- **2026-11-18: a boolean recipe answer is a boolean in a condition.** A recipe variable of type
-  `boolean` answered `false` gives `false` to an expression, not the text `"false"`, which "Truth
-  and Falsehood" above says is true. Environment variables are unchanged: still text (S12).
+per harness (S8): "I accept your recommendations" (2026-11-16). It is the empty string when no
+harness is known (the build contracts of the 2026-11-18 build; the per-harness builds set it). The
+evaluator keeps each build's records apart, since the builds run side by side;
+`evaluations(file, harness)` takes the build (default `""`), and an expression still unknown once
+the config settles names the harness build it was in.
+
+### 2026-11-18: `$file` added to the reserved keys
+
+By Luke's ruling (2026-11-17): "`b with the general $include` is my answer", renamed: "Sure, we can
+use $file instead. Seems better, anyway." Reason: a large value (a list of permission rules, a
+server definition) is easier to keep in a file of its own format, and a recipe's manifest is now
+evaluated as config (S12). Its content is not interpolated, as Luke ruled: "if a file contains
+`.tpl.`, its processed as a liquid template. Otherwise, its not interpolated at all."
+
+### 2026-11-18: `$${` writes a literal `${`
+
+Luke asked for "a way to escape variables in interpolation operations" (2026-11-17); the agent chose
+`$${`, the escape Docker Compose and Terraform use, because a backslash must itself be escaped in
+JSON. Reason: a value such as a hook command holds `${CLAUDE_PLUGIN_ROOT}`, which another tool fills
+in.
+
+### 2026-11-18: A boolean recipe answer is a boolean in a condition
+
+A recipe variable of type `boolean` answered `false` gives `false` to an expression, not the text
+`"false"`, which "Truth and Falsehood" above says is true. Environment variables are unchanged:
+still text (S12).

@@ -814,7 +814,6 @@ None.
 print one harness's own build. From Luke's accepted design (S8): "I accept your recommendations"
 (2026-11-16). A "what if" build runs the harness builds too.
 
-
 ### 2026-11-18: Every document edit is surgical; Markdown frontmatter and plain text lines
 
 Rulings by Luke while deciding how Sous edits other tools' files (2026-11-17). On YAML, which was
@@ -862,6 +861,7 @@ only the values it was told to change, and leaves every other byte of the file a
 CI files, agent files' frontmatter, `.gitignore`), and a committed file should show only the line
 that changed. The operations that state what must be true (`ensureIncludes`, `ensureLine` and the
 rest) belong to the editor plugin that composes them from these.
+
 ### 2026-11-18: The compiler lists output files in stage 1; variables by output path
 
 Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18:

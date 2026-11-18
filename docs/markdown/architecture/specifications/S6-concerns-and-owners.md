@@ -1050,6 +1050,7 @@ replaces the line "Codex, and every other agent tool, is a separately installed 
 that the Codex work "will be done as part of this body of work" (2026-11-17), and the brief for the
 build made it built in. It adds nothing until a project turns Codex on, so a project that does not
 use Codex pays nothing for it. Every other agent tool is still a separately installed plugin.
+
 ### 2026-11-18: Claude Code owns its kinds, its memories file and its migrations
 
 Built from Luke's rulings of 2026-11-15 to 2026-11-18; the design is S15.
@@ -1077,6 +1078,7 @@ Built from Luke's rulings of 2026-11-15 to 2026-11-18; the design is S15.
 provides for a purpose. It sits above `plugin-host` and `plugin-recipes`, and loads after
 `plugin-memories`, before `plugin-build`. Approved by Luke with the handlers design (2026-11-17 and
 2026-11-18).
+
 ### 2026-11-18: The compiler is not the only built-in plugin that writes to the project
 
 The ruling of 2026-10-29, "among the built-in plugins, only the compiler writes build outputs",
@@ -1094,6 +1096,7 @@ one nothing produces any more; the editor changes only the values it was told to
 the project or another tool owns, and undoes exactly that. Other plugins still add compilation
 targets for files Sous owns, and add entries to `editor.edits` for files it does not. Approved by
 Luke on 2026-11-17, when he agreed a separate plugin carries out declared edits.
+
 ### 2026-11-18: Outputs are config entries; variables by output path; what templates read
 
 Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18.
@@ -1121,6 +1124,7 @@ to or removed from a glob target's folder rebuilds the config.
 **Why stage 1.** Listing must see every target, and in stage 0 it ran on every pass in which a target
 changed (three times on this repository) and its result made the user's config files, which watch the
 whole config, run again. In stage 1 it runs once.
+
 ### 2026-11-18: `init.hooks`; `plugin-init` depends on `plugin-update`
 
 `plugin-init` gains the `init.hooks` intent (`sous init hooks`, S14), which asks the
@@ -1128,6 +1132,7 @@ whole config, run again. In stage 1 it runs once.
 for the install command and the script run after an install, two new members of the entity. So
 `plugin-init` depends on `plugin-update`, which moves a row down. Approved with S14, from Luke's
 ruling: "I want a new command: `sous init hooks` that all of this is packaged in."
+
 ### 2026-11-18: Manifests as config
 
 The `recipes.manifests` contributor and the `content-kind` entity kind join plugin-recipes, and the
