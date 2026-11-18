@@ -478,7 +478,8 @@ ctx.reporter.warn(`Removing ${input.repository} deletes ${files.length} built fi
 ### Compiler: `plugin-compiler`
 
 Ruled 2026-10-29: among the built-in plugins, only the compiler writes build outputs. Other plugins
-add compilation targets to the config.
+add compilation targets to the config. Changed 2026-11-18: the compiler writes the files Sous owns;
+the editor (below) edits files Sous does not own. See "Changes".
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -515,6 +516,18 @@ name is never silent ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
 ```text
 /home/luke/code/acme/.claude/skills/review/SKILL.md is written by this project's own target, so the copy from the recipe workflow/review is not written.
 ```
+
+### The editor: `sous-plugin-editor`
+
+Edits to files Sous does not own: surgical, recorded, undone when no longer declared, and checked by
+assertions (S9, the editor).
+
+| Concern | Owner | Kind |
+| --- | --- | --- |
+| The master list of edits and where the history is kept | the `editor` config key (`editor.edits`) | `config-key` entity |
+| Applying the list, undoing what is no longer declared, the assertions | `editor.apply` | intent, internal; run by `build` after the compiler |
+| Editing one file directly | `editor` | service, config |
+| The record of applied edits | `.sous/sous.edits.json` | file, git-ignored |
 
 ### Build: `plugin-build`
 
@@ -983,6 +996,24 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-18: The compiler is not the only built-in plugin that writes to the project
+
+The ruling of 2026-10-29, "among the built-in plugins, only the compiler writes build outputs",
+described the build as it was and was never meant as a rule for all time:
+
+> "The compiler is the only thing that builds outputs, today, and we have intentionally pushed in
+> that direction. However, I don't recall deciding that the compiler should be the _only_ thing
+> that outputs, forever."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-17)
+
+The new built-in `sous-plugin-editor` edits files Sous does not own (S9, the editor). The line
+between the two is ownership: the compiler writes the files Sous owns, overwriting them and deleting
+one nothing produces any more; the editor changes only the values it was told to change in a file
+the project or another tool owns, and undoes exactly that. Other plugins still add compilation
+targets for files Sous owns, and add entries to `editor.edits` for files it does not. Approved by
+Luke on 2026-11-17, when he agreed a separate plugin carries out declared edits.
 
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 
