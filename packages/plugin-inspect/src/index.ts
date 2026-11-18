@@ -29,7 +29,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
             description: "Prints what sous does on this machine. --layers adds each contributor's changes, in order; --raw adds each config file as written; --harness <id> prints that harness's own config build instead of the merged config.",
             input: configShowSchema,
             parallel: true,
-            cli: { examples: ["sous config show", "sous config show --layers", "sous config show --raw", "sous config show --harness codex"] },
+            cli: { examples: ["sous config show", "sous config show --layers", "sous config show --raw", "sous config show --harness claude"] },
             agent: { usage: "Read the config as sous built it. Secrets are hidden." },
             handle: configShow,
         });
@@ -44,7 +44,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
             parallel: true,
             cli: {
                 positional: ["path"],
-                examples: ["sous config get name", "sous config get repos.sous-recipes.url", "sous config get compilation --layers", "sous config get compilation --harness codex"],
+                examples: ["sous config get name", "sous config get repos.sous-recipes.url", "sous config get compilation --layers", "sous config get compilation --harness claude"],
             },
             agent: { usage: "Read one config value by path. Secrets are hidden." },
             handle: configGet,
