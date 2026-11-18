@@ -141,6 +141,7 @@ action once, when the entry is first applied.
 | 40 | `ensureIncludes` | `items` (or `item`), `position` | `appendIfMissing`, `union`; `ensureFirst`, `ensureLast`, `ensureAt` (with `index`) |
 | 40 | `prependIfMissing` | `items` (or `item`) | |
 | 40 | `append` (action) | `item` or `items`, `position` | `prepend`, `insertAt` (with `index`), `insertBefore`, `insertAfter` |
+| 40 | `insertBeforeWhere`, `insertAfterWhere` (actions) | `where`, `item` or `items` | |
 | 50 | `remove` | `values` or `where` | `removeValues`, `ensureExcludes`, `removeValue`; `removeWhere`, `ensureNoItemWhere` |
 | 50 | `removeAt` (action) | `index` | |
 | 50 | `delete` | | `ensureAbsent` |
@@ -250,6 +251,31 @@ Other ways to say it: within one object, `renameKey` does the same (`renameKey: 
 env.ACME_DIR, name: ACME_HOME }`), but leaves both keys alone when the new name is taken. When you
 know the value, `set` at `to` plus `delete` at `path` says the same thing. `path` must end in a key:
 an item of a list is moved within its list with `moveItem`.
+
+### Inserting beside an item that matches
+
+`insertBeforeWhere` and `insertAfterWhere` add items just before or just after the first item whose
+fields match `where`. They are actions, like `append`: the items are added even if they are already
+there, and Sous does it once, when the entry is first applied. When no item matches, the items go
+at the end, as with `insertBefore` and an `after` or `before` line that is not found. A missing list
+is created; when the entry goes away, the items it added are removed (and a list it created).
+
+```yaml
+- file: .claude/settings.json
+  insertAfterWhere:
+    path: hooks.PreToolUse
+    where: { matcher: Bash }
+    item: { matcher: Bash, hooks: [{ type: command, command: acme-guard.sh }] }
+```
+
+```ts
+settings.at("hooks.PreToolUse").insertAfterWhere({ matcher: "Bash" }, { matcher: "Bash", hooks: [] });
+```
+
+Other ways to say it: when you can write out the whole item to put it beside, `insertBefore` and
+`insertAfter` (`append` with `position: { before: ... }`) do the same. When the item should be in
+the list once, whatever builds come and go, use a statement instead: `upsertWhere` (the list has an
+item with these fields, equal to this one) or `ensureIncludes`.
 
 ## Assertions
 

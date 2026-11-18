@@ -159,7 +159,7 @@ that one definition, and every shorthand or alias is a name for one of them with
 
 Two groups: operations that state what must be true change the file only when it is not already
 true (the common ones); actions always act. Sous runs an action (`append`, `prepend`, `insertAt`,
-`removeAt`, `appendText`, `prependText`, `increment`, `decrement`, `toggle`) once per declaration,
+`insertBeforeWhere`, `insertAfterWhere`, `removeAt`, `appendText`, `prependText`, `increment`, `decrement`, `toggle`) once per declaration,
 when the entry is first applied, since repeating it on every build would add the item again each
 time.
 
@@ -170,7 +170,7 @@ time.
 | 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey`, `copy` (`ifMissing`), `move` (`ifMissing`) |
 | 25 | `merge` (`ifMissing`), `replaceWhere`, `updateWhere`, `mergeWhere` |
 | 30 | `upsertWhere` |
-| 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`) |
+| 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`), `insertBeforeWhere`, `insertAfterWhere` |
 | 50 | `remove` (`values` or `where`), `removeAt`, `removeLine`, `delete`, `deleteIfEquals`, `deleteIfEmpty`, `deleteKeys`, `keepOnlyKeys` |
 | 60 | `ensureLine` (`position`), `ensureBlock`, `appendText`, `prependText`, `replaceText`, `replacePattern` |
 | 70 | `increment`, `decrement`, `toggle` |
@@ -225,9 +225,14 @@ after the key that came before it, and restores what `to` held. A value already 
 replaced unless `ifMissing: true`. Nothing happens while `path` is missing. Its automatic assertion
 is that `path` does not exist (none with `ifMissing`, where the source may stay).
 
-Not built yet, from the list Luke accepted: `insertBeforeWhere`,
-`insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
-`removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
+`insertBeforeWhere` and `insertAfterWhere` are actions: they add `items` (or `item`) just before or
+after the first item matching `where`, even when an equal item is there, and at the end when no item
+matches (as `insertBefore` and `ensureLine` do with an anchor that is not found). A missing list is
+created; `down` removes each item added (at the index it was added at, or else the last equal one)
+and a list `up` created. The automatic assertion is that the list includes each item.
+
+Not built yet, from the list Luke accepted: `moveItem`, the comment operations
+(`setCommentBefore`, `setCommentAfter`, `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
@@ -471,9 +476,12 @@ entry or a created file, or when the file already exists. The agent's fix, in th
 ### 2026-11-18: The operations that relocate values
 
 From the list Luke accepted, built in `operations-relocate.ts` and registered with the others:
-`copy` (`to`, `ifMissing`) and `move` (`to`, `ifMissing`). Both replace a value already at `to`
+`copy` (`to`, `ifMissing`), `move` (`to`, `ifMissing`), and the actions `insertBeforeWhere` and
+`insertAfterWhere` (`where`, `item` or `items`). `copy` and `move` replace a value already at `to`
 by default, like `set`, and `ifMissing: true` keeps it, like `set`'s option. A `move` within one
 object is a rename, which keeps the key's text and comments; a move to another object cannot keep a
 comment on the key's own line, since the library reuses a key's old text only in its own object.
 `move` refuses a `path` that is a list item: on the next build the index names the next item, so
-the move would repeat on a different item. The agent's choices; not yet reviewed by Luke.
+the move would repeat on a different item. The inserts follow `insertBefore` when nothing matches
+(the end) and `append` when the item is already there (added again, once per declaration). The
+agent's choices; not yet reviewed by Luke.

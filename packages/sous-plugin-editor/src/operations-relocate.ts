@@ -9,7 +9,8 @@
  */
 
 import { deepEqual, formatPath, isJsonObject, isPathPrefix, parsePath, type DocNode, type JsonObject, type JsonValue, type PathSegment } from "@sous-io/sous-lib-documents";
-import { EditNotPossible, OperationParamsError, type AliasDefinition, type OperationContext, type OperationDefinition } from "./operations.js";
+import { matchesFields } from "./checks.js";
+import { EditNotPossible, OperationParamsError, type AliasDefinition, type ImpliedCheck, type OperationContext, type OperationDefinition } from "./operations.js";
 
 /** The chain methods of these operations; `ValueOperations` in `chain.ts` extends this. */
 export interface RelocateOperations<R> {
@@ -17,6 +18,10 @@ export interface RelocateOperations<R> {
     copy(to: string, options?: { ifMissing?: boolean }): R;
     /** This value moves to `to`. With `ifMissing: true`, it moves only when `to` is missing. */
     move(to: string, options?: { ifMissing?: boolean }): R;
+    /** Adds the item just before the first item matching `where` (an action). */
+    insertBeforeWhere(where: object, item: unknown): R;
+    /** Adds the item just after the first item matching `where` (an action). */
+    insertAfterWhere(where: object, item: unknown): R;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -83,10 +88,47 @@ function requireKey(raw: JsonObject, key: string, operation: string): JsonValue 
     return raw[key]!;
 }
 
+function fieldsParam(raw: JsonObject, key: string, operation: string): JsonObject {
+    const value = requireKey(raw, key, operation);
+
+    if (!isJsonObject(value)) {
+        throw new OperationParamsError(`'${operation}': '${key}' must be an object of fields to match.`);
+    }
+
+    return value;
+}
+
 function booleanParam(raw: JsonObject, key: string, operation: string): void {
     if (raw[key] !== undefined && typeof raw[key] !== "boolean") {
         throw new OperationParamsError(`'${operation}': '${key}' must be true or false.`);
     }
+}
+
+/** A list from `items`, or `item`. */
+function itemsOf(raw: JsonObject, operation: string): JsonValue[] {
+    if (raw.items !== undefined) {
+        return Array.isArray(raw.items) ? [...raw.items] : [raw.items];
+    }
+
+    if (raw.item !== undefined) {
+        return [raw.item];
+    }
+
+    throw new OperationParamsError(`'${operation}' needs 'items' (or 'item').`);
+}
+
+function without(raw: JsonObject, ...keys: string[]): JsonObject {
+    return Object.fromEntries(Object.entries(raw).filter(([key]) => !keys.includes(key)));
+}
+
+function listOf(node: DocNode): JsonValue[] {
+    const value = node.get();
+
+    return Array.isArray(value) ? value : [];
+}
+
+function notAList(operation: string, node: DocNode): EditNotPossible {
+    return new EditNotPossible(`'${operation}' needs a list at ${node.pathString || "the root"}, and the value there is not one.`);
 }
 
 /** The node at another path of the same file. */
@@ -339,6 +381,78 @@ function moveDefinition(): OperationDefinition {
 }
 
 // ---------------------------------------------------------------------------------------------
+// insertBeforeWhere and insertAfterWhere
+// ---------------------------------------------------------------------------------------------
+
+function insertWhereDefinition(name: "insertBeforeWhere" | "insertAfterWhere"): OperationDefinition {
+    const before = name === "insertBeforeWhere";
+    const side = before ? "before" : "after";
+
+    return definition({
+        name,
+        order: 40,
+        scope: "document",
+        action: true,
+        summary: `Adds the items just ${side} the first item matching \`where\`, or at the end when no item matches, even if they are already there (an action: Sous does it once, when the entry is first applied). A missing list is created.`,
+        params: ["where", "items", "item"],
+        args: ["where", "item"],
+        normalize(raw) {
+            fieldsParam(raw, "where", name);
+
+            return { ...without(raw, "item"), items: itemsOf(raw, name) };
+        },
+        up(ctx, params) {
+            const node = ctx.node();
+            const value = node.get();
+
+            if (value !== undefined && !Array.isArray(value)) {
+                throw notAList(name, node);
+            }
+
+            if (value === undefined) {
+                node.set([]);
+            }
+
+            const list = listOf(node);
+            const at = list.findIndex((item) => matchesFields(item, params.where!));
+            let index = at === -1 ? list.length : before ? at : at + 1;
+            const added: JsonObject[] = [];
+
+            for (const item of params.items as JsonValue[]) {
+                node.insertAt(index, item);
+                added.push({ item, index });
+                index += 1;
+            }
+
+            return { added, matched: at !== -1, ...(value === undefined ? { created: true } : {}) };
+        },
+        down(ctx, _params, record) {
+            if (!isJsonObject(record)) return;
+
+            const node = ctx.node();
+
+            // Last added first, each at the index it was added at, or else the last equal item.
+            for (const entry of [...((record.added as JsonObject[] | undefined) ?? [])].reverse()) {
+                const list = listOf(node);
+                const at = entry.index as number;
+                let index = deepEqual(list[at], entry.item) ? at : -1;
+
+                for (let i = list.length - 1; index === -1 && i >= 0; i--) {
+                    if (deepEqual(list[i], entry.item)) index = i;
+                }
+
+                if (index !== -1) node.removeAt(index);
+            }
+
+            if (record.created === true && Array.isArray(node.get()) && listOf(node).length === 0) {
+                node.delete();
+            }
+        },
+        assertions: (params, path) => (params.items as JsonValue[]).map((item): ImpliedCheck => ({ check: "includes", arg: item, path })),
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Registering
 // ---------------------------------------------------------------------------------------------
 
@@ -353,5 +467,7 @@ export function registerRelocateOperations(definitions: OperationDefinition[], _
     definitions.push(
         copyDefinition(),
         moveDefinition(),
+        insertWhereDefinition("insertBeforeWhere"),
+        insertWhereDefinition("insertAfterWhere"),
     );
 }

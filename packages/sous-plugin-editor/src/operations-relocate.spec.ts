@@ -359,3 +359,165 @@ describe("move", () => {
         expect(read(tmp.path, "s.yaml")).toBe(ENV_YAML.replace("OLD_DIR:", "DIR:"));
     });
 });
+
+const HOOKS_JSONC = `{
+    "hooks": [
+        { "id": "lint", "run": "pnpm lint" }, // first
+        { "id": "test", "run": "pnpm test" }
+    ]
+}
+`;
+
+const HOOKS_YAML = `hooks:
+  - id: lint # first
+    run: pnpm lint
+  - id: test
+    run: pnpm test
+`;
+
+describe("insertBeforeWhere and insertAfterWhere", () => {
+    /**
+     * The item goes just before the first item matching `where`; a rollback removes it.
+     *
+     * insertBeforeWhere: { path: hooks, where: { id: test }, item: { id: types } }
+     */
+    it("should insert before the matching item in JSONC and YAML, and undo it byte for byte", async () => {
+        const item = { id: "types", run: "tsc" };
+        const jsonc = await roundTrip("s.jsonc", HOOKS_JSONC, { insertBeforeWhere: { path: "hooks", where: { id: "test" }, item } });
+
+        expect(jsonc.after).toBe(`{
+    "hooks": [
+        { "id": "lint", "run": "pnpm lint" }, // first
+        {
+            "id": "types",
+            "run": "tsc"
+        },
+        { "id": "test", "run": "pnpm test" }
+    ]
+}
+`);
+        expect(jsonc.undone).toBe(HOOKS_JSONC);
+
+        const yaml = await roundTrip("s.yaml", HOOKS_YAML, { insertBeforeWhere: { path: "hooks", where: { id: "test" }, item } });
+
+        expect(yaml.after).toBe(`hooks:
+  - id: lint # first
+    run: pnpm lint
+  - id: types
+    run: tsc
+  - id: test
+    run: pnpm test
+`);
+        expect(yaml.undone).toBe(HOOKS_YAML);
+    });
+
+    /**
+     * `insertAfterWhere` puts the items just after the matching item, in the order given.
+     */
+    it("should insert several items after the matching item", async () => {
+        const items = [{ id: "a" }, { id: "b" }];
+        const { after, undone } = await roundTrip("s.yaml", HOOKS_YAML, { insertAfterWhere: { path: "hooks", where: { id: "lint" }, items } });
+
+        expect(after).toBe(`hooks:
+  - id: lint # first
+    run: pnpm lint
+  - id: a
+  - id: b
+  - id: test
+    run: pnpm test
+`);
+        expect(undone).toBe(HOOKS_YAML);
+
+        const md = "---\ntags:\n  - name: x\n  - name: y\n---\nBody\n";
+        const frontmatter = await roundTrip("a.md", md, { insertAfterWhere: { path: "tags", where: { name: "x" }, item: { name: "n" } } });
+
+        expect(frontmatter.after).toBe("---\ntags:\n  - name: x\n  - name: n\n  - name: y\n---\nBody\n");
+        expect(frontmatter.undone).toBe(md);
+    });
+
+    /**
+     * No item matches: the items go at the end, as `insertBefore` and `ensureLine` do with an
+     * anchor that is not found.
+     */
+    it("should add at the end when nothing matches", async () => {
+        const { after, undone } = await roundTrip("s.yaml", HOOKS_YAML, { insertBeforeWhere: { path: "hooks", where: { id: "nope" }, item: { id: "x" } } });
+
+        expect(after).toBe(`${HOOKS_YAML}  - id: x\n`);
+        expect(undone).toBe(HOOKS_YAML);
+    });
+
+    /**
+     * An action: the item is added even when it is already there, and only once per declaration,
+     * however many builds run.
+     */
+    it("should add an item already there, once per declaration", async () => {
+        const { after, afterAgain, undone } = await roundTrip("s.yaml", HOOKS_YAML, {
+            insertAfterWhere: { path: "hooks", where: { id: "test" }, item: { id: "lint" } },
+        });
+
+        expect(after).toBe(`${HOOKS_YAML}  - id: lint\n`);
+        expect(afterAgain).toBe(after);
+        expect(undone).toBe(HOOKS_YAML);
+    });
+
+    /**
+     * A missing list is created, and removed again by the rollback; a value that is not a list is
+     * skipped with a warning.
+     */
+    it("should create a missing list and refuse a value that is not one", async () => {
+        const created = await roundTrip("s.jsonc", '{\n    "a": 1\n}\n', { insertBeforeWhere: { path: "hooks", where: { id: "x" }, item: "h" } });
+
+        expect(created.after).toBe('{\n    "a": 1,\n    "hooks": ["h"]\n}\n');
+        expect(created.undone).toBe('{\n    "a": 1\n}\n');
+
+        const refused = await roundTrip("s.jsonc", '{\n    "hooks": "no"\n}\n', { insertAfterWhere: { path: "hooks", where: { id: "x" }, item: "h" } });
+
+        expect(refused.after).toBe('{\n    "hooks": "no"\n}\n');
+        expect(refused.applied.reporter.at("warning").join("\n")).toMatch(/needs a list at hooks/);
+    });
+
+    /**
+     * Parameters: `where` must be an object, and an item is required. The automatic assertion is
+     * that the list includes each item.
+     */
+    it("should check its parameters and imply includes", () => {
+        expect(() => resolveOperation("insertBeforeWhere", { path: "a", where: "x", item: 1 })).toThrow(/object of fields/);
+        expect(() => resolveOperation("insertAfterWhere", { path: "a", where: { id: 1 } })).toThrow(/needs 'items'/);
+        expect(resolveOperation("insertAfterWhere", { path: "a", where: { id: 1 }, item: 2 }).params).toEqual({ path: "a", where: { id: 1 }, items: [2] });
+        expect(OPERATIONS.get("insertBeforeWhere")!.action).toBe(true);
+        expect(OPERATIONS.get("insertBeforeWhere")!.assertions({ items: [1, 2] }, "a")).toEqual([
+            { check: "includes", arg: 1, path: "a" },
+            { check: "includes", arg: 2, path: "a" },
+        ]);
+    });
+
+    /**
+     * The chain: `settings.at("hooks").insertAfterWhere({ id: "lint" }, { id: "fmt" })`.
+     */
+    it("should be recorded by the chain and applied", async () => {
+        write(tmp.path, "s.yaml", HOOKS_YAML);
+
+        const entries = recorded((config) => {
+            const hooks = editor(config).file("s.yaml").at("hooks");
+
+            hooks.insertAfterWhere({ id: "lint" }, { id: "fmt" });
+            hooks.insertBeforeWhere({ id: "lint" }, { id: "first" });
+        });
+
+        expect(entries).toEqual([
+            { file: "s.yaml", insertAfterWhere: { path: "hooks", where: { id: "lint" }, item: { id: "fmt" } } },
+            { file: "s.yaml", insertBeforeWhere: { path: "hooks", where: { id: "lint" }, item: { id: "first" } } },
+        ]);
+
+        await applyRecorded(entries);
+
+        expect(read(tmp.path, "s.yaml")).toBe(`hooks:
+  - id: first
+  - id: lint # first
+    run: pnpm lint
+  - id: fmt
+  - id: test
+    run: pnpm test
+`);
+    });
+});
