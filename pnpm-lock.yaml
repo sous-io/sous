@@ -860,6 +860,12 @@ importers:
       '@sous-io/plugin-yarn':
         specifier: workspace:*
         version: link:../plugin-yarn
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
+      '@sous-io/sous-plugin-migrations':
+        specifier: workspace:*
+        version: link:../sous-plugin-migrations
       esbuild:
         specifier: ^0.27.4
         version: 0.27.4
@@ -872,6 +878,56 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/sous-plugin-doctor:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-recipe-answers':
+        specifier: workspace:*
+        version: link:../plugin-recipe-answers
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+
+  packages/sous-plugin-migrations:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
 
 packages:
 
