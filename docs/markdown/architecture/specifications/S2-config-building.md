@@ -715,10 +715,13 @@ for files outside the config: sous plans to edit JSON and YAML files other tools
 Code's settings files, and already edits its own managed `conf.d` files key by key, keeping the
 user's comments and formatting (see "Sous's edits to the files it manages are surgical").
 
-So one package, `documents` (S6), edits a JSON, JSONC or YAML document surgically, keeping comments,
-key order and formatting. The config builder is that package plus read recording and patches. The
-managed `conf.d` edits, and any plugin editing another tool's file, use the package directly, through
-a service.
+So one package, `documents` (S6), edits a JSON, JSONC or YAML document, or the YAML frontmatter of a
+Markdown file, surgically: an edit changes only the values it was told to change, and leaves every
+other byte of the file as it was. It also edits a plain text file, such as `.gitignore`, as a list
+of lines, and keeps named blocks in it between marker lines. `formatForPath(path)` says which of
+these a file is. The config builder is that package plus read recording and patches. The managed
+`conf.d` edits, and any plugin editing another tool's file, use the package directly, through a
+service.
 
 The operations it needs, at least:
 
@@ -753,9 +756,28 @@ node.atIndex(0);
 node.move(from, to);
 node.dedupe();
 
+// Comparing structurally, adding only what is missing, ordering
+node.includes(item);           // also indexOf, equals, indexWhere, findAll
+node.insertAtIfMissing(0, item);   // also appendIfMissing, prependIfMissing
+node.removeValues([item]);
+node.sort();
+doc.root().moveKeyBefore("env", "permissions");   // also moveKeyAfter, moveKeyFirst, moveKeyLast, sortKeys
+
 // The whole document
 doc.root().merge(data);
-doc.toString();                // the edited text, comments and formatting kept
+doc.toString();                // the edited text: every untouched byte as it was
+```
+
+A plain text file, as lines:
+
+```ts
+const file = parseLines(text, { comment: commentStyleForPath(".gitignore") });
+
+file.includes("dist/");
+file.insert("dist/", { after: "# build output" });   // "start", "end", { before }, { line: n }
+file.remove("dist/");
+file.setBlock("session-files", ["docs/context/.kw-session-*"]);
+file.removeBlock("session-files");
 ```
 
 Inside a contributor, every read is recorded as a read, and every change ends up as primitive
@@ -767,6 +789,54 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-18: Every document edit is surgical; Markdown frontmatter and plain text lines
+
+Rulings by Luke while deciding how Sous edits other tools' files (2026-11-17). On YAML, which was
+reprinted whole after any edit:
+
+> "yes, all document edits should be surgical."
+
+On the frontmatter of Markdown files, such as an agent file's `model`:
+
+> "Front matter in markdown files should be supported."
+
+On TOML: "add toml as its own issue, keep it out of this work." On a plugin adding a format: "Yes,
+but not now."
+
+**What changed.** "The Document-Editing Package". The agreed meaning of surgical: an edit changes
+only the values it was told to change, and leaves every other byte of the file as it was.
+
+- YAML is edited in its text, at the places the parse gives for each node, as JSONC already was.
+  Every line an edit does not touch stays byte for byte: comments, key order, indentation, quoting
+  style, blank lines, block and flow style, line endings. A new value is written like the one it
+  replaces; new keys and items take their neighbors' indentation; new strings are quoted the way
+  most strings in the file are.
+- Each YAML edit is read back and compared with the value asked for. When an edit cannot be made
+  in place (a key written with `?`, a list item whose value starts below its dash), the document is
+  reprinted whole, as before, keeping comments, and the document reports it. An edit to a value a
+  YAML anchor shares with its aliases is refused with an error, since it would change every copy;
+  before, it changed them silently.
+- A new format, `markdown`: the document is the YAML frontmatter at the top of a Markdown file. The
+  body is never changed. A file with no frontmatter gets one when a value is set, and an edit that
+  empties the frontmatter removes the block.
+- A new format, `lines`: a plain text file as a list of lines, with the operations to test for a
+  line, add one (at the end, the start, after or before a line, or at a line number), remove one,
+  and keep a named block between the marker lines `>>> sous managed: <name> (do not edit between
+  these markers)` and `<<< sous managed: <name>`, in the file type's comment style. A damaged block
+  is an error, never a guess.
+- `formatForPath(path)` chooses the format from a path; `commentStyleForPath(path)` the comment
+  style. TOML has no format yet.
+- New node operations for the declared edits to build on: structural comparison (`includes`,
+  `indexOf`, `equals`, `indexWhere`, `findAll`), adding a list item only when it is missing
+  (`appendIfMissing`, `prependIfMissing`, `insertAtIfMissing`), `removeValues`, `sort`, and moving
+  keys (`moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast`, `sortKeys`). They are made
+  of the six existing primitives; a key or item moved this way keeps its old text and comments.
+
+**Why.** Sous is to edit files that people and other programs also write (`.claude/settings.json`,
+CI files, agent files' frontmatter, `.gitignore`), and a committed file should show only the line
+that changed. The operations that state what must be true (`ensureIncludes`, `ensureLine` and the
+rest) belong to the editor plugin that composes them from these.
 
 ### 2026-10-30: Walk of apply order; same base name fails in one directory
 
