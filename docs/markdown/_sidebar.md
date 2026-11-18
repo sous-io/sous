@@ -65,7 +65,7 @@
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
   - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)
-  - [0024: One config build per harness](adrs/0024-one-config-build-per-harness.md)
+  - [0040: One config build per harness](adrs/0040-one-config-build-per-harness.md)
   - [0034: Handlers](adrs/0034-handlers.md)
   - [0026: Declared edits to files Sous does not own](adrs/0026-declared-edits-to-files-sous-does-not-own.md)
   - [0027: Assertions on edited files](adrs/0027-assertions-on-edited-files.md)

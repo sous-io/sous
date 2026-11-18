@@ -1,4 +1,4 @@
-# ADR 0024: One config build per harness
+# ADR 0040: One config build per harness
 
 **Status:** Accepted, 2026-11-16. Built 2026-11-18.
 
