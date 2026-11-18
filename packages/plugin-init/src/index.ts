@@ -56,10 +56,10 @@ export const initPlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-config-files": `^${packageJson.version}`,
         "@sous-io/plugin-host": `^${packageJson.version}`,
         "@sous-io/plugin-update": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 
     register(sous) {
-        // Added whether or not sous-plugin-doctor is loaded: without it, nothing reads the entity.
         sous.entities.add("doctor-check", gitHooksCheck);
 
         sous.intents.add({
