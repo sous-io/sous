@@ -23,6 +23,8 @@ export interface UnitOutput {
     readonly transforms: readonly string[];
     /** The harness it belongs to (`harness` on the output), which templates read as `harness.id`. */
     readonly harness?: string;
+    /** `backupExisting` on the output: a file sous did not write there is backed up, with a warning, and overwritten. */
+    readonly backupExisting?: boolean;
 }
 
 /** One source to compile, and where it goes. */
@@ -171,7 +173,14 @@ function unitOf(
         // A `compilation.varOverrides` rule's variables are laid over the output's own, so they win.
         const vars = env.resolver.scope({ level: "output", target: index, output: file.output, ...keyed, ...(file._vars === undefined ? {} : { extra: file._vars }) });
 
-        outputs.push({ index: file.output, destination: file.destination, vars, transforms, ...(file.harness === undefined ? {} : { harness: file.harness }) });
+        outputs.push({
+            index: file.output,
+            destination: file.destination,
+            vars,
+            transforms,
+            ...(file.harness === undefined ? {} : { harness: file.harness }),
+            ...(output.backupExisting === true ? { backupExisting: true } : {}),
+        });
     }
 
     const base = {

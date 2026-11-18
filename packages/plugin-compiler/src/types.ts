@@ -43,6 +43,13 @@ export interface CompilationOutput {
      * output that belongs to none.
      */
     harness?: string;
+    /**
+     * When true, a file sous did not write at the destination is backed up under
+     * `.sous/backups/`, a warning says so, and the file is overwritten, whatever
+     * `compilation.overwriteUntracked` says. Unset, the compiler's general rule applies. Set by a
+     * memory target's `backupExisting`.
+     */
+    backupExisting?: boolean;
 }
 
 /**
@@ -394,6 +401,8 @@ export interface WriteOptions {
     mode?: number;
     /** Which run the write belongs to (the chain's id): every backup of one run goes in one timestamp folder. */
     run?: number;
+    /** Overrides `compilation.overwriteUntracked` for this write: `true` backs up and overwrites a file sous did not write. */
+    overwriteUntracked?: boolean;
 }
 
 /** How to remove files. */

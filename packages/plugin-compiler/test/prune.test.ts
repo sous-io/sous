@@ -78,6 +78,32 @@ describe("compiler.prune", () => {
         expect(loadState(statePath(), project.root).files.map((entry) => entry.dest)).toEqual([dest]);
     });
 
+    /**
+     * An output a transform leaves out is not produced, so the copy an earlier build wrote is pruned.
+     * (A memory target's output is left out this way when it compiles to nothing.)
+     *
+     * build 1: source "# Source" -> dest.md written
+     * build 2: source ""         -> the transform drops it; prune removes dest.md
+     */
+    it("should remove an output a transform left out on a later build", async () => {
+        project = makeProject();
+        const src = project.write("source.md", "# Source\n");
+        const dest = project.at("dest.md");
+        const compiler = await makeCompiler(project, {
+            config: { compilation: { targets: [{ entryPoint: src, transforms: ["skip-empty"], outputs: [{ destinationFile: dest }] }] } },
+            register: (sous) => sous.entities.add("compilation-transform", { id: "skip-empty", transform: (file) => (String(file.content).trim() === "" ? undefined : file) }),
+        });
+
+        await compiler.compile();
+        expect(fs.existsSync(dest)).toBe(true);
+
+        fs.writeFileSync(src, "");
+        await compiler.compile();
+        await compiler.prune();
+
+        expect(fs.existsSync(dest)).toBe(false);
+    });
+
     /** A directory sous made is removed once its last file is pruned. */
     it("should remove an empty Sous-created directory after its file is pruned", async () => {
         project = makeProject();

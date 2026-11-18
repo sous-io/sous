@@ -45,6 +45,10 @@ const outputSchema = z
         destinationDir: z.string().optional(),
         transforms: z.array(z.string()).optional(),
         harness: z.string().min(1).optional().describe("The harness this output belongs to (claude-code, codex). Templates read it as harness.id."),
+        backupExisting: z
+            .boolean()
+            .optional()
+            .describe("When true, a file sous did not write at the destination is backed up, a warning is given, and it is overwritten, whatever compilation.overwriteUntracked says."),
     })
     .strict()
     .superRefine((output, ctx) => {
