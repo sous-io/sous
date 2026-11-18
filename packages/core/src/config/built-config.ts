@@ -8,6 +8,7 @@ import type {
     Patch,
     PatchSet,
     PathInput,
+    PathSegment,
     ServiceReader,
 } from "@sous-io/plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
@@ -15,6 +16,7 @@ import { type Limits, resolveLimits } from "../limits.js";
 import { CORE_PLUGIN } from "../util/names.js";
 import type { ActivePlugin, ContributorRecord } from "./build.js";
 import { primitiveTarget, WHAT_IF_PLUGIN } from "./build.js";
+import { type ListSegment, overlapsList } from "./harness-merge.js";
 
 /** What a built config is made of. */
 export interface BuiltConfigData {
@@ -27,6 +29,23 @@ export interface BuiltConfigData {
     readonly active: ReadonlyMap<string, ActivePlugin>;
     readonly passes: number;
     readonly hash: string;
+    /** The harness this config was built for: `""` for the build with no harness and for the merged config. Default `""`. */
+    readonly harness?: string;
+    /** For the merged config: every build of the same run, so each can be reached. */
+    readonly family?: HarnessFamily;
+    /**
+     * Only on the merged config: the lists the merge takes from the harness builds, so `layers`
+     * also names the changes each harness build made to them.
+     */
+    readonly mergedLists?: readonly (readonly ListSegment[])[];
+}
+
+/** Every config build of one run: the one with no harness and one per harness. */
+export interface HarnessFamily {
+    /** The build with no harness, before the merge. */
+    readonly noHarness: BuiltConfig;
+    /** Each harness's build, by id. */
+    readonly byHarness: ReadonlyMap<string, BuiltConfig>;
 }
 
 /**
@@ -38,9 +57,12 @@ export class BuiltConfigImpl implements BuiltConfig {
     readonly whatIf: boolean;
     readonly passes: number;
     readonly hash: string;
+    readonly harness: string;
     readonly entities: EntitySnapshot;
     /** Set by the engine right after construction. */
     services!: ServiceReader;
+    /** Every build of the same run; the engine sets it on each build once all have finished. */
+    family: HarnessFamily | undefined;
 
     private readonly data: BuiltConfigData;
     private limitsCache: Limits | undefined;
@@ -51,7 +73,28 @@ export class BuiltConfigImpl implements BuiltConfig {
         this.whatIf = data.whatIf;
         this.passes = data.passes;
         this.hash = data.hash;
+        this.harness = data.harness ?? "";
         this.entities = data.entities;
+        this.family = data.family;
+    }
+
+    /** Every contributor's latest run, in the order their patches apply. */
+    get records(): readonly ContributorRecord[] {
+        return this.data.records;
+    }
+
+    /** The ids of every harness that had its own build, sorted. */
+    get harnesses(): readonly string[] {
+        return [...(this.family?.byHarness.keys() ?? [])].sort();
+    }
+
+    /** One harness's full config; `""` gives the build with no harness, before the merge. */
+    forHarness(id: string): BuiltConfig | undefined {
+        if (id === "") {
+            return this.family?.noHarness ?? (this.harness === "" ? this : undefined);
+        }
+
+        return this.family?.byHarness.get(id);
     }
 
     /** Whether a plugin is active in this config. Core always is. */
@@ -106,12 +149,34 @@ export class BuiltConfigImpl implements BuiltConfig {
                         helpers,
                         applyOrder: record.entry.applyOrder,
                         actualApplyOrder: record.actualApplyOrder,
+                        build: this.harness,
                     });
                 }
             });
         }
 
-        return layers;
+        return [...layers, ...this.harnessLayers(target)];
+    }
+
+    /**
+     * On the merged config: the changes each harness build made to the lists the merge takes from
+     * it, at `target`, so `--layers` names the build an entry came from. Their indices are those of
+     * the harness's own build.
+     */
+    private harnessLayers(target: readonly PathSegment[]): ConfigLayer[] {
+        const lists = this.data.mergedLists;
+        const family = this.family;
+
+        if (!lists || !family || !lists.some((list) => overlapsList(target, list))) {
+            return [];
+        }
+
+        return this.harnesses.flatMap((id) =>
+            family.byHarness
+                .get(id)!
+                .layers(target)
+                .filter((layer) => lists.some((list) => overlapsList(primitiveTarget(layer.patch), list))),
+        );
     }
 
     contributions(): Contribution[] {
@@ -123,6 +188,7 @@ export class BuiltConfigImpl implements BuiltConfig {
             actualApplyOrder: record.actualApplyOrder,
             patches: record.patchSet,
             runs: record.runs,
+            build: this.harness,
         }));
     }
 }

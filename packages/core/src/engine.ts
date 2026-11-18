@@ -53,6 +53,7 @@ import { type ActivePlugin, type BuildOutcome, ConfigBuild, WHAT_IF_PLUGIN } fro
 import { BuiltConfigImpl } from "./config/built-config.js";
 import { ContributorRegistry } from "./config/contributor-registry.js";
 import { CORE_CONFIG_KEYS } from "./config/core-keys.js";
+import { CORE_HARNESS_LISTS, HARNESS_LIST_KIND, type HarnessListEntity, mergeHarnessBuilds, parseListPath } from "./config/harness-merge.js";
 import { entitySignature, type View } from "./config/reads.js";
 import { validateConfig } from "./config/validate.js";
 import { type CallHost, type CallState, ChainState, configOf, createContext } from "./context.js";
@@ -103,6 +104,12 @@ export interface EngineOptions {
     /** The clock timings use, in milliseconds. Default: `performance.now()`. */
     now?: () => number;
 }
+
+/** The harness of the build with no harness, as `harness.id` reads it. */
+const NO_HARNESS = "";
+
+/** The entity kind plugins register harnesses as; each one gets its own config build. */
+export const HARNESS_KIND = "harness";
 
 /** Starts an engine. Nothing is loaded until the config is first built. */
 export function createEngine(options: EngineOptions = {}): Engine {
@@ -480,6 +487,12 @@ export class Engine {
         return built;
     }
 
+    /**
+     * One complete config: the build with no harness, then one more full build for every harness
+     * registered in any build (each at most once, run side by side), then the merge of their
+     * results into the config every intent reads. With no harness registered, only the first build
+     * runs and nothing is merged.
+     */
     private async buildOnce(whatIf: boolean, extra: readonly ContributorDefinition[], reportBudgets = true): Promise<BuiltConfigImpl> {
         const buildNumber = ++this.buildCounter;
         const label = whatIf ? `what-if #${buildNumber}` : "config";
@@ -493,34 +506,23 @@ export class Engine {
         const endBuild = this.timer.start("config.build", label);
         let built: BuiltConfigImpl | undefined;
         let build: ConfigBuild | undefined;
+        let noHarness: BuiltConfigImpl | undefined;
 
         try {
-            build = new ConfigBuild(this.buildHost(), extra);
-            const outcome = await build.run();
+            build = new ConfigBuild(this.buildHost(NO_HARNESS), extra);
+            noHarness = await this.finishBuild(await build.run(), buildNumber, whatIf, NO_HARNESS);
 
-            await this.checkDependencies(outcome.active);
+            const byHarness = await this.buildHarnesses(noHarness, buildNumber, whatIf, extra);
 
-            const entities = new EntitySnapshot(this.entityRegistry.recheck(outcome.entities.allRecords()), () => this.kindNames());
-            const config = await this.validate(outcome, entities);
-
-            built = this.makeBuilt({
-                buildNumber,
-                whatIf,
-                config,
-                entities,
-                records: outcome.records,
-                active: outcome.active,
-                passes: outcome.passes,
-                hash: hashOf(config, entities),
-            });
+            built = byHarness.size === 0 ? noHarness : this.mergeBuilds(noHarness, byHarness, buildNumber, whatIf, label);
 
             this.checkConflicts(built);
-            this.reportBuildWarnings(outcome, entities);
 
             return built;
         } catch (error) {
-            if (!whatIf && build) {
-                this.failedPartial = this.partialConfig(build, buildNumber);
+            if (!whatIf) {
+                // A harness build that failed leaves the build with no harness, which succeeded.
+                this.failedPartial = noHarness ?? (build ? this.partialConfig(build, buildNumber) : undefined);
             }
 
             throw error;
@@ -537,6 +539,135 @@ export class Engine {
 
             this.timer.releaseDeferred(reportBudgets);
         }
+    }
+
+    /** Checks a finished build's plugins and values, and makes it a config. */
+    private async finishBuild(outcome: BuildOutcome, buildNumber: number, whatIf: boolean, harness: string): Promise<BuiltConfigImpl> {
+        await this.checkDependencies(outcome.active);
+
+        const entities = new EntitySnapshot(this.entityRegistry.recheck(outcome.entities.allRecords()), () => this.kindNames());
+        const config = await this.validate(outcome, entities);
+        const built = this.makeBuilt({
+            buildNumber,
+            whatIf,
+            config,
+            entities,
+            records: outcome.records,
+            active: outcome.active,
+            passes: outcome.passes,
+            hash: hashOf(config, entities),
+            harness,
+        });
+
+        this.reportBuildWarnings(outcome, entities, harness);
+
+        return built;
+    }
+
+    /**
+     * One full config build per harness: every harness the build with no harness registered, and
+     * every harness a harness build registers in turn, each built once. A build starts as soon as
+     * the build that registered its harness has finished, so builds run side by side. Resolves when
+     * every one has finished; the first that fails fails them all.
+     */
+    private async buildHarnesses(
+        noHarness: BuiltConfigImpl,
+        buildNumber: number,
+        whatIf: boolean,
+        extra: readonly ContributorDefinition[],
+    ): Promise<Map<string, BuiltConfigImpl>> {
+        const done = new Map<string, BuiltConfigImpl>();
+        const started = new Set<string>();
+        const running: Promise<void>[] = [];
+        const start = (built: BuiltConfigImpl): void => {
+            for (const id of harnessIdsOf(built)) {
+                if (started.has(id)) {
+                    continue;
+                }
+
+                started.add(id);
+
+                const finished = this.timer
+                    .measure("config.harness", id, undefined, () => this.buildForHarness(id, buildNumber, whatIf, extra))
+                    .then((harnessBuilt) => {
+                        done.set(id, harnessBuilt);
+                        start(harnessBuilt);
+                    });
+
+                // Awaited below; this keeps a failure from being reported as unhandled meanwhile.
+                finished.catch(() => {});
+                running.push(finished);
+            }
+        };
+
+        start(noHarness);
+
+        // A build that finishes may start more, so wait until no new one appeared meanwhile.
+        for (let waited = 0; waited < running.length; ) {
+            const upTo = running.length;
+
+            await Promise.all(running.slice(waited, upTo));
+            waited = upTo;
+        }
+
+        return done;
+    }
+
+    /** One harness's full config build. An error names the harness. */
+    private async buildForHarness(id: string, buildNumber: number, whatIf: boolean, extra: readonly ContributorDefinition[]): Promise<BuiltConfigImpl> {
+        try {
+            const build = new ConfigBuild(this.buildHost(id), extra);
+
+            return await this.finishBuild(await build.run(), buildNumber, whatIf, id);
+        } catch (error) {
+            if (error instanceof SousError) {
+                (error as { details: readonly string[] }).details = [...error.details, `This happened in the config build for the harness "${id}".`];
+            }
+
+            throw error;
+        }
+    }
+
+    /**
+     * The config every intent reads: the build with no harness, with every entry of a
+     * `harness-list` that belongs to a harness taken from that harness's build. It keeps every
+     * build, so `forHarness` reaches each.
+     */
+    private mergeBuilds(noHarness: BuiltConfigImpl, byHarness: ReadonlyMap<string, BuiltConfigImpl>, buildNumber: number, whatIf: boolean, label: string): BuiltConfigImpl {
+        const lists = noHarness.entities.records(HARNESS_LIST_KIND).map((record) => parseListPath((record.entry as HarnessListEntity).path));
+        const config = this.timer.measure("config.merge", label, undefined, () =>
+            deepFreeze(
+                mergeHarnessBuilds(
+                    noHarness.value(),
+                    new Map([...byHarness].map(([id, built]) => [id, built.value()])),
+                    lists,
+                ),
+            ),
+        );
+        const family = { noHarness, byHarness };
+        const ids = [...byHarness.keys()].sort();
+        const hash = createHash("sha1")
+            .update(hashOf(config, noHarness.entities))
+            .update(ids.map((id) => `${id}=${byHarness.get(id)!.hash}`).join("\n"))
+            .digest("hex");
+
+        for (const built of [noHarness, ...byHarness.values()]) {
+            built.family = family;
+        }
+
+        return this.makeBuilt({
+            buildNumber,
+            whatIf,
+            config,
+            entities: noHarness.entities,
+            records: noHarness.records,
+            active: noHarness.active,
+            passes: noHarness.passes,
+            hash,
+            harness: NO_HARNESS,
+            family,
+            mergedLists: lists,
+        });
     }
 
     /** The config a failed build reached: the plugins it activated and the values merged so far, unchecked. */
@@ -560,13 +691,14 @@ export class Engine {
         }
     }
 
-    private buildHost() {
+    private buildHost(harness: string) {
         return {
             entityRegistry: this.entityRegistry,
             timer: this.timer,
             project: this.project,
             env: this.env,
             plan: this.runPlan,
+            harness: Object.freeze({ id: harness }),
             baseLimits: this.baseLimits,
             contributorsOf: (isActive: (plugin: string) => boolean) => this.contributors.active(isActive),
             loadBuiltIns: () => this.loadBuiltIns(),
@@ -576,8 +708,13 @@ export class Engine {
             enterContributor: (id: string) => {
                 this.contributorStack.push(id);
             },
-            leaveContributor: () => {
-                this.contributorStack.pop();
+            // Builds for several harnesses run side by side, so the one leaving may not be the last in.
+            leaveContributor: (id: string) => {
+                const index = this.contributorStack.lastIndexOf(id);
+
+                if (index >= 0) {
+                    this.contributorStack.splice(index, 1);
+                }
             },
             limitsFrom: (config: JsonValue) => resolveLimits(this.baseLimits, (config as JsonObject | null)?.limits as JsonObject | undefined),
         };
@@ -681,9 +818,11 @@ export class Engine {
         }
     }
 
-    private reportBuildWarnings(outcome: BuildOutcome, entities: EntitySnapshot): void {
+    private reportBuildWarnings(outcome: BuildOutcome, entities: EntitySnapshot, harness: string): void {
+        const where = harness === NO_HARNESS ? "" : ` in the config build for the harness "${harness}"`;
+
         for (const problem of outcome.problems) {
-            this.reporterImpl.warning(`The contributor "${problem.contributor}" made a change that could not be applied: ${problem.message}`);
+            this.reporterImpl.warning(`The contributor "${problem.contributor}" made a change that could not be applied${where}: ${problem.message}`);
         }
 
         for (const warning of this.plugins.takeDuplicateWarnings()) {
@@ -773,6 +912,40 @@ export class Engine {
 
         for (const key of CORE_CONFIG_KEYS) {
             this.entityRegistry.add("config-key", key, CORE_PLUGIN);
+        }
+
+        this.entityRegistry.define(
+            HARNESS_LIST_KIND,
+            {
+                "~standard": {
+                    version: 1,
+                    vendor: "sous",
+                    validate: (value: unknown) => {
+                        const entry = value as { id?: unknown; path?: unknown } | null;
+
+                        if (typeof entry?.id !== "string" || typeof entry.path !== "string") {
+                            return { issues: [{ message: "A harness-list entity needs an id and a path." }] };
+                        }
+
+                        try {
+                            parseListPath(entry.path);
+                        } catch (error) {
+                            return { issues: [{ message: messageOf(error) }] };
+                        }
+
+                        return { value };
+                    },
+                },
+            },
+            CORE_PLUGIN,
+            {
+                description:
+                    "A config list whose entries may belong to one harness; the merge of the per-harness config builds takes each such entry from its harness's build.",
+            },
+        );
+
+        for (const list of CORE_HARNESS_LISTS) {
+            this.entityRegistry.add(HARNESS_LIST_KIND, list, CORE_PLUGIN);
         }
     }
 
@@ -1463,6 +1636,14 @@ function hashOf(config: Readonly<JsonObject>, entities: EntitySnapshot): string 
         .sort();
 
     return createHash("sha1").update(stableStringify(config)).update("\u0000").update(ids.join("\n")).digest("hex");
+}
+
+/** The ids of the harnesses a build registered, sorted. */
+function harnessIdsOf(built: BuiltConfigImpl): string[] {
+    return built.entities
+        .records(HARNESS_KIND)
+        .map((record) => record.id)
+        .sort();
 }
 
 function uniqueTriggers(triggers: readonly RebuildTrigger[]): string[] {

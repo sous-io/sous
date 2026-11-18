@@ -398,6 +398,13 @@ and says what it could not download.
 A config whose contributors read nothing that later changes settles in one pass. Re-running only
 the contributors whose reads changed keeps later passes short.
 
+### One build per harness
+
+The loop above is one build. The engine runs it once with no harness, then once more for every
+registered harness, and merges the results into the config intents read (S8, one config build per
+harness). Each build is complete and independent: its own passes, plugins and validation.
+Contributors read the build's harness as `config.harness.id` (`""` with none).
+
 ### "What if" builds
 
 The engine can build a separate config on request, with extra contributors, without replacing the
@@ -601,6 +608,8 @@ its own `config-key` entities and reads the built config.
   expression as written, what it evaluated to and the values it read; then the result and the number
   of passes.
 - `--raw` prints each config file as written, in order.
+- `--harness <id>` prints that harness's own config build instead of the merged config (S8). Once
+  any change came from a harness's build, `--layers` names the build of every change.
 
 ```text
 $ sous config get subscriptions."tool-usage/automated-browser-tasks".enabled --layers
@@ -767,6 +776,13 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-18: One build per harness
+
+"One build per harness" added, and `--layers` names the build of each change
+(`ConfigLayer.build`, `Contribution.build`); `sous config show` and `get` take `--harness <id>` to
+print one harness's own build. From Luke's accepted design (S8): "I accept your recommendations"
+(2026-11-16). A "what if" build runs the harness builds too.
 
 ### 2026-10-30: Walk of apply order; same base name fails in one directory
 

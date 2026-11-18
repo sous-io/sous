@@ -50,6 +50,14 @@ when stdout is a TTY.
   ([Patches](config-layers.md#patches) explains both). It ends with the result and the number of passes the config took to
   settle.
 - `--raw` prints each config file as written, in order.
+- `--harness <id>` prints that harness's own config build instead of the merged config (see
+  [Conditions on the harness](configuration.md#conditions-on-the-harness)). A harness with no build
+  is an error that names the harnesses built.
+
+Once any change came from a harness's build, `--layers` names the build of every change
+(`no harness`, `harness codex`). Changes a harness's build made to a list the merge takes from it
+(compilation outputs, `editor.edits`, `recipes.contents`) are listed after the others, with the
+indices of that harness's own build.
 
 ```text
 confd/620-no-diagrams.js
@@ -82,8 +90,16 @@ conf.d/610-mac.jsonc             { "$if": { "expr": "host.platform == 'darwin'",
 result                           false     (settled after 1 pass)
 ```
 
+`--harness <id>` reads the value from that harness's own config build:
+
+```bash
+sous config get compilation.includeSourceComments --harness codex
+```
+
 `sous plugins show` lists every plugin and what it adds or replaces, and `--timings` on any command
-prints how long each step took, each config file included.
+prints how long each step took, each config file included. Each harness's build shows as
+`config.harness:<id>`, its stages and passes as `config.stage:<id>/0` and `config.pass:<id>/0.1`, and
+the merge as `config.merge:config`.
 
 ## sous config validate
 

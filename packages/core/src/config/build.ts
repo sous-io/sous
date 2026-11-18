@@ -1,5 +1,6 @@
 import { applyPatches, flattenPatchSet, formatPath, parsePath, pathsOverlap, type PatchProblem } from "@sous-io/documents";
 import {
+    type BuildHarness,
     ConfigError,
     type ContributorDefinition,
     type Environment,
@@ -60,6 +61,8 @@ export interface BuildHost {
     readonly env: Environment;
     /** What the front end is about to run, when it said. */
     readonly plan?: RunPlan;
+    /** The harness this build is for: `{ id: "" }` for the build with no harness. */
+    readonly harness: BuildHarness;
     /** The limits as the defaults and the previous config set them. */
     readonly baseLimits: Limits;
     /** Every contributor of the given plugins. */
@@ -74,7 +77,7 @@ export interface BuildHost {
     log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
     /** Called around each contributor run, so the engine can warn about direct entity reads. */
     enterContributor(id: string): void;
-    leaveContributor(): void;
+    leaveContributor(id: string): void;
     /** Resolves limits from the config's `limits` key. */
     limitsFrom(config: JsonValue): Limits;
 }
@@ -147,7 +150,7 @@ export class ConfigBuild {
 
         for (let stage = this.nextStage(finished); stage !== undefined; stage = this.nextStage(finished)) {
             this.currentStage = stage;
-            await this.host.timer.measure("config.stage", String(stage), undefined, () => this.runStage(stage));
+            await this.host.timer.measure("config.stage", this.timingName(String(stage)), undefined, () => this.runStage(stage));
             finished = stage;
         }
 
@@ -188,6 +191,14 @@ export class ConfigBuild {
         };
     }
 
+    /**
+     * A stage's or a pass's name in `--timings`: `0` and `0.1` in the build with no harness,
+     * `codex/0` and `codex/0.1` in the build for the harness `codex`.
+     */
+    private timingName(name: string): string {
+        return this.host.harness.id === "" ? name : `${this.host.harness.id}/${name}`;
+    }
+
     /** The stage a contributor runs in: its declared stage, shifted by its plugin's activation stage. */
     private stageOf(entry: ContributorEntry): number {
         return entry.declaredStage + (this.active.get(entry.plugin)?.stageShift ?? 0);
@@ -222,7 +233,7 @@ export class ConfigBuild {
 
             let ran = false;
 
-            await this.host.timer.measure("config.pass", `${stage}.${pass}`, undefined, async () => {
+            await this.host.timer.measure("config.pass", this.timingName(`${stage}.${pass}`), undefined, async () => {
                 for (const entry of this.sorted(stage)) {
                     if (await this.runIfNeeded(entry, stage, pass)) {
                         ran = true;
@@ -326,7 +337,8 @@ export class ConfigBuild {
                 project: this.host.project,
                 env: this.host.env,
                 plan: this.host.plan,
-                log: (level, message, details, style) => this.host.log(level, message, details, style),
+                harness: this.host.harness,
+                log:(level, message, details, style) => this.host.log(level, message, details, style),
             },
             entry.definition.monitors,
         );
@@ -342,7 +354,7 @@ export class ConfigBuild {
 
             throw new ConfigError(`The contributor "${entry.id}" (${entry.plugin}) failed: ${messageOf(error)}`, { cause: error });
         } finally {
-            this.host.leaveContributor();
+            this.host.leaveContributor(entry.id);
         }
 
         const patchSet = builder.patchSet();

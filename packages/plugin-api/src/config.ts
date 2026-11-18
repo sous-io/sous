@@ -31,12 +31,19 @@ export interface ConfigLayer {
     readonly applyOrder: number;
     /** Its apply order once `before` and `after` are met; it may pass 99999. */
     readonly actualApplyOrder: number;
+    /**
+     * The config build the change was made in: `""` for the build with no harness, else the
+     * harness's id (`"codex"`). See {@link BuiltConfig.harnesses}.
+     */
+    readonly build: string;
 }
 
 /** One contributor's part in a build. */
 export interface Contribution {
     readonly contributor: string;
     readonly plugin: string;
+    /** The config build it ran in: `""` for the build with no harness, else the harness's id. */
+    readonly build: string;
     readonly stage: number;
     /** Its declared apply order, 0 to 99999 (default 2000). */
     readonly applyOrder: number;
@@ -69,6 +76,30 @@ export interface BuiltConfig extends ConfigReader {
     layers(path: PathInput): ConfigLayer[];
     /** Every contributor's part, in the order their patches apply: earlier stages first, then by actual apply order and id. */
     contributions(): Contribution[];
+    /**
+     * The harness this config was built for: `""` for the config every intent reads (the build
+     * with no harness, merged with what belongs to each harness), else the harness's id.
+     */
+    readonly harness: string;
+    /** The ids of every harness that had its own config build, sorted. Empty when no harness is registered. */
+    readonly harnesses: readonly string[];
+    /**
+     * One harness's full config, as its own build made it, for code that acts for that harness;
+     * `undefined` when no build was made for it. `forHarness("")` gives the build with no harness,
+     * before the merge.
+     *
+     * ```ts
+     * const codex = ctx.config.forHarness("codex");
+     * const comments = codex?.get<boolean>("compilation.includeSourceComments");
+     * ```
+     */
+    forHarness(id: string): BuiltConfig | undefined;
+}
+
+/** The harness a config build is for, as contributors and config expressions read it (`harness.id`). */
+export interface BuildHarness {
+    /** The harness's id (`"codex"`); `""` in the build with no harness, never `undefined`. */
+    readonly id: string;
 }
 
 /** Watching more than a contributor reads: a path, or an entity kind. */
@@ -122,6 +153,12 @@ export interface ConfigBuilder extends Reporter {
      * nothing is known, as for a library caller or a command only a plugin loaded later adds.
      */
     readonly plan: RunPlan | undefined;
+    /**
+     * The harness this build is for. The engine builds the config once with no harness
+     * (`id: ""`), then once more for each registered harness; it never changes within a build,
+     * so reading it is not recorded.
+     */
+    readonly harness: BuildHarness;
 }
 
 /**

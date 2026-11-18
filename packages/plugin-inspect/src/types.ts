@@ -34,12 +34,16 @@ export interface ConfigShowInput {
     layers?: boolean;
     /** Each config file as written, in order. */
     raw?: boolean;
+    /** Show this harness's own config build instead of the merged config every intent reads. */
+    harness?: string;
 }
 
 /** The result of `config.show`. */
 export interface ConfigShowResult {
     /** The evaluated config: what sous does on this machine. */
     readonly config: JsonObject;
+    /** The harness whose own build is shown, when `harness` was given. */
+    readonly harness?: string;
     readonly passes: number;
     readonly layers?: readonly LayerView[];
     readonly raw?: readonly RawConfigFile[];
@@ -51,11 +55,15 @@ export interface ConfigGetInput {
     path: string;
     layers?: boolean;
     raw?: boolean;
+    /** Read the value from this harness's own config build instead of the merged config. */
+    harness?: string;
 }
 
 /** The result of `config.get`. */
 export interface ConfigGetResult {
     readonly path: string;
+    /** The harness whose own build the value was read from, when `harness` was given. */
+    readonly harness?: string;
     readonly exists: boolean;
     readonly value: JsonValue | undefined;
     readonly passes: number;

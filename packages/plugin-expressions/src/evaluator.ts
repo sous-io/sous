@@ -52,11 +52,14 @@ export interface Evaluator extends ExpressionsEvaluator {
 }
 
 /** Names an expression reads that are never variables. */
-const BUILT_IN_NAMES = new Set(["host", "env"]);
+const BUILT_IN_NAMES = new Set(["host", "harness", "env"]);
 
-/** Makes the evaluator. One lives for the whole process; it keeps the latest build's records. */
+/**
+ * Makes the evaluator. One lives for the whole process; it keeps the latest build's records, per
+ * config build (the one with no harness, and one per harness, which may run side by side).
+ */
 export function createEvaluator(deps: EvaluatorDeps): Evaluator {
-    const byFile = new Map<string, { expressions: EvaluatedExpression[]; unsettled: UnsettledExpression[] }>();
+    const byFile = new Map<string, { harness: string; expressions: EvaluatedExpression[]; unsettled: UnsettledExpression[] }>();
     let stale = false;
 
     return {
@@ -68,19 +71,20 @@ export function createEvaluator(deps: EvaluatorDeps): Evaluator {
 
             const run = new LayerRun(data, options, deps);
             const value = run.evaluate();
+            const harness = harnessOf(options.config);
 
-            byFile.set(options.file, { expressions: run.expressions, unsettled: run.unsettled });
+            byFile.set(`${harness}\u0000${options.file}`, { harness, expressions: run.expressions, unsettled: run.unsettled });
 
             return { value, expressions: run.expressions, pending: run.unsettled.length > 0 } satisfies EvaluatedLayer;
         },
         isExpressionObject,
         hasExpressions,
-        evaluations(file) {
+        evaluations(file, harness = "") {
             if (file !== undefined) {
-                return [...(byFile.get(file)?.expressions ?? [])];
+                return [...(byFile.get(`${harness}\u0000${file}`)?.expressions ?? [])];
             }
 
-            return [...byFile.values()].flatMap((entry) => entry.expressions);
+            return [...byFile.values()].filter((entry) => entry.harness === harness).flatMap((entry) => entry.expressions);
         },
         unsettled() {
             return [...byFile.values()].flatMap((entry) => entry.unsettled);
@@ -105,7 +109,10 @@ function unsettledError(open: readonly UnsettledExpression[]): ExpressionError {
     const [first, ...rest] = open;
 
     return new ExpressionError(first!.file, first!.path, `${describeUnknown(first!.unknown)}.`, {
-        details: rest.map((entry) => `${entry.path} ${describeUnknown(entry.unknown)} (in ${entry.file})`),
+        details: [
+            ...(first!.harness === "" ? [] : [`This is in the config build for the harness "${first!.harness}".`]),
+            ...rest.map((entry) => `${entry.path} ${describeUnknown(entry.unknown)} (in ${entry.file}${entry.harness === "" ? "" : `, in the build for the harness "${entry.harness}"`})`),
+        ],
     });
 }
 
@@ -129,6 +136,14 @@ function describeUnknown(unknown: ExpressionUnknowns): string {
 
 function names(list: readonly string[]): string {
     return list.join(", ");
+}
+
+/**
+ * The harness of the config build a builder belongs to; `""` in the build with no harness, and for
+ * a builder that does not say (one made outside a build).
+ */
+function harnessOf(config: ConfigBuilder): string {
+    return (config.harness as { id?: string } | undefined)?.id ?? "";
 }
 
 /** A condition is true by Liquid's rules: only `false`, `undefined` and `null` are false. */
@@ -283,7 +298,7 @@ class LayerRun {
     /** Records an expression that could not be known in this pass; it gives `undefined`. */
     private pending(path: readonly PathSegment[], unknown: ExpressionUnknowns): undefined {
         this.unknown = unknown;
-        this.unsettled.push({ file: this.file, path: formatPath(path), unknown });
+        this.unsettled.push({ file: this.file, harness: harnessOf(this.config), path: formatPath(path), unknown });
 
         return undefined;
     }
@@ -320,7 +335,11 @@ class LayerRun {
             return { unknown: { variables: missing, filters: [] } };
         }
 
-        return language.evaluate(expression.source, { host: { platform: this.deps.platform ?? process.platform }, env: this.config.env, vars }, ctx);
+        return language.evaluate(
+            expression.source,
+            { host: { platform: this.deps.platform ?? process.platform }, harness: { id: harnessOf(this.config) }, env: this.config.env, vars },
+            ctx,
+        );
     }
 
     /** The language an expression names, checked. */

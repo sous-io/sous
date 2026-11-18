@@ -11,6 +11,7 @@ import {
     IntentOutputs,
     NotFoundError,
     SousError,
+    type BuiltConfig,
     type ConfigKeyEntity,
     type ConfigLayer,
     type PatchSet,
@@ -51,34 +52,59 @@ const MAIN_CONTRIBUTOR = "config-files.main";
 const MAIN_PATCH_PREFIX = "config-files/";
 
 /**
+ * The config a `config show` or `config get` reads: the merged one every intent reads, or with
+ * `harness`, that harness's own build. A harness with no build is a `NotFoundError` naming those
+ * that have one.
+ */
+function configFor(ctx: Context, harness: string | undefined): BuiltConfig {
+    if (harness === undefined) {
+        return ctx.config;
+    }
+
+    const found = ctx.config.forHarness(harness);
+
+    if (found === undefined) {
+        const known = ctx.config.harnesses;
+
+        throw new NotFoundError("harness", harness, `No config was built for the harness "${harness}".`, {
+            details: [known.length > 0 ? `Configs were built for: ${known.join(", ")}.` : "No harness is registered, so only the config with no harness was built."],
+        });
+    }
+
+    return found;
+}
+
+/**
  * Every change to a path, in order, with secrets hidden. A change that sets the value itself (or an
  * object around it) says what the value was and became; one that sets the value to what it already
- * was is left out, so each line is a real change.
+ * was is left out, so each line is a real change. The changes of each config build are followed
+ * separately, since each build starts from nothing.
  */
-function layersOf(ctx: Context, path: string, policy: SecretPolicy): LayerView[] {
+function layersOf(ctx: Context, config: BuiltConfig, path: string, policy: SecretPolicy): LayerView[] {
     const target = parsePath(path);
-    const sources = sourcesOf(ctx);
+    const sources = sourcesOf(ctx, config);
     const views: LayerView[] = [];
-    let before: JsonValue | undefined;
+    const before = new Map<string, JsonValue | undefined>();
     const touching = target.some((segment) => typeof segment === "number")
-        ? itemLayers(ctx, target)
-        : ctx.config.layers(path).map((layer) => ({ layer, patch: layer.patch, target }));
+        ? itemLayers(config, target)
+        : config.layers(path).map((layer) => ({ layer, patch: layer.patch, target }));
 
     for (const { layer, patch, target: at } of touching) {
         const view: LayerView = { ...redactLayer(layer, policy), ...withSource(sources.get(layer.contributor)) };
         const after = valueAfter(redactLayer({ ...layer, patch }, policy).patch, at);
+        const was = before.get(layer.build);
 
         if (after === UNKNOWN) {
             views.push(view);
             continue;
         }
 
-        if (JSON.stringify(after) === JSON.stringify(before)) {
+        if (JSON.stringify(after) === JSON.stringify(was)) {
             continue;
         }
 
-        views.push({ ...view, change: { ...(before === undefined ? {} : { from: before }), ...(after === undefined ? {} : { to: after }) } });
-        before = after;
+        views.push({ ...view, change: { ...(was === undefined ? {} : { from: was }), ...(after === undefined ? {} : { to: after }) } });
+        before.set(layer.build, after);
     }
 
     return views;
@@ -107,11 +133,11 @@ interface TouchingLayer {
  * demo.list: [1, 2] set, 3 appended, 0 prepended -> [0, 1, 2, 3]
  * demo.list[0] -> the prepend only
  */
-function itemLayers(ctx: Context, target: readonly PathSegment[]): TouchingLayer[] {
+function itemLayers(built: BuiltConfig, target: readonly PathSegment[]): TouchingLayer[] {
     const steps: { layer: ConfigLayer; patch: Patch }[] = [];
     let config: JsonValue | undefined = {};
 
-    for (const contribution of ctx.config.contributions()) {
+    for (const contribution of built.contributions()) {
         const record = (patch: Patch, helpers: readonly string[]): void => {
             let applied = patch;
 
@@ -124,8 +150,8 @@ function itemLayers(ctx: Context, target: readonly PathSegment[]): TouchingLayer
             config = applyPatch(config, applied, { onProblem: () => void (failed = true) });
 
             if (!failed) {
-                const { contributor, plugin, applyOrder, actualApplyOrder } = contribution;
-                steps.push({ layer: { contributor, plugin, patch, helpers, applyOrder, actualApplyOrder }, patch: applied });
+                const { contributor, plugin, applyOrder, actualApplyOrder, build } = contribution;
+                steps.push({ layer: { contributor, plugin, patch, helpers, applyOrder, actualApplyOrder, build }, patch: applied });
             }
         };
         const walkSet = (set: PatchSet, helpers: readonly string[]): void => {
@@ -230,7 +256,7 @@ function valueAfter(patch: Patch, target: readonly PathSegment[]): JsonValue | u
 }
 
 /** The config file behind each file contributor, from the `.sous` directory: `conf.d/610-mac.jsonc`. */
-function sourcesOf(ctx: Context): Map<string, string> {
+function sourcesOf(ctx: Context, config: BuiltConfig): Map<string, string> {
     const sources = new Map<string, string>();
     const project = ctx.project;
 
@@ -248,7 +274,7 @@ function sourcesOf(ctx: Context): Map<string, string> {
         sources.set(MAIN_CONTRIBUTOR, fromSousDir(project.configPath));
     }
 
-    for (const contribution of ctx.config.contributions()) {
+    for (const contribution of config.contributions()) {
         if (contribution.contributor.startsWith(MAIN_PATCH_PREFIX)) {
             sources.set(contribution.contributor, fromSousDir(nodePath.join(project.sousDir, contribution.contributor.slice(MAIN_PATCH_PREFIX.length))));
         }
@@ -264,10 +290,12 @@ function sourcesOf(ctx: Context): Map<string, string> {
 /** `config.show`: the evaluated config, and with `layers` or `raw`, where it came from. */
 export async function configShow(input: ConfigShowInput, ctx: Context): Promise<IntentOutputs<ConfigShowResult>> {
     const policy = policyOf(ctx);
+    const config = configFor(ctx, input.harness);
     const result: ConfigShowResult = {
-        config: redactValue(ctx.config.value() as JsonObject, policy),
-        passes: ctx.config.passes,
-        ...(input.layers === true ? { layers: layersOf(ctx, "", policy) } : {}),
+        config: redactValue(config.value() as JsonObject, policy),
+        ...(input.harness === undefined ? {} : { harness: input.harness }),
+        passes: config.passes,
+        ...(input.layers === true ? { layers: layersOf(ctx, config, "", policy) } : {}),
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 
@@ -276,18 +304,20 @@ export async function configShow(input: ConfigShowInput, ctx: Context): Promise<
 
 /** `config.get`: one value by path. A path with nothing at it gives `exists: false`. */
 export async function configGet(input: ConfigGetInput, ctx: Context): Promise<IntentOutputs<ConfigGetResult>> {
-    const exists = ctx.config.has(input.path);
-    const value = exists ? ctx.config.get<JsonValue>(input.path) : undefined;
+    const config = configFor(ctx, input.harness);
+    const exists = config.has(input.path);
+    const value = exists ? config.get<JsonValue>(input.path) : undefined;
     const lastKey = input.path.split(/[.[\]"]+/).filter((part) => part !== "").pop() ?? "";
     const policy = policyOf(ctx);
     const shown = value === undefined ? undefined : redactUnder(lastKey, value, policy);
 
     const result: ConfigGetResult = {
         path: input.path,
+        ...(input.harness === undefined ? {} : { harness: input.harness }),
         exists,
         value: shown,
-        passes: ctx.config.passes,
-        ...(input.layers === true ? { layers: layersOf(ctx, input.path, policy) } : {}),
+        passes: config.passes,
+        ...(input.layers === true ? { layers: layersOf(ctx, config, input.path, policy) } : {}),
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 

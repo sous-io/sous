@@ -147,7 +147,7 @@ describe("6. a variable still unknown when the load settles", () => {
 
         expect(result.value).toEqual({ subscriptions: { x: {} } });
         expect(result.pending).toBe(true);
-        expect(evaluator.unsettled()).toEqual([{ file: FILE, path: "subscriptions.x.enabled", unknown: { variables: ["machineRole"], filters: [] } }]);
+        expect(evaluator.unsettled()).toEqual([{ file: FILE, harness: "", path: "subscriptions.x.enabled", unknown: { variables: ["machineRole"], filters: [] } }]);
         expect(() => evaluator.settle()).toThrow(/subscriptions\.x\.enabled reads machineRole, which is not set/);
 
         try {

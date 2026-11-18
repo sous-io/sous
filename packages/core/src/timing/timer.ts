@@ -210,10 +210,10 @@ export class Timer implements Timings {
     }
 }
 
-const LEVELS: Partial<Record<TimingCategory, number>> = { "config.build": 0, "config.stage": 1, "config.pass": 2 };
+const LEVELS: Partial<Record<TimingCategory, number>> = { "config.build": 0, "config.harness": 1, "config.stage": 2, "config.pass": 3 };
 
 function levelOf(category: TimingCategory): number {
-    return LEVELS[category] ?? 3;
+    return LEVELS[category] ?? 4;
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {

@@ -101,8 +101,9 @@ the full semantics.
 A value in a JSON, JSONC or YAML config file may be an expression object, decided when sous builds
 the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif` and
 `$else` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
-Liquid is the expression language. An expression can read `host.platform`, `env.<NAME>`, variables
-by their bare name, and recipe answers (except under `subscriptions` and `repos`).
+Liquid is the expression language. An expression can read `host.platform`, `harness.id`,
+`env.<NAME>`, variables by their bare name, and recipe answers (except under `subscriptions` and
+`repos`).
 
 A subscription switched off on a Mac only:
 
@@ -127,6 +128,39 @@ is dropped and the subscription stays on. An expression may appear at any depth,
 arrays. An object mixing a reserved key with any other key is an error, so a typo such as `"$iff"`
 never passes through as config. The full rules are in
 [the design of config expressions](architecture/specifications/S5-config-expressions.md).
+
+### Conditions on the harness
+
+A "harness" is a coding tool sous writes files for, such as Claude Code or Codex; each one is
+registered by the plugin that knows it. Sous builds the config once with no harness, then once more
+for every registered harness. `harness.id` is the harness of the build: `""` (the empty string) in
+the build with no harness, and the harness's id in its own build. It is never `undefined`, so a
+condition on it never fails as an unknown variable.
+
+The config every command reads is the build with no harness, plus what belongs to each harness taken
+from that harness's build:
+
+- a compilation output marked with a harness (`"harness": "codex"`) comes from that harness's build,
+  with the `_vars` written on it;
+- an entry of `editor.edits` or `recipes.contents` that only a harness's build holds (a condition on
+  `harness.id` put it there) is added, marked with that harness;
+- everything else keeps the value of the build with no harness.
+
+So a condition on `harness.id` takes effect in the merged config only for those lists. A setting
+such as this one is `true` only in the `codex` build, which plugins acting for Codex can read, while
+the merged config keeps `false`:
+
+```jsonc
+{
+    "compilation": {
+        "includeSourceComments": { "$if": "harness.id == 'codex'" }
+    }
+}
+```
+
+`sous config show --harness codex` prints the `codex` build itself. With no harness registered,
+sous builds the config once, as before. The design is in
+[One config build per harness](architecture/specifications/S8-per-harness-config-builds.md).
 
 ## Plugins
 

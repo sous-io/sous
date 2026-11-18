@@ -14,6 +14,11 @@ import type { VarScope } from "@sous-io/plugin-variables/types";
 export interface ExpressionScope {
     /** `host.platform`: Node's `process.platform`. */
     readonly host: { readonly platform: string };
+    /**
+     * `harness.id`: the harness the config build is for, or `""` in the build with no harness
+     * (never `undefined`, so a condition on it is never an unknown variable).
+     */
+    readonly harness: { readonly id: string };
     /** `env.<NAME>`, after the env files load. */
     readonly env: Environment;
     /** Variables by bare name: the `_vars` of every level containing the expression, recipe answers where allowed. */
@@ -101,6 +106,8 @@ export interface EvaluatedLayer {
 /** One expression still unknown once the config settled: an error naming it. */
 export interface UnsettledExpression {
     readonly file: string;
+    /** The config build it was evaluated in: `""` for the build with no harness, else the harness's id. */
+    readonly harness: string;
     readonly path: string;
     readonly unknown: ExpressionUnknowns;
 }
@@ -113,9 +120,12 @@ export interface ExpressionsEvaluator {
     isExpressionObject(value: unknown): boolean;
     /** Whether a value holds an expression object at any depth. */
     hasExpressions(value: unknown): boolean;
-    /** The expressions of the latest build, for one file or every file. */
-    evaluations(file?: string): EvaluatedExpression[];
-    /** Expressions still unknown in the latest pass; non-empty once the config settles means an error. */
+    /**
+     * The expressions of the latest build, for one file or every file, as the config build for
+     * `harness` evaluated them (default `""`: the build with no harness).
+     */
+    evaluations(file?: string, harness?: string): EvaluatedExpression[];
+    /** Expressions still unknown in the latest pass of every config build; non-empty once the config settles means an error. */
     unsettled(): UnsettledExpression[];
     /** The languages known, in plugin order. */
     languages(): string[];

@@ -6,6 +6,8 @@
 /** What was timed. */
 export type TimingCategory =
     | "config.build"
+    | "config.harness"
+    | "config.merge"
     | "config.stage"
     | "config.pass"
     | "config.validate"
@@ -22,6 +24,8 @@ export type TimingCategory =
 /** Every timing category, for checks that each has a budget. */
 export const TIMING_CATEGORIES: readonly TimingCategory[] = [
     "config.build",
+    "config.harness",
+    "config.merge",
     "config.stage",
     "config.pass",
     "config.validate",

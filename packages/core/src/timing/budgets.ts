@@ -6,6 +6,8 @@ import type { JsonObject, TimingCategory } from "@sous-io/plugin-api";
  */
 export const DEFAULT_BUDGETS: Readonly<Record<TimingCategory, number>> = Object.freeze({
     "config.build": 200,
+    "config.harness": 200,
+    "config.merge": 20,
     "config.stage": 200,
     "config.pass": 100,
     "config.validate": 50,
