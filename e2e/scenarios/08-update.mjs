@@ -17,19 +17,20 @@ let NEW = "latest";
 /**
  * What a package manager installs to get sous: the published version, or with `--local` the two
  * files packed from this checkout. The packed sous depends on the packed plugin interface at a
- * version npm may not have, so each manager is pointed at the file for it too.
+ * version npm may not have, so pnpm and Yarn are pointed at the file for it (pnpm reads overrides
+ * from pnpm-workspace.yaml); npm takes both files at the top and needs nothing more.
  */
 function sousInstall(t, pm) {
-  if (!t.local) return { packageJson: {}, specs: `@sous-io/sous@${NEW}` };
+  if (!t.local) return { packageJson: {}, before: "true", specs: `@sous-io/sous@${NEW}` };
   const api = `file:${t.local.api}`;
-  const overrides = {
-    npm: { overrides: { "@sous-io/sous-plugin-api": api } },
-    pnpm: { pnpm: { overrides: { "@sous-io/sous-plugin-api": api } } },
-    yarn: { resolutions: { "@sous-io/sous-plugin-api": api } },
-  }[pm];
-  const specs = pm === "yarn" ? `@sous-io/sous@file:${t.local.sous}` : `${t.local.api} ${t.local.sous}`;
-  return { packageJson: overrides, specs };
+  if (pm === "yarn") return { packageJson: { resolutions: { "@sous-io/sous-plugin-api": api } }, before: "true", specs: `@sous-io/sous@file:${t.local.sous}` };
+  const before = pm === "pnpm" ? `printf 'overrides:\\n  "@sous-io/sous-plugin-api": "${api}"\\n' > pnpm-workspace.yaml` : "true";
+  return { packageJson: {}, before, specs: `${t.local.api} ${t.local.sous}` };
 }
+
+/** Why a step is skipped with --local: sous cannot upgrade an install made from a packed file. */
+const LOCAL_UPGRADE =
+  "with --local the project installs sous from a packed file, whose version sous cannot compare with npm's; this step needs a sous installed from npm";
 
 function packageJson(name, extra) {
   return `echo '${JSON.stringify({ name, private: true, ...extra })}' > package.json`;
@@ -40,16 +41,16 @@ function managers() {
     {
       id: "npm",
       setup: (t, dir) => {
-        const { packageJson: extra, specs } = sousInstall(t, "npm");
-        return expectExit(t.sh(`${packageJson("pm-npm", extra)} && npm i --no-audit --no-fund ${specs}`, { cwd: dir, timeout: 240_000 }));
+        const { packageJson: extra, before, specs } = sousInstall(t, "npm");
+        return expectExit(t.sh(`${packageJson("pm-npm", extra)} && ${before} && npm i --no-audit --no-fund ${specs}`, { cwd: dir, timeout: 240_000 }));
       },
       lockfile: "package-lock.json",
     },
     {
       id: "pnpm",
       setup: (t, dir) => {
-        const { packageJson: extra, specs } = sousInstall(t, "pnpm");
-        return expectExit(t.sh(`${packageJson("pm-pnpm", extra)} && pnpm add ${specs}`, { cwd: dir, timeout: 240_000 }));
+        const { packageJson: extra, before, specs } = sousInstall(t, "pnpm");
+        return expectExit(t.sh(`${packageJson("pm-pnpm", extra)} && ${before} && pnpm add ${t.local ? "--workspace-root " : ""}${specs}`, { cwd: dir, timeout: 240_000 }));
       },
       lockfile: "pnpm-lock.yaml",
     },
@@ -142,6 +143,7 @@ export default {
       await t.step(`${pm.id}: upgrade --project --version <older> --yes changes the installed version`, () => {
         if (!ready) t.skip("install failed");
         if (!initOk) t.skip("init did not produce a loadable config, see the init step");
+        if (t.local) t.skip(LOCAL_UPGRADE);
         const r = sous(["upgrade", "--project", "--yes", "--no-build", "--version", OLD_VERSION]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
         // Check what the package manager installed, not by running the older sous: an older release
@@ -151,6 +153,7 @@ export default {
     }
 
     await t.step("upgrade --version with an unknown version fails naming it", () => {
+      if (t.local) t.skip(LOCAL_UPGRADE);
       const dir = path.join(t.root, "pm-npm");
       const r = run(path.join(dir, "node_modules/.bin/sous"), ["upgrade", "--project", "--dry-run", "--version", "99.99.99"], { cwd: dir, env: t.env });
       assert.notEqual(r.code, 0);
