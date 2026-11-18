@@ -285,11 +285,6 @@ const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
             'removeLine {"path":"notes","line":"hello"} yaml',
         ].map((name) => [name, "YAML: a string keeps a quoting or block style its old value needed"]),
         ['removeLine {"path":"notes","line":"hello"} jsonc', "undoing removeLine adds a line break the text did not have"],
-        ...[
-            'replacePattern {"path":"notes","match":"l+","value":"L"} jsonc',
-            'replacePattern {"path":"notes","match":"l+","value":"L"} yaml',
-            'replacePattern {"match":"/^(\\\\w+)a$/gm","value":"[$1]"} text',
-        ].map((name) => [name, "replacePattern is not undone"]),
     ],
 );
 
@@ -451,6 +446,37 @@ describe("undoing an order through editor.apply", () => {
 
         await project.apply([]);
         expect(project.read("settings.yaml")).toBe(YAML);
+    });
+});
+
+describe("undoing replacePattern through editor.apply", () => {
+    /**
+     * A replacement cannot be worked backwards, so undoing puts back the text from before Sous's
+     * last replacement, and only while the text is still what Sous left; someone's later change
+     * is kept.
+     *
+     * "alpha" replacePattern a$ -> "alphA"; someone writes "alphA!" -> undeclared: "alphA!" stays
+     */
+    it("should put back the text it replaced only while it is what Sous left", async () => {
+        const entry = { file: "notes.txt", replacePattern: { match: "a$", value: "A" } };
+
+        project.write("notes.txt", "alpha");
+        await project.apply([entry]);
+        expect(project.read("notes.txt")).toBe("alphA");
+
+        project.write("notes.txt", "alphA!");
+        await project.apply([entry]);
+        await project.apply([]);
+        expect(project.read("notes.txt")).toBe("alphA!");
+
+        project.write("notes.txt", "beta");
+        await project.apply([entry]);
+        project.write("notes.txt", "betA, gamma");
+        await project.apply([entry]);
+        expect(project.read("notes.txt")).toBe("betA, gammA");
+
+        await project.apply([]);
+        expect(project.read("notes.txt")).toBe("betA, gamma");
     });
 });
 

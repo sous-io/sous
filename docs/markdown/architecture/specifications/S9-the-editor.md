@@ -466,3 +466,10 @@ So `sort` records the list before Sous first sorted it, the key operations recor
 and `dedupe` records each item it removed with its index; `down` puts them back, and an item or key
 added since keeps its place. `sort` now moves items with the library's `sort`, so each keeps its
 own text. Found by running every operation through `editor.apply`; the agent's fix.
+
+### 2026-11-18: `replacePattern` is undone
+
+`replacePattern` had no `down`. A regular expression's replacement cannot be worked backwards, so
+it now records the text before its last replacement and the text it left, and `down` puts the
+first back only while the text is still the second: a change someone made since is never undone
+with it. Found by running every operation through `editor.apply`; the agent's fix.

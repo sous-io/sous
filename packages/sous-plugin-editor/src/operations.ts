@@ -1952,7 +1952,7 @@ define({
     name: "replacePattern",
     order: 60,
     scope: "document",
-    summary: "Every match of the regular expression `match` (`\"^a\"` or `\"/^a/i\"`) becomes `value`, with `$1` and so on. Not undone.",
+    summary: "Every match of the regular expression `match` (`\"^a\"` or `\"/^a/i\"`) becomes `value`, with `$1` and so on. Undone by putting back the text it replaced, while the text is still what Sous left.",
     params: ["match", "value"],
     args: ["match", "value"],
     normalize(raw) {
@@ -1975,11 +1975,23 @@ define({
         const text = access.get();
         const next = text.replace(global, params.value as string);
 
-        if (next !== text) access.set(next);
+        if (next === text) return { changed: false } as JsonValue;
 
-        return null;
+        access.set(next);
+
+        return { changed: true, previous: text, result: next };
     },
-    down() {},
+    // A replacement cannot be worked backwards, so the text is put back only while it is still
+    // what Sous left: an edit made to it since is never undone with it.
+    down(ctx, _params, record) {
+        if (!isJsonObject(record) || record.changed !== true || typeof record.previous !== "string") return;
+
+        const access = textAccess(ctx, "replacePattern");
+
+        if (access.get() === record.result) access.set(record.previous);
+    },
+    // A later replacement acted on text someone changed since; going back to before it keeps their change.
+    mergeRecords: (previous, next) => (isJsonObject(next) && next.changed === true ? next : previous),
     assertions: () => [],
 });
 

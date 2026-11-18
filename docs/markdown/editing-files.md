@@ -183,6 +183,9 @@ change nothing when the key or the anchor is missing.
 An order is undone like a value: `sort`, `sortKeys` and the key moves record the order the list or
 object had before Sous first changed it, and put it back when the entry goes away; an item or key
 added since keeps its place. `dedupe` records each item it removed and where, and puts them back.
+`replaceText` is undone by turning `value` back into `match`. A `replacePattern` cannot be worked
+backwards, so Sous keeps the text from before its last replacement and puts it back only while the
+text is still exactly what Sous left; if anyone has changed it since, it stays as it is.
 
 `ensureBlock` keeps a block between two marker lines, written in the file's comment style (`#`,
 `//`, `<!-- -->`, `/* */`, `--` or `;`, from the file's name, or `comment` to choose):
