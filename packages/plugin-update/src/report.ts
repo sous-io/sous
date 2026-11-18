@@ -110,6 +110,33 @@ function summaryRows(result: UpdateResult, globalCount: number): VariableEntry[]
                 return { label, value: `up to date at ${plan.installed}` };
         }
     });
+    const migrations = result.migrations;
+
+    if (migrations !== undefined) {
+        const label = "Project migrations";
+
+        switch (migrations.result) {
+            case "migrated":
+                rows.push({ label, value: "ran", detail: "the new copy ran every pending migration it could" });
+                break;
+            case "failed":
+                rows.push({ label, value: "failed", detail: `exited with code ${migrations.exitCode}` });
+                break;
+            case "no-bin":
+                rows.push({ label, value: "failed", detail: "the new copy names no bin" });
+                break;
+            case "unsupported":
+                rows.push({ label, value: "none", detail: "the new copy has no migrations to run" });
+                break;
+            case "skipped":
+                rows.push({ label, value: "not run", detail: "a downgrade keeps the version the project migrated to" });
+                break;
+            case "no-config":
+                rows.push({ label, value: "not run", detail: "the project has no sous config" });
+                break;
+        }
+    }
+
     const build = result.build;
 
     if (build !== undefined) {

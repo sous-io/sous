@@ -35,6 +35,7 @@ const updateInput = jsonSchema<UpdateInput>({
         yes: { type: "boolean", default: false, description: "Answer yes to every question." },
         dryRun: { type: "boolean", default: false, description: "Show every install's plan without installing anything." },
         noBuild: { type: "boolean", default: false, description: "Update the project install without building the project afterwards." },
+        answer: { type: "array", items: { type: "string" }, description: "Answer a question of the new version's migrations ahead of time, as <name>=<value>." },
     },
     additionalProperties: false,
 });

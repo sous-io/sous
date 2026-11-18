@@ -247,6 +247,7 @@ describe("the sous upgrade command", () => {
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -281,6 +282,7 @@ describe("the sous upgrade command", () => {
       expect(printed).toContain(`Then builds : yes with the new copy, in ${project}`);
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -313,6 +315,7 @@ describe("the sous upgrade command", () => {
       expect(flat(result.stderr)).toContain("Sous could not load the project config at");
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${app} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${app} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -356,6 +359,7 @@ describe("the sous upgrade command", () => {
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([
         `yarn add -D -E @sous-io/sous@0.2.34 @ ${project} SOUS_NO_DELEGATE=`,
+        `yarn run --binaries-only sous migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `yarn run --binaries-only sous build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -363,9 +367,9 @@ describe("the sous upgrade command", () => {
   );
 
   /**
-   * `--no-build` updates the project install and runs no build.
+   * `--no-build` updates the project install and runs its migrations, and no build.
    *
-   * sous upgrade --project --yes --no-build -> only npm runs
+   * sous upgrade --project --yes --no-build -> npm, then the new copy's migrations; no build
    */
   it(
     "should skip the build under --no-build",
@@ -375,7 +379,10 @@ describe("the sous upgrade command", () => {
       const result = await runSous(project, "upgrade", "--project", "--yes", "--no-build");
 
       expect(result.status).toBe(0);
-      expect(takeCalls()).toEqual([`npm i -D -E @sous-io/sous@0.2.34 @ ${project}`]);
+      expect(takeCalls()).toEqual([
+        `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
+      ]);
     },
     CLI_TIMEOUT
   );
