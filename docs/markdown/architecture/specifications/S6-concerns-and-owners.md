@@ -174,8 +174,9 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | a `package-manager` entity each |
 | `plugin-github`, `plugin-gitlab`, `plugin-local` | a `repository-host` entity each |
 | `plugin-claude-code` | everything sous knows about Claude Code: its `harness`, `skill-target` and `memory-target` entities |
+| `sous-plugin-codex` | everything sous knows about Codex: its `harness`, `skill-target` and `memory-target` entities, added only while a project turns Codex on (S16) |
 
-Codex, and every other agent tool, is a separately installed plugin. A web front end, such as the
+Every other agent tool is a separately installed plugin. A web front end, such as the
 one `sous serve` would start, is a plugin of the same shape as `plugin-mcp` (see "Front ends" in S1, the engine).
 
 `plugin-claude-code` is the Sous plugin that teaches sous about Claude Code. It is not the
@@ -189,7 +190,7 @@ types only. What orders them is `dependsOn`, which sous checks at load (S1, the 
 has no cycles: a plugin depends only on plugins on lower rows (agent suggestion):
 
 ```text
-top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugin-npm  plugin-pnpm  plugin-yarn
+top      plugin-claude-code   sous-plugin-codex   plugin-github  plugin-gitlab  plugin-local   plugin-npm  plugin-pnpm  plugin-yarn
            │
          plugin-cli   plugin-mcp   plugin-inspect          (depend on nothing: they use intents by name)
            │
@@ -241,6 +242,7 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
 | `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | `plugin-update` |
 | `plugin-github`, `plugin-gitlab`, `plugin-local` | `plugin-recipes` |
 | `plugin-claude-code` | `plugin-skills`, `plugin-memories`, `plugin-harnesses` |
+| `sous-plugin-codex` | `plugin-skills`, `plugin-memories`, `plugin-harnesses`, `plugin-host` |
 
 Reading the diagram:
 
@@ -253,7 +255,7 @@ Reading the diagram:
 - `plugin-refs` depends on nothing but `plugin-host`.
 - `plugin-recipe-answers` depends on `plugin-recipes`, never the other way.
 - `plugin-skills` and `plugin-memories` only add compilation targets; they write nothing.
-- `plugin-claude-code` sits on top: nothing depends on it (G8, works without any one agent tool).
+- `plugin-claude-code` and `sous-plugin-codex` sit on top: nothing depends on them (G8, works without any one agent tool).
 
 A test in the workspace checks `dependsOn` against the type imports on every run, so an undeclared
 dependency fails the build (G5, obvious, enforceable boundaries).
@@ -375,8 +377,9 @@ for (const target of config.entities("memory-target")) {
     }
 }
 
-// With plugin-claude-code (CLAUDE.md) and sous-plugin-codex (AGENTS.md),
-// host.directories writes README.md, CLAUDE.md and AGENTS.md, each once.
+// With plugin-claude-code (CLAUDE.md, read in any directory), host.directories writes
+// README.md and CLAUDE.md, each once. sous-plugin-codex's AGENTS.override.md is read at the
+// project root only, so it makes no pointer file.
 ```
 
 ### Shared building blocks
@@ -1039,6 +1042,14 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-18: Codex is a built-in plugin
+
+`sous-plugin-codex` is a new built-in plugin (S16), loaded right after `plugin-claude-code`. This
+replaces the line "Codex, and every other agent tool, is a separately installed plugin": Luke ruled
+that the Codex work "will be done as part of this body of work" (2026-11-17), and the brief for the
+build made it built in. It adds nothing until a project turns Codex on, so a project that does not
+use Codex pays nothing for it. Every other agent tool is still a separately installed plugin.
 
 ### 2026-11-18: Handlers
 
