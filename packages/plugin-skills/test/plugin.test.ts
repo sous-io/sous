@@ -149,6 +149,33 @@ describe("plugin-skills", () => {
     });
 
     /**
+     * An output written into a skill target is marked with the target's harness, so the merge of the
+     * per-harness config builds takes it from that harness's build; a configured output has no mark.
+     *
+     * // skill target claude-code (harness claude-code), outputs [/abs/other]
+     * // -> outputs: [{ destinationDir: "${projectRoot}/.claude/skills", harness: "claude-code" }, { destinationDir: "/abs/other" }]
+     */
+    it("should mark each output written into a skill target with its harness", async () => {
+        const other = path.join(tmp.path, "other");
+        const { engine } = makeEngine(
+            [
+                compilerStandIn(),
+                recipesStandIn([activeRecipe(recipeDir)]),
+                skillsPlugin,
+                plugin("test-harness", (sous) => sous.entities.add("skill-target", { id: "claude-code", harness: "claude-code", directory: ".claude/skills" })),
+                userConfig({ recipes: { skills: { outputs: [other] } } }),
+            ],
+            projectIn(projectRoot),
+        );
+        const built = await engine.buildConfig();
+
+        expect(targetsOf(built.get("compilation.targets"))[0]!.outputs).toEqual([
+            { destinationDir: "${projectRoot}/.claude/skills", harness: "claude-code" },
+            { destinationDir: other },
+        ]);
+    });
+
+    /**
      * The contributor reads skill targets through the builder, so a skill target a contributor adds
      * in a later pass re-runs it.
      *
