@@ -45,4 +45,25 @@ describe("compilation.overwriteUntracked", () => {
 
         expect(strict.result.ok).toBe(false);
     });
+
+    /**
+     * An output with `backupExisting` backs up and overwrites a file sous did not write even when
+     * overwriteUntracked is false, and says so as a warning.
+     *
+     * CLAUDE.md "the user's own", overwriteUntracked false, backupExisting true
+     * // -> CLAUDE.md "COMPILED"; .sous/backups/<date>/<time>/CLAUDE.md "the user's own"; one warning
+     */
+    it("should back up, warn and overwrite for an output with backupExisting", async () => {
+        project = makeProject();
+        const src = project.write("src.md", "COMPILED");
+        const dest = project.write("CLAUDE.md", "the user's own");
+        const compilation = { overwriteUntracked: false, targets: [{ entryPoint: src, outputs: [{ destinationFile: dest, backupExisting: true }] }] };
+        const { result } = await compileOnce(project, compilation);
+
+        expect(result.ok).toBe(true);
+        expect(result.outputs[0]?.action).toBe("updated");
+        expect(result.outputs[0]?.backup).toContain(`${project.sousDir}/backups/`);
+        expect(result.problems).toEqual([expect.objectContaining({ level: "warning", file: dest, message: expect.stringContaining("was not written by sous") })]);
+        expect(project.read("CLAUDE.md")).toBe("COMPILED");
+    });
 });

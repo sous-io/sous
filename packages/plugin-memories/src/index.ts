@@ -11,7 +11,7 @@ import type {} from "@sous-io/plugin-refs/types";
 import { memoriesHashName } from "./hash-name.js";
 import { memoriesSettingsSchema, memoryTargetSchema } from "./schemas.js";
 import { MemoriesSelectionService } from "./selection.js";
-import { targetsContributor } from "./targets.js";
+import { skipEmptyTransform, targetsContributor } from "./targets.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -32,7 +32,7 @@ export const memoriesPlugin: PluginDefinition = definePlugin({
 
     register(sous) {
         sous.entities.define("memory-target", memoryTargetSchema, {
-            description: "A file a harness reads into every session, built from the selected recipe memories.",
+            description: "The one file a harness reads into every session, compiled from .sous/MEMORIES.tpl.md or the default memories source.",
         });
 
         sous.entities.add("config-key", {
@@ -42,6 +42,8 @@ export const memoriesPlugin: PluginDefinition = definePlugin({
         });
 
         sous.entities.add("hash-name", memoriesHashName);
+
+        sous.entities.add("compilation-transform", skipEmptyTransform);
 
         sous.services.add("memories.selection", (config, ctx) => new MemoriesSelectionService(config, ctx), {
             lifetime: "config",
@@ -56,6 +58,16 @@ export default memoriesPlugin;
 export { compileRecipeKeyMatcher, isRegexSpelling } from "./key-matcher.js";
 export { dependencyOrder, recipeMemories, selectMemories, viewPath } from "./listing.js";
 export type { ExcludedMemory, MemoryGlobs, MemoryRecipe, MemorySelectionResult } from "./listing.js";
-export { compilationTargetId, defaultFormat, destinationFile, TARGETS_CONTRIBUTOR } from "./targets.js";
+export {
+    compilationTargetId,
+    configPath,
+    DEFAULT_SOURCE_LINES,
+    defaultFormat,
+    MEMORIES_SOURCE,
+    memoriesContent,
+    PROJECT_MEMORIES_DIR,
+    SKIP_EMPTY_TRANSFORM,
+    TARGETS_CONTRIBUTOR,
+} from "./targets.js";
 
 export type * from "./types.js";

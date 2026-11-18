@@ -1050,6 +1050,26 @@ replaces the line "Codex, and every other agent tool, is a separately installed 
 that the Codex work "will be done as part of this body of work" (2026-11-17), and the brief for the
 build made it built in. It adds nothing until a project turns Codex on, so a project that does not
 use Codex pays nothing for it. Every other agent tool is still a separately installed plugin.
+### 2026-11-18: Claude Code owns its kinds, its memories file and its migrations
+
+Built from Luke's rulings of 2026-11-15 to 2026-11-18; the design is S15.
+
+- `plugin-claude-code` now owns, besides its `harness` (id `claude-code`, was `claude`) and `skill-target`: the
+  `memory-target` for `.claude/rules/SOUS-MEMORIES.md` (its `memoriesOutputPath` option), the `CLAUDE.md`
+  `pointer-file` entity, the content kinds `claude-code-plugin` and `claude-code-agent` with the contributor that
+  turns them into compilation targets, the `/reload-plugins` line, and the two 1.0.20 migrations (`tools.claude`
+  renamed, the memories file moved or kept). Luke: "its better to be overly verbose than regret inspecificity
+  later."
+- It therefore depends on `plugin-recipes` (`recipes.contents`, the `content-kind` kind), `plugin-compiler`
+  (types, the events it listens to), `sous-plugin-migrations` (`sous.migrations`), and, for types only,
+  `plugin-build`, `plugin-config-files` and `plugin-confd`. It still sits on top: nothing depends on it.
+- `plugin-memories` no longer chooses which memories a file takes or formats them: the `memory-target` entity is
+  now `{ id, harness?, outputPath, prependWith?, backupExisting? }`, the file's content comes from
+  `.sous/MEMORIES.tpl.md` or the default source, and the `pointer-file` it used to add for `readIn:
+  "any-directory"` moves to `plugin-claude-code`.
+- `plugin-skills` and `plugin-memories` mark each output with the harness of the entity it was written for.
+- The compiler gains `backupExisting` on an output, and stops counting an output a transform left out as
+  produced, so the prune removes an earlier copy.
 
 ### 2026-11-18: Handlers
 

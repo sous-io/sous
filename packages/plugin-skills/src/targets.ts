@@ -92,11 +92,7 @@ function compilationTarget(
                 ...(skill.recipe === undefined ? {} : { recipe: skill.recipe }),
                 ...(skill.repository === undefined ? {} : { repository: skill.repository }),
             },
-            outputs: destinations.map((destination): CompilationOutput => {
-                const destinationFile = `${destination.dir.replace(/\/+$/, "")}/${fromBase}`;
-
-                return destination.transform ? { destinationFile, transforms: [destination.transform] } : { destinationFile };
-            }),
+            outputs: destinations.map((destination) => outputFor(destination, { destinationFile: `${destination.dir.replace(/\/+$/, "")}/${fromBase}` })),
         };
     }
 
@@ -109,9 +105,24 @@ function compilationTarget(
             ...(skill.recipe === undefined ? {} : { recipe: skill.recipe }),
             ...(skill.repository === undefined ? {} : { repository: skill.repository }),
         },
-        outputs: destinations.map((destination): CompilationOutput =>
-            destination.transform ? { destinationDir: destination.dir, transforms: [destination.transform] } : { destinationDir: destination.dir },
-        ),
+        outputs: destinations.map((destination) => outputFor(destination, { destinationDir: destination.dir })),
+    };
+}
+
+/**
+ * One output for one destination: the destination's transform, and its harness, so the merge of
+ * the per-harness config builds takes the output from that harness's build (S8, "The Merge").
+ *
+ * ```ts
+ * outputFor({ dir: "${projectRoot}/.claude/skills", target: "claude-code", harness: "claude-code" }, { destinationDir: "${projectRoot}/.claude/skills" });
+ * // -> { destinationDir: "${projectRoot}/.claude/skills", harness: "claude-code" }
+ * ```
+ */
+export function outputFor(destination: SkillDestination, where: Pick<CompilationOutput, "destinationDir" | "destinationFile">): CompilationOutput {
+    return {
+        ...where,
+        ...(destination.transform === undefined ? {} : { transforms: [destination.transform] }),
+        ...(destination.harness === undefined ? {} : { harness: destination.harness }),
     };
 }
 

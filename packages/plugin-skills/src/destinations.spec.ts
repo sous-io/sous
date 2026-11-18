@@ -55,6 +55,20 @@ describe("skillDestinations()", () => {
      * skillDestinations([".claude/skills"], [{ id: "claude-code", directory: "${projectRoot}/.claude/skills" }]);
      * // -> [{ dir: "${projectRoot}/.claude/skills", target: "claude-code" }]
      */
+    /**
+     * skillDestinations should carry each skill target's harness, so its outputs are marked with it;
+     * a directory from `recipes.skills.outputs` has none.
+     *
+     * skillDestinations(["/abs/other"], [{ id: "claude-code", harness: "claude-code", directory: ".claude/skills" }]);
+     * // -> [{ dir: "${projectRoot}/.claude/skills", target: "claude-code", harness: "claude-code" }, { dir: "/abs/other" }]
+     */
+    it("should carry the skill target's harness", () => {
+        expect(skillDestinations(["/abs/other"], [{ id: "claude-code", harness: "claude-code", directory: ".claude/skills" }])).toEqual([
+            { dir: "${projectRoot}/.claude/skills", target: "claude-code", harness: "claude-code" },
+            { dir: "/abs/other" },
+        ]);
+    });
+
     it("should write a directory named twice once", () => {
         expect(skillDestinations([".claude/skills", ".claude/skills/"], [{ id: "claude-code", directory: "${projectRoot}/.claude/skills" }])).toEqual([
             { dir: "${projectRoot}/.claude/skills", target: "claude-code" },

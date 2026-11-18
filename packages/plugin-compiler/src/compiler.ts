@@ -291,7 +291,7 @@ export class CompileRun extends Reporting(Object) {
             // output edited by hand since is compiled again instead, so the edit is backed up and
             // replaced rather than recorded as sous's own.
             if (existing !== undefined && hashContent(existing) === tracked.destHash) {
-                await this.write({ source: unit.label, destination: output.destination, content: existing }, sourceHash, base, sourceMode);
+                await this.write({ source: unit.label, destination: output.destination, content: existing }, sourceHash, base, sourceMode, output.backupExisting);
 
                 return;
             }
@@ -303,7 +303,7 @@ export class CompileRun extends Reporting(Object) {
         // file is not corrupted by being read as text. (An include that found nothing to include
         // leaves no part of its own, so the parts must also still be the file's text.)
         if (entry?.bytes !== undefined && transforms.length === 0 && entry.parts.every((part) => typeof part === "string") && entry.parts.join("\n") === entry.content) {
-            await this.write({ source: unit.label, destination: output.destination, content: entry.bytes }, sourceHash, base, sourceMode);
+            await this.write({ source: unit.label, destination: output.destination, content: entry.bytes }, sourceHash, base, sourceMode, output.backupExisting);
 
             return;
         }
@@ -344,6 +344,8 @@ export class CompileRun extends Reporting(Object) {
             }
 
             if (file === undefined) {
+                // Not produced, so a copy an earlier build wrote is removed by the prune that follows.
+                this.produced.delete(output.destination);
                 this.operation("skipped", output.destination, { note: `left out by the transform "${id}"` });
 
                 return;
@@ -356,7 +358,7 @@ export class CompileRun extends Reporting(Object) {
             this.produced.add(file.destination);
         }
 
-        await this.write(file, sourceHash, base, sourceMode);
+        await this.write(file, sourceHash, base, sourceMode, output.backupExisting);
     }
 
     private async write(
@@ -364,9 +366,11 @@ export class CompileRun extends Reporting(Object) {
         sourceHash: string,
         base: Pick<CompiledOutput, "source" | "target" | "origin">,
         mode: number | undefined,
+        backupExisting?: boolean,
     ): Promise<void> {
         try {
             const written = await this.deps.writer.write(file.destination, file.content, {
+                ...(backupExisting === true ? { overwriteUntracked: true } : {}),
                 source: base.source,
                 sourceHash,
                 ...(base.target === undefined ? {} : { target: base.target }),
@@ -384,6 +388,14 @@ export class CompileRun extends Reporting(Object) {
 
             if (written.backup !== undefined) {
                 reportBackup(this.reporter, written.file, written.backup, this.options.dryRun === true);
+
+                // An output that asked for it says so as a warning: a file someone wrote is being replaced.
+                if (backupExisting === true) {
+                    this.recordWarning(
+                        `${written.file} was not written by sous, so it ${this.options.dryRun === true ? "would be" : "was"} backed up to ${written.backup} and replaced.`,
+                        { file: written.file },
+                    );
+                }
             }
 
             this.reportWritten(written.file, written.action, tokens);

@@ -125,7 +125,7 @@ export const config = {
     targets: [projectSkills, rootClaude, docsSiteClaude],
   },
   tools: {
-    claude: {
+    "claude-code": {
       command: "claude",
       args: ["--dangerously-skip-permissions"],
     },

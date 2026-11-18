@@ -54,7 +54,7 @@ export class WriterService implements CompilerWriter {
 
         // A file the compiler did not write is left alone when the user said so, even when its
         // content already matches: taking it over would let a later prune delete it.
-        if (exists && tracked === undefined && !this.settings.overwriteUntracked) {
+        if (exists && tracked === undefined && !(options.overwriteUntracked ?? this.settings.overwriteUntracked)) {
             return { ...base, action: "skipped-untracked" };
         }
 

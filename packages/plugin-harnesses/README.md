@@ -14,7 +14,7 @@ It adds these commands:
 ```ts
 import type {} from "@sous-io/plugin-harnesses/types";
 
-await ctx.run("launch", { tool: ["claude"], noBuild: true });
+await ctx.run("launch", { tool: ["claude-code"], noBuild: true });
 ```
 
 ## Where things are

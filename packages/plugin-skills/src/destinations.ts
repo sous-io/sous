@@ -14,6 +14,8 @@ export interface SkillDestination {
     readonly target?: string;
     /** The `compilation-transform` id of the target's transform, when it has one. */
     readonly transform?: string;
+    /** The skill target's harness; every output written here is marked with it (S8, "The Merge"). */
+    readonly harness?: string;
 }
 
 /** The `compilation-transform` id a skill target's transform is registered under. */
@@ -62,11 +64,12 @@ export function skillDestinations(outputs: readonly string[], targets: readonly 
         }
 
         seen.add(dir);
-        destinations.push(
-            typeof target.transform === "function"
-                ? { dir, target: target.id, transform: transformIdFor(target.id) }
-                : { dir, target: target.id },
-        );
+        destinations.push({
+            dir,
+            target: target.id,
+            ...(typeof target.transform === "function" ? { transform: transformIdFor(target.id) } : {}),
+            ...(typeof target.harness === "string" && target.harness !== "" ? { harness: target.harness } : {}),
+        });
     }
 
     for (const output of outputs) {

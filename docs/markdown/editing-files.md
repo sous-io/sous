@@ -1,6 +1,6 @@
 # Editing files Sous does not own
 
-Sous writes the files it owns (compiled skills, memories, `CLAUDE.md`) and overwrites them on every
+Sous writes the files it owns (compiled skills, agents, the memories file) and overwrites them on every
 build. Some files belong to the project or to another tool: Claude Code's `.claude/settings.json`,
 `.mcp.json`, `.pre-commit-config.yaml`, `.gitignore`, the frontmatter of an agent file, a file in
 your home directory. For those, Sous has **the editor**: you declare an edit, and Sous makes exactly

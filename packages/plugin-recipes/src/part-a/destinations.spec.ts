@@ -39,9 +39,14 @@ describe("destinationsFor()", () => {
     });
 
     it("should list every memory target's file", () => {
-        const ctx = contextWith({ "memory-target": [{ id: "claude-code", fileName: "CLAUDE.md" }, { id: "codex", fileName: "AGENTS.md", directory: "docs" }] });
+        const ctx = contextWith({
+            "memory-target": [
+                { id: "claude-code", outputPath: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md" },
+                { id: "codex", outputPath: "docs/AGENTS.override.md" },
+            ],
+        });
 
-        expect(destinationsFor(ctx, "memories")).toEqual([path.join(root, "CLAUDE.md"), path.join(root, "docs", "AGENTS.md")]);
+        expect(destinationsFor(ctx, "memories")).toEqual([path.join(root, ".claude", "rules", "SOUS-MEMORIES.md"), path.join(root, "docs", "AGENTS.override.md")]);
     });
 
     it("should list nothing when no plugin adds a target, and nothing for config layers", () => {

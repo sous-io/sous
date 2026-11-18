@@ -97,17 +97,56 @@ handlers:
           handler: checkCommands
 ```
 
-`contents[].kind` names a content kind. Sous registers `skills`, `memories`, `prompts` and `config`; a sous plugin
-can register more (a `content-kind` entity), so any lowercase, hyphenated name is accepted here. A sous plugin is
+`contents[].kind` names a content kind. Sous registers `skills`, `memories`, `prompts` and `config`, and its
+Claude Code plugin registers `claude-code-plugin` and `claude-code-agent` (see
+[Kinds for Claude Code](#kinds-for-claude-code)); a sous plugin can register more (a `content-kind` entity), so
+any lowercase, hyphenated name is accepted here. A sous plugin is
 not a content kind but the `plugin` field above. `skills` are
 written to the destinations named by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included
-into your instruction files by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
+into each coding tool's memories file by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
 each `config` file joins the subscriber's config, under the project's own files so the project wins; nothing takes `prompts` yet, and the build warns about a recipe that
 publishes them. `include` needs at least one glob, and both lists are recipe-relative.
 
 A kind no plugin registers stops a subscriber's build, naming the kind and the recipe. `sous repo release`
 refuses one when nothing the recipe names could register it (no `requires.plugins`, no `subscribes`, no
 `plugin` of its own), and warns otherwise.
+
+### Kinds for Claude Code
+
+Two kinds carry files only Claude Code reads. Only Claude Code's part of Sous takes them, so a recipe needs no
+harness condition for them, and other coding tools never receive them.
+
+```yaml
+contents:
+  - kind: claude-code-plugin
+    include:
+      - plugins/**            # each folder directly under plugins/ is one plugin
+  - kind: claude-code-agent
+    include:
+      - agents/**/*.md
+```
+
+| Recipe file | Written to |
+|---|---|
+| `plugins/session-harness/.claude-plugin/plugin.json` | `.claude/skills/session-harness/.claude-plugin/plugin.json` |
+| `plugins/session-harness/scripts/start.tpl.sh` | `.claude/skills/session-harness/scripts/start.sh` (rendered) |
+| `agents/reviewer.tpl.md` | `.claude/agents/reviewer.md` (rendered) |
+| `agents/review/security.md` | `.claude/agents/review/security.md` |
+
+- `claude-code-plugin`: a Claude Code plugin folder, one holding `.claude-plugin/plugin.json`. Each folder directly
+  under an `include` pattern's fixed part is one plugin, written under Claude Code's skills directory with the
+  folder name the recipe gives it; Claude Code loads it from there as a plugin.
+- `claude-code-agent`: agent files (Markdown with frontmatter), written to `.claude/agents/` with their
+  sub-folders kept. An agent here keeps its plain name, where an agent inside a plugin is named `<plugin>:<name>`.
+- A file whose name holds `.tpl.` is rendered, so an agent's `model` can be a recipe variable each person answers
+  for themselves; any other file is written as it is.
+- When a build adds, changes or removes a file of a Claude Code plugin (any folder holding
+  `.claude-plugin/plugin.json`, however the recipe shipped it), the build ends with one line: run
+  `/reload-plugins` in any open Claude Code session, since Claude Code loads plugins only when a session starts or
+  on that command.
+
+A plugin folder may also be listed among a recipe's `skills`, with an `exclude` entry carrying
+`harness.id != 'claude-code'` so other tools do not receive it (see [Authoring](repositories-authoring.md)).
 
 ### Contents are config
 

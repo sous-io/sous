@@ -350,16 +350,19 @@ Sous never deletes backups; remove old ones from `.sous/backups/` yourself.
 ### `sous launch TOOL...`
 
 Builds the project, then starts a coding agent: one an agent plugin provides (the built-in Claude Code plugin
-provides `claude`, and the built-in [Codex plugin](codex.md) provides `codex` once a project turns it on), or one
-configured under `tools` in the config. A failed build starts nothing.
+provides `claude-code`, and the built-in [Codex plugin](codex.md) provides `codex` once a project turns it on), or
+one configured under `tools` in the config. A failed build starts nothing. The settings for the built-in Claude
+Code one are under `tools.claude-code` (`command`, `args`, `promptFile`, `headless`). Before version 1.0.20 the
+tool was named `claude`; `sous launch claude` is not kept as an alias, and when no tool has that name the error
+suggests `sous launch claude-code`.
 `--continuous` restarts the agent whenever it exits, and `--no-build` skips the build.
 
 Arguments `launch` does not recognize are passed to the agent. Put one that clashes with a sous flag after a
 bare `--`:
 
 ```bash
-sous launch claude --resume
-sous launch claude -- -c
+sous launch claude-code --resume
+sous launch claude-code -- -c
 ```
 
 ### `sous search TEXT`

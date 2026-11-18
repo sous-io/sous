@@ -1,17 +1,22 @@
 /**
- * The contract of plugin-memories: files a harness reads into
- * every session (`memory-target`), which memories go where, the `memories.targets` contributor that
- * turns memory targets into compilation targets, the `#memories` name, and a
- * `pointer-file` entity for every memory target read in any directory.
+ * The contract of plugin-memories: the one file each harness reads into every session
+ * (`memory-target`), which recipe memories exist (`memories.selection`, the `#memories` name), and
+ * the `memories.targets` contributor that turns each memory target into a compilation target.
  *
- * The order is: the active recipes' memories, the config's selection (`recipes.memories.first`,
- * `.exclude`), the target's `filter()`, then its `format()`. The default
- * `format()` writes one compiler `@` include line per memory.
+ * The file's source is the project's `.sous/MEMORIES.tpl.md` when it exists. Otherwise it is these
+ * two lines, read as if written in a file inside `.sous/`:
+ *
+ * ```markdown
+ * @memories/**\/*.md
+ * @#memories/**\/*.md
+ * ```
+ *
+ * The first includes the project's own files under `.sous/memories/`, the second the subscribed
+ * recipes' memories. A result with nothing in it writes no file, and removes one an earlier build
+ * wrote.
  *
  * Other plugins import this file type-only.
  */
-
-import type { ConfigBuilder } from "@sous-io/plugin-api";
 
 /** One memory file. */
 export interface Memory {
@@ -27,35 +32,51 @@ export interface Memory {
     readonly content?: string;
 }
 
-/** Where a harness reads a memory file. */
-export type MemoryReadIn = "project-root" | "any-directory";
-
 /**
- * A `memory-target` entity: a file a harness reads into every session. `filter` and `format`
- * run in the `memories.targets` contributor and get its builder, so what they read is recorded.
+ * A `memory-target` entity: the one file a harness reads into every session, which sous compiles
+ * from the memories source. A harness's plugin adds one, from its own options:
+ *
+ * ```ts
+ * config.addEntity("memory-target", {
+ *     id: "claude-code",
+ *     harness: "claude-code",
+ *     outputPath: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md",
+ *     backupExisting: true,
+ * });
+ * ```
  */
 export interface MemoryTargetEntity {
-    /** `claude-code`. */
+    /** `claude-code`, `codex`. The compilation target it becomes is `memories/<id>`. */
     id: string;
-    /** The `harness` entity that reads it. */
+    /** The `harness` entity that reads the file. Its output is marked with it (S8, "The Merge"). */
     harness?: string;
-    /** The file name: `CLAUDE.md`, `AGENTS.md`. */
-    fileName: string;
-    /** `any-directory` also makes a `pointer-file` entity of it. Default `project-root`. */
-    readIn?: MemoryReadIn;
-    /** Where the file is written; relative to the project root. Default the project root. */
-    directory?: string;
-    /** Which memories it takes. Default: all. Sous does not report what it leaves out. */
-    filter?(memory: Memory, config: ConfigBuilder): boolean;
-    /** The file's template content. Default: one `@<path>` include line per memory, blank lines between. */
-    format?(memories: readonly Memory[], config: ConfigBuilder): string;
+    /**
+     * The file to write. May hold `${projectRoot}` and other config variables; a relative path is
+     * under the project root. Its folder is created.
+     */
+    outputPath: string;
+    /**
+     * A file whose content is placed before the memories, included as an `@` line includes a file
+     * (a `.tpl.` file is rendered, and its own includes are followed). Skipped silently when the file
+     * does not exist. A relative path is under the project root.
+     */
+    prependWith?: string;
+    /**
+     * When true and a file sous did not write already exists at `outputPath`, it is backed up under
+     * `.sous/backups/`, a warning says so, and it is overwritten, whatever
+     * `compilation.overwriteUntracked` says. Unset or false, the compiler's general rule applies.
+     */
+    backupExisting?: boolean;
 }
 
 /** Which memories go where. */
 export interface MemoriesSelection {
     /** The active recipes' memories, ordered and filtered by `recipes.memories`. */
     selected(): Memory[];
-    /** What one target gets after its `filter()`. */
+    /**
+     * The recipe memories one target's file takes through `@#memories/**\/*.md`: the selection.
+     * Throws a `NotFoundError` for a target that does not exist.
+     */
     forTarget(targetId: string): Memory[];
     /** Memories the selection excluded, with the setting that did it. */
     excluded(): Array<{ readonly memory: Memory; readonly by: string }>;
@@ -75,7 +96,7 @@ declare module "@sous-io/plugin-api" {
     }
 
     interface SousEntities {
-        /** A file a harness reads into every session. */
+        /** The one file a harness reads into every session. */
         "memory-target": MemoryTargetEntity;
     }
 

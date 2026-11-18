@@ -68,7 +68,7 @@ export interface Transcript {
  * it runs (`ctx.config.get("tools.<id>")`).
  */
 export interface HarnessEntity {
-    /** `claude`, `codex`; what `sous launch <id>` names. */
+    /** `claude-code`, `codex`; what `sous launch <id>` names. */
     id: string;
     /** What it is, for `--help` and errors. */
     description?: string;
@@ -94,7 +94,7 @@ export interface ToolSettings {
 
 /** `launch`: builds, then starts a harness. */
 export interface LaunchInput {
-    /** The harness id, then any arguments passed through to it (`sous launch claude -- -c`). */
+    /** The harness id, then any arguments passed through to it (`sous launch claude-code -- -c`). */
     tool: string[];
     /** Skips the build first. */
     noBuild?: boolean;

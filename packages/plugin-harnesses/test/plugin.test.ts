@@ -54,14 +54,14 @@ describe("the tools key and its contributor", () => {
         const provider = definePlugin({
             name: "provider",
             version: "1.0.0",
-            register: (sous) => sous.entities.add("harness", { id: "claude", launch: async () => ({ exitCode: 0, signal: null, durationMs: 0 }) }),
+            register: (sous) => sous.entities.add("harness", { id: "claude-code", launch: async () => ({ exitCode: 0, signal: null, durationMs: 0 }) }),
         });
-        const { engine } = await makeEngine(dir.path, [provider, toolsConfig({ claude: { args: ["--x"] }, codex: { command: "codex" } })]);
+        const { engine } = await makeEngine(dir.path, [provider, toolsConfig({ "claude-code": { args: ["--x"] }, codex: { command: "codex" } })]);
         const config = await engine.buildConfig();
         const records = config.entities.describe("harness");
 
-        expect(records.find((r) => r.id === "claude")?.plugin).toBe("provider");
-        expect(records.map((r) => r.id).sort()).toEqual(["claude", "codex"]);
+        expect(records.find((r) => r.id === "claude-code")?.plugin).toBe("provider");
+        expect(records.map((r) => r.id).sort()).toEqual(["claude-code", "codex"]);
     });
 
     it("adds nothing without tools", async () => {
@@ -120,6 +120,26 @@ describe("launch", () => {
 
         expect(error.message).toContain("Tool 'nope' not found");
         expect(error.details).toEqual(["Available tools: a, b"]);
+    });
+
+    /**
+     * A harness id names its tool in full, so the short name is not an alias; it gets a hint.
+     *
+     * sous launch claude   (with claude-code and codex registered)
+     * // -> Tool 'claude' not found.  Did you mean: sous launch claude-code
+     */
+    it("suggests the tool whose id starts with the name and a hyphen", async () => {
+        const dir = tmp();
+        const provider = definePlugin({
+            name: "provider",
+            version: "1.0.0",
+            register: (sous) => sous.entities.add("harness", { id: "claude-code", launch: async () => ({ exitCode: 0, signal: null, durationMs: 0 }) }),
+        });
+        const { engine } = await makeEngine(dir.path, [provider, toolsConfig({ codex: { command: "codex" } })]);
+        const error = (await engine.submit({ intent: "launch", input: { tool: ["claude"] } }).catch((e: unknown) => e)) as Error & { details: string[] };
+
+        expect(error.message).toContain("Tool 'claude' not found");
+        expect(error.details).toEqual(["Did you mean: sous launch claude-code", "Available tools: claude-code, codex"]);
     });
 
     it("reports a tool with no command", async () => {

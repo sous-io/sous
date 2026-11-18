@@ -132,6 +132,30 @@ describe("migrations.run", () => {
         expect(result.migrations[0]?.answers).toEqual([{ question: "memories.location", value: "keep", source: "config" }]);
     });
 
+    /**
+     * A follow-up question sees the answers given before it in the same migration, so it can stand
+     * down when an earlier answer makes it moot.
+     *
+     * memories.location=keep (--answer) -> memories.cleanup answered "no" from the config, never asked
+     */
+    it("should give a question the answers to the questions before it", async () => {
+        const log: string[] = [];
+        const cleanup = {
+            id: "memories.cleanup",
+            message: "Remove the duplicated line?",
+            default: "no",
+            answered: (_ctx: Context, earlier: Readonly<Record<string, string>>) => (earlier["memories.location"] === "keep" ? "no" : undefined),
+        };
+        const { submit } = await engineWith({ lock: { lockfile: emptyLock("1.0.0") }, migrations: [recording(log, "1.1.0", { questions: [whereQuestion, cleanup] })] });
+        const result = (await submit("migrations.run", { answer: ["memories.location=keep"] })).toPlain() as MigrationsRunResult;
+
+        expect(result.unanswered).toEqual([]);
+        expect(result.migrations[0]?.answers).toEqual([
+            { question: "memories.location", value: "keep", source: "answer" },
+            { question: "memories.cleanup", value: "no", source: "config" },
+        ]);
+    });
+
     /** With a terminal, the question is asked. */
     it("should ask the question when there is a terminal", async () => {
         const log: string[] = [];

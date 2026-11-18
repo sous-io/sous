@@ -2,14 +2,14 @@
 
 Teaches sous about Claude Code: where its skills and memory files go, and how to run it.
 
-It adds no commands. `sous launch claude` works because of it.
+It adds no commands. `sous launch claude-code` works because of it.
 
 ## Using it from another plugin
 
 ```ts
 import type {} from "@sous-io/plugin-claude-code/types";
 
-const harness = ctx.entities.get("harness", "claude");
+const harness = ctx.entities.get("harness", "claude-code");
 ```
 
 ## Where things are

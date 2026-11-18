@@ -99,7 +99,7 @@ export const migrationsCheck: DoctorCheckEntity = {
         const given = new Set(answersForMigrations(ctx, run.answers).map((entry) => entry.slice(0, entry.indexOf("=")).trim()));
         const waiting = run.yes || ctx.prompter.interactive
             ? []
-            : pending.flatMap((migration) => (migration.questions ?? []).filter((question) => question.answered?.(ctx) === undefined && !given.has(question.id)));
+            : pending.flatMap((migration) => (migration.questions ?? []).filter((question) => question.answered?.(ctx, {}) === undefined && !given.has(question.id)));
 
         if (waiting.length > 0) {
             return {

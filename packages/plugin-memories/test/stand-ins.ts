@@ -155,12 +155,13 @@ export const refsStandIn = definePlugin({
     },
 });
 
-/** Stands in for plugin-compiler: the `compilation` key. */
+/** Stands in for plugin-compiler: the `compilation` key and the `compilation-transform` kind. */
 export const compilerStandIn = definePlugin({
     name: "@sous-io/plugin-compiler",
     version: packageJson.version,
     register(sous) {
         sous.entities.add("config-key", { id: "compilation", schema: jsonSchema({}) });
+        sous.entities.define("compilation-transform", jsonSchema({ type: "object", required: ["id"] }));
     },
 });
 
@@ -194,11 +195,15 @@ export function recipesStandIn(recipes: () => readonly Record<string, unknown>[]
 export function makeEngine(
     recipes: readonly Record<string, unknown>[],
     extra: PluginDefinition[] = [],
+    projectRoot?: string,
 ): { engine: Engine; reporter: BufferedReporter } {
     const reporter = new BufferedReporter();
     const engine = createEngine({
         builtIns: [hostStandIn, refsStandIn, compilerStandIn, recipesStandIn(() => recipes), memoriesPlugin, ...extra],
         reporter,
+        ...(projectRoot === undefined
+            ? {}
+            : { project: { root: projectRoot, sousDir: path.join(projectRoot, ".sous"), configPath: undefined, confDir: path.join(projectRoot, ".sous", "conf.d") } }),
     });
 
     return { engine, reporter };

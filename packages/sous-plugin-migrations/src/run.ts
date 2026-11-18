@@ -94,7 +94,7 @@ async function plan(pending: readonly MigrationEntity[], input: MigrationsRunInp
         const unanswered: UnansweredQuestion[] = [];
 
         for (const question of migration.questions ?? []) {
-            const configured = question.answered?.(ctx);
+            const configured = question.answered?.(ctx, Object.fromEntries(answers.map((answer) => [answer.question, answer.value])));
 
             if (configured !== undefined) {
                 answers.push({ question: question.id, value: configured, source: "config" });

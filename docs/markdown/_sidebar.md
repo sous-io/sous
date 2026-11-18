@@ -39,6 +39,7 @@
   - [Migrations, sous doctor, upgrade and update](architecture/specifications/S11-migrations-and-doctor.md)
   - [Manifests as config](architecture/specifications/S12-manifests-as-config.md)
   - [Codex](architecture/specifications/S16-codex.md)
+  - [Claude Code](architecture/specifications/S15-claude-code.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -74,5 +75,7 @@
   - [0031: `sous upgrade`, `sous update`, and short aliases](adrs/0031-upgrade-update-and-short-aliases.md)
   - [0032: A recipe's manifest is added to the config](adrs/0032-manifests-as-config.md)
   - [0033: Open content kinds, `$file`, and a literal `${`](adrs/0033-open-content-kinds-and-file-values.md)
+  - [0036: Claude Code's memories go to `.claude/rules/SOUS-MEMORIES.md`](adrs/0036-claude-code-memories-file.md)
+  - [0037: The harness id `claude-code`, and the Claude Code content kinds](adrs/0037-claude-code-content-kinds-and-harness-id.md)
   - [0038: A boolean recipe answer is a boolean in Liquid](adrs/0038-boolean-answers.md)
   - [0039: Codex's memories go to a git-ignored `AGENTS.override.md`](adrs/0039-codex-memories.md)

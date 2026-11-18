@@ -21,7 +21,7 @@ const harnessSchema = jsonSchema<HarnessEntity>({
     type: "object",
     required: ["id"],
     properties: {
-        id: { type: "string", description: "What `sous launch <id>` names: `claude`." },
+        id: { type: "string", description: "What `sous launch <id>` names: `claude-code`, `codex`." },
         description: { type: "string" },
     },
 });
@@ -85,10 +85,10 @@ export const harnessesPlugin: PluginDefinition = definePlugin({
                 // Flags launch does not know go to the tool, after the config's own args.
                 passThrough: true,
                 examples: [
-                    "sous launch claude",
+                    "sous launch claude-code",
                     "sous launch codex --no-build",
-                    "sous launch claude --continuous",
-                    "sous launch claude -- -c",
+                    "sous launch claude-code --continuous",
+                    "sous launch claude-code -- -c",
                 ],
             },
             load: () => import("./launch.js"),

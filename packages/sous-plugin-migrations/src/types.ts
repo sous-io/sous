@@ -54,9 +54,11 @@ export interface MigrationQuestion {
     default: string;
     /**
      * The answer the project's config already gives, if any. A question answered this way is not
-     * asked: the project has already made the choice.
+     * asked: the project has already made the choice. `earlier` holds the answers to the same
+     * migration's questions listed before this one, so a follow-up question can stand down when an
+     * earlier answer makes it moot (it returns the answer that means "nothing to do").
      */
-    answered?(ctx: Context): string | undefined;
+    answered?(ctx: Context, earlier: Readonly<Record<string, string>>): string | undefined;
 }
 
 /** What a migration did, for the report. */

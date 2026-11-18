@@ -1,7 +1,7 @@
 {
   "name": "@sous-io/plugin-claude-code",
   "version": "1.0.19",
-  "description": "Everything sous knows about Claude Code: its harness, skill-target and memory-target entities.",
+  "description": "Everything sous knows about Claude Code: its harness, skill and memory targets, its content kinds, and its migrations.",
   "type": "module",
   "license": "Apache-2.0",
   "private": true,
@@ -26,10 +26,18 @@
     "@sous-io/plugin-skills": "workspace:*",
     "@sous-io/plugin-memories": "workspace:*",
     "@sous-io/plugin-harnesses": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/sous-plugin-migrations": "workspace:*",
+    "@sous-io/documents": "workspace:*",
+    "@sous-io/plugin-config-files": "workspace:*",
+    "@sous-io/plugin-confd": "workspace:*",
+    "@sous-io/plugin-build": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-plugin-doctor": "workspace:*"
   },
   "engines": {
     "node": ">=22"
