@@ -154,3 +154,41 @@ describe("the engine handle", () => {
         await expect(build({ id: "x", stage: Number.NaN, contribute() {} })).rejects.toThrow("declares a stage that is not a number");
     });
 });
+
+describe("namespaces plugins add to the sous object", () => {
+    /**
+     * `sous.extensions.add("greeting", factory)` gives every plugin registering afterwards a
+     * `sous.greeting`, made from that plugin's own `sous`.
+     *
+     * plugin-a: sous.extensions.add("greeting", (sous) => ({ from: sous.plugin.name }))
+     * plugin-b: sous.greeting.from -> "plugin-b"
+     */
+    it("should give later plugins a namespace an earlier one added, made from their own sous", async () => {
+        const seen: unknown[] = [];
+        const { engine } = makeEngine([
+            plugin("plugin-a", (sous) => {
+                sous.extensions.add("greeting" as never, ((other: { plugin: { name: string } }) => ({ from: other.plugin.name })) as never);
+            }),
+            plugin("plugin-b", (sous) => {
+                seen.push((sous as unknown as { greeting: { from: string } }).greeting.from);
+                seen.push((sous as unknown as Record<string, unknown>).nothing);
+            }),
+        ]);
+
+        await engine.buildConfig();
+
+        expect(seen).toEqual(["plugin-b", undefined]);
+        expect(engine.handle.plugins().find((info) => info.name === "plugin-a")?.registrations).toContainEqual({ kind: "extension", name: "greeting" });
+    });
+
+    /** Two plugins adding the same namespace is an error naming both. */
+    it("should refuse a namespace two plugins add", async () => {
+        const add = (name: string) =>
+            plugin(name, (sous) => {
+                sous.extensions.add("greeting" as never, (() => ({})) as never);
+            });
+        const { engine } = makeEngine([add("plugin-a"), add("plugin-b")]);
+
+        await expect(engine.buildConfig()).rejects.toThrow("Two plugins add sous.greeting: plugin-a and plugin-b.");
+    });
+});

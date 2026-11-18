@@ -118,10 +118,40 @@ export interface EntityRegistry extends EntityReader {
 }
 
 /**
- * What `register(sous)` receives: everything a plugin uses, scoped to that plugin, so every
- * registration is recorded with it.
+ * The namespaces plugins add to the `sous` object, by name (`sous.migrations`). A plugin declares
+ * its own with declaration merging and adds it with `sous.extensions.add`:
+ *
+ * ```ts
+ * declare module "@sous-io/plugin-api" {
+ *     interface SousExtensions {
+ *         migrations: { add(migration: MigrationDefinition): void };
+ *     }
+ * }
+ *
+ * sous.extensions.add("migrations", (other) => ({
+ *     add: (migration) => other.entities.add("migration", toEntity(migration)),
+ * }));
+ * ```
+ *
+ * A plugin that registers after it then calls `sous.migrations.add(...)`, and what it adds is
+ * recorded as its own registration, since the factory receives that plugin's `sous`.
  */
-export interface Sous {
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface SousExtensions {}
+
+/** Makes the value of one extension for one plugin's `sous` object. */
+export type SousExtensionFactory<T> = (sous: Sous) => T;
+
+/**
+ * What `register(sous)` receives: everything a plugin uses, scoped to that plugin, so every
+ * registration is recorded with it. Each namespace another plugin added with
+ * `sous.extensions.add` is there too, by its name.
+ */
+export interface Sous extends SousExtensions {
+    /** Adds a namespace to the `sous` object of every plugin, this one included (see {@link SousExtensions}). */
+    readonly extensions: {
+        add<K extends keyof SousExtensions & string>(name: K, factory: SousExtensionFactory<SousExtensions[K]>): void;
+    };
     /** The plugin registering. */
     readonly plugin: { readonly name: string; readonly version: string | undefined };
     readonly project: ProjectInfo | undefined;
