@@ -107,6 +107,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                         summary: { type: "string" },
                         description: { type: "string" },
                         hidden: { type: "boolean" },
+                        aliases: { type: "array", items: { type: "array", items: { type: "string" } } },
                     },
                     required: ["id", "command", "summary"],
                 }),

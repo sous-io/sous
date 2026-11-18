@@ -235,13 +235,16 @@ describe("plugin-recipe-answers through the engine", () => {
         expect(outputs.last()!.summary).toMatch(/^Mapped TEAM_API to misc\/stuff\/apiUrl in /);
     });
 
-    /** The intents should keep today's commands, aliases and arguments. */
+    /**
+     * The intents should keep today's commands and arguments. The singular `var` reaches them through
+     * the `vars` group's alias (plugin-cli), so no intent spells it.
+     */
     it("should keep today's commands", () => {
         const cli = (name: string) => engine.intentCatalog.get(name)?.definition.cli;
 
-        expect(cli("vars.list")).toMatchObject({ command: ["vars", "list"], aliases: [["var", "list"], ["vars"]], positional: ["name"] });
-        expect(cli("vars.show")).toMatchObject({ command: ["vars", "show"], aliases: [["var", "show"]], positional: ["name"] });
-        expect(cli("vars.ask")).toMatchObject({ command: ["vars", "ask"], aliases: [["var", "ask"]], positional: ["name"] });
+        expect(cli("vars.list")).toMatchObject({ command: ["vars", "list"], aliases: [["vars", "ls"], ["vars"]], positional: ["name"] });
+        expect(cli("vars.show")).toMatchObject({ command: ["vars", "show"], positional: ["name"] });
+        expect(cli("vars.ask")).toMatchObject({ command: ["vars", "ask"], positional: ["name"] });
     });
 });
 

@@ -61,12 +61,12 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         }
 
         // Help shown next to an error goes to standard error, so it is painted for that stream.
-        const help = (node: Parameters<typeof renderHelp>[0]) => renderHelp(node, { appName: engine.app.name, globals: specs, style: reporter.styleFor() });
+        const help = (node: Parameters<typeof renderHelp>[0]) => renderHelp(node, { appName: engine.app.name, globals: specs, tree, style: reporter.styleFor() });
 
         switch (line.kind) {
             case "help":
                 reporter.result(
-                    new IntentOutputs(new IntentOutput({ result: new HelpPage(line.node, { appName: engine.app.name, globals: specs }) })),
+                    new IntentOutputs(new IntentOutput({ result: new HelpPage(line.node, { appName: engine.app.name, globals: specs, tree }) })),
                 );
                 break;
             case "version":

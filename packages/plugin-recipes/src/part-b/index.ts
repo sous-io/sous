@@ -188,7 +188,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         summary: "Rebuild this project's lockfile from its subscriptions and the cached repository indexes",
         input: lockRebuildInputSchema,
         changesConfig: true,
-        cli: { aliases: [["locks", "rebuild"]], examples: ["sous lock rebuild", "sous lock rebuild --dry-run"] },
+        cli: { examples: ["sous lock rebuild", "sous lock rebuild --dry-run"] },
         handle: async (input, ctx) => rebuildLock(input, ctx),
     });
 
@@ -198,7 +198,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         summary: "Show every recipe version this project's lockfile pins",
         input: lockShowInputSchema,
         parallel: true,
-        cli: { aliases: [["locks", "show"]], examples: ["sous lock show"] },
+        cli: { examples: ["sous lock show"] },
         handle: (_input, ctx) => lockShowOutputs(showLock(ctx)),
     });
 
@@ -207,7 +207,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         requiresProject: true,
         summary: "Collect the machine-wide recipe store back down to its size cap",
         input: repoGcInputSchema,
-        cli: { aliases: [["repos", "gc"]], examples: ["sous repo gc", "sous repo gc --dry-run", "sous repo gc --max-bytes 268435456"] },
+        cli: { examples: ["sous repo gc", "sous repo gc --dry-run", "sous repo gc --max-bytes 268435456"] },
         handle: async (input, ctx) => storeGcOutputs(await collectStore(input, ctx)),
     });
 
@@ -223,7 +223,6 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         input: repoLinkInputSchema,
         changesConfig: true,
         cli: {
-            aliases: [["repos", "link"]],
             positional: ["repo", "path"],
             flags: { yes: { short: "y", aliases: ["force", "trust"] } },
             examples: [
@@ -248,7 +247,6 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         input: repoUnlinkInputSchema,
         changesConfig: true,
         cli: {
-            aliases: [["repos", "unlink"]],
             positional: ["repo"],
             flags: { yes: { short: "y", aliases: ["force", "trust"] } },
             examples: ["sous repo unlink sous-recipes", "sous repo unlink sous-recipes --update", "sous repo unlink sous-recipes --remove", "sous repo unlink sous-recipes --global"],

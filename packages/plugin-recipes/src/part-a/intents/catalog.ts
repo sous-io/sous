@@ -145,7 +145,7 @@ export function registerCatalogIntents(sous: Sous): void {
         summary: "List the namespaces in the repositories this project trusts",
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
-        cli: { aliases: [["namespaces", "list"]], ...browsingCli },
+        cli: { aliases: [["namespace", "ls"]], ...browsingCli },
         agent: { usage: "Call this before subscribing, to find which namespaces exist." },
         handle: async (input, ctx) => {
             const catalog = await loadCatalog(ctx, input);
@@ -163,7 +163,7 @@ export function registerCatalogIntents(sous: Sous): void {
         summary: "Show one namespace and every recipe in it",
         input: inputSchema<CatalogShowInput>({ ref: { type: "string", description: "The namespace, optionally as repository:namespace" }, ...browsing, acceptFirst }, ["ref"]),
         parallel: true,
-        cli: { aliases: [["namespaces", "show"]], positional: ["ref"], ...browsingCli },
+        cli: { positional: ["ref"], ...browsingCli },
         handle: async (input, ctx) => namespaceShowOutputs(ctx, input, await showNamespace(input, ctx)),
     });
 
@@ -173,7 +173,7 @@ export function registerCatalogIntents(sous: Sous): void {
         summary: "List the recipes in the repositories this project trusts",
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
-        cli: { aliases: [["recipes", "list"]], ...browsingCli },
+        cli: { aliases: [["recipe", "ls"]], ...browsingCli },
         handle: async (input, ctx) => {
             const catalog = await loadCatalog(ctx, input);
 
@@ -192,7 +192,7 @@ export function registerCatalogIntents(sous: Sous): void {
             ["ref"],
         ),
         parallel: true,
-        cli: { aliases: [["recipes", "show"]], positional: ["ref"], ...browsingCli },
+        cli: { positional: ["ref"], ...browsingCli },
         handle: async (input, ctx) => recipeShowOutputs(ctx, input, await showRecipe(input, ctx)),
     });
 }

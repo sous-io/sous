@@ -326,7 +326,6 @@ export const varsIntents: IntentDefinition[] = [
         }),
         cli: {
             command: ["vars", "ask"],
-            aliases: [["var", "ask"]],
             positional: ["name"],
             examples: [
                 "sous vars ask",
@@ -365,7 +364,7 @@ export const varsIntents: IntentDefinition[] = [
         parallel: true,
         cli: {
             command: ["vars", "list"],
-            aliases: [["var", "list"], ["vars"]],
+            aliases: [["vars", "ls"], ["vars"]],
             positional: ["name"],
             examples: ["sous vars", "sous vars apiUrl", "sous vars list", "sous vars list --file ./questions.yaml"],
         },
@@ -389,7 +388,6 @@ export const varsIntents: IntentDefinition[] = [
         parallel: true,
         cli: {
             command: ["vars", "show"],
-            aliases: [["var", "show"]],
             positional: ["name"],
             examples: ["sous vars show apiUrl", "sous vars show workflow/task-files.apiUrl", "sous vars show SOUS_VAR_API_URL"],
         },
@@ -414,7 +412,6 @@ export const varsIntents: IntentDefinition[] = [
         changesConfig: true,
         cli: {
             command: ["vars", "map"],
-            aliases: [["var", "map"]],
             positional: ["envName", "target"],
             examples: ["sous vars map TEAM_API_URL sous-recipes:misc/stuff/apiUrl", "sous vars map TEAM_API_URL --remove"],
         },

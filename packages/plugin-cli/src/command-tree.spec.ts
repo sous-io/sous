@@ -87,6 +87,53 @@ describe("CommandTree", () => {
         });
     });
 
+    describe("group aliases", () => {
+        const namespaceGroup = { id: "namespace", command: ["namespace"], summary: "Namespaces", aliases: [["namespaces"], ["ns"]] };
+        const intents = [intent("namespace.list", "b", { aliases: [["namespace", "ls"]] }), intent("namespace.show", "b")];
+
+        /**
+         * A group's alias reaches every command under it, the commands' own aliases included, with
+         * no command spelling the alias itself.
+         *
+         * sous ns list   -> namespace.list
+         * sous ns ls     -> namespace.list
+         * sous ns show   -> namespace.show
+         */
+        it("should make every command of a group answer to the group's alias, with the commands' own aliases", () => {
+            const tree = CommandTree.build(intents, [namespaceGroup]);
+
+            expect(tree.find(["ns", "list"]).node.command?.intent).toBe("namespace.list");
+            expect(tree.find(["ns", "ls"]).node.command?.intent).toBe("namespace.list");
+            expect(tree.find(["namespaces", "show"]).node.command?.intent).toBe("namespace.show");
+            expect(tree.find(["ns"]).node.canonical).toBe(false);
+        });
+
+        /**
+         * A command's help lists its own aliases, then its words with the group spelled by each
+         * of the group's aliases.
+         *
+         * aliasesOf(namespace.list) -> namespace ls, namespaces list, ns list
+         */
+        it("should list a command's own aliases and the words its group's aliases give it", () => {
+            const tree = CommandTree.build(intents, [namespaceGroup]);
+            const list = tree.find(["namespace", "list"]).node.command!;
+
+            expect(tree.aliasesOf(list)).toEqual([
+                ["namespace", "ls"],
+                ["namespaces", "list"],
+                ["ns", "list"],
+            ]);
+        });
+
+        /** groupAt names the group only at its own words, never at an alias. */
+        it("should find a group's entity at its own words only", () => {
+            const tree = CommandTree.build(intents, [namespaceGroup]);
+
+            expect(tree.groupAt(["namespace"])?.id).toBe("namespace");
+            expect(tree.groupAt(["ns"])).toBeUndefined();
+        });
+    });
+
     describe("find()", () => {
         /** find walks as far as the words go and says how many it used. */
         it("should stop at the first unknown word", () => {

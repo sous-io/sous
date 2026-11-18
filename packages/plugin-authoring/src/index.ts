@@ -43,7 +43,6 @@ export const authoringPlugin: PluginDefinition = definePlugin({
                 "pull request); --ci runs the way a merge does.",
             input: releaseInput,
             cli: {
-                aliases: [["repos", "release"]],
                 flags: { ...yesFlag, directory: { hidden: true } },
                 examples: [
                     "sous repo release",
@@ -69,7 +68,6 @@ export const authoringPlugin: PluginDefinition = definePlugin({
                 "host. Needs the host's command line tool (gh, glab) signed in.",
             input: submitInput,
             cli: {
-                aliases: [["repos", "submit"]],
                 positional: ["repo"],
                 flags: { ...yesFlag, directory: { hidden: true } },
                 examples: [
@@ -97,11 +95,7 @@ export const authoringPlugin: PluginDefinition = definePlugin({
             // It links and unlinks in a project, so it needs one.
             requiresProject: true,
             cli: {
-                aliases: [
-                    ["repos", "contribute"],
-                    ["repo", "contrib"],
-                    ["repos", "contrib"],
-                ],
+                aliases: [["repo", "contrib"]],
                 positional: ["ref"],
                 flags: yesFlag,
                 examples: [
@@ -124,7 +118,6 @@ export const authoringPlugin: PluginDefinition = definePlugin({
             summary: "Create a new sous recipe repository in a directory, then set it up for sous",
             input: initInput,
             cli: {
-                aliases: [["repos", "init"]],
                 positional: ["directory"],
                 examples: [
                     "sous repo init",

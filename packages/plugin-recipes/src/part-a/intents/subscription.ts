@@ -894,7 +894,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         ),
         changesConfig: true,
         cli: {
-            aliases: [["subscriptions", "add"], ["subscribe"]],
+            aliases: [["subscribe"]],
             positional: ["ref"],
             flags: { yes: yesFlag },
             examples: ["sous subscription add workflow/task-files", "sous subscription add workflow/task-files@^1.2.0 --yes --answer apiUrl=https://api.example.com"],
@@ -909,7 +909,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         summary: "Remove a subscription and the recipes only it held",
         input: inputSchema<SubscriptionRemoveInput>({ ref, yes: { type: "boolean", description: "Answer yes to every question" }, dryRun, noBuild }, ["ref"]),
         changesConfig: true,
-        cli: { aliases: [["subscriptions", "remove"], ["unsubscribe"]], positional: ["ref"], flags: { yes: yesFlagNoTrust } },
+        cli: { aliases: [["subscription", "rm"], ["unsubscribe"]], positional: ["ref"], flags: { yes: yesFlagNoTrust } },
         handle: async (input, ctx) => subscriptionRemoveOutputs(ctx, await removeSubscription(input, ctx)),
     });
 
@@ -919,7 +919,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         summary: "Switch a subscription back on for everyone using this project",
         input: toggleInput,
         changesConfig: true,
-        cli: { aliases: [["subscriptions", "enable"]], positional: ["ref"] },
+        cli: { positional: ["ref"] },
         handle: async (input, ctx) => subscriptionToggleOutputs(ctx, await toggleSubscription(input, ctx, true)),
     });
 
@@ -929,7 +929,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         summary: "Switch a subscription off for everyone using this project, keeping its pins",
         input: toggleInput,
         changesConfig: true,
-        cli: { aliases: [["subscriptions", "disable"]], positional: ["ref"] },
+        cli: { positional: ["ref"] },
         handle: async (input, ctx) => subscriptionToggleOutputs(ctx, await toggleSubscription(input, ctx, false)),
     });
 
@@ -939,7 +939,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         summary: "List what this project subscribes to",
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
-        cli: { aliases: [["subscriptions", "list"]], flags: { latest: latestFlag } },
+        cli: { aliases: [["subscription", "ls"]], flags: { latest: latestFlag } },
         handle: async (input, ctx) => subscriptionListOutputs(ctx, input, await listSubscriptions(input, ctx)),
     });
 

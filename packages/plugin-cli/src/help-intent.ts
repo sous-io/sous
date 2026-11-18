@@ -35,7 +35,7 @@ export const helpIntent: IntentDefinition = {
             });
         }
 
-        const page = new HelpPage(node, { appName: ctx.engine.app.name, globals: globalSpecs(ctx.entities.list("cli-global-argument")) });
+        const page = new HelpPage(node, { appName: ctx.engine.app.name, globals: globalSpecs(ctx.entities.list("cli-global-argument")), tree });
 
         return new IntentOutputs(new IntentOutput({ result: page, data: { text: page.toText() } }));
     },
