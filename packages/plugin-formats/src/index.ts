@@ -106,4 +106,11 @@ export {
     ENV_VAR_NAME_PATTERN,
 } from "./formats/common.js";
 export type { DependencyRefChecker } from "./formats/recipe-manifest.js";
+export {
+    branchValues,
+    CONTENT_KINDS,
+    isManifestExpression,
+    parseRecipeContentGroup,
+    possibleContentKinds,
+} from "./formats/recipe-manifest.js";
 export type * from "./types.js";

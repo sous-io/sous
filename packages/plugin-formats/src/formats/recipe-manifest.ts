@@ -86,23 +86,110 @@ function refListSchema(label: string, check: DependencyRefChecker) {
 // --- Contents -----------------------------------------------------------------------------------
 
 /**
- * What a content entry contributes. `skills`, `memories` and `prompts` are
- * compiled or copied into the subscribing project's agent directories; `config`
- * entries name config layer files that are merged into the subscriber's config.
+ * The content kinds sous itself registers. `skills`, `memories` and `prompts`
+ * are compiled or copied into the subscribing project's agent directories;
+ * `config` entries name config layer files that are merged into the
+ * subscriber's config.
+ *
+ * Kinds are OPEN: a plugin adds one with a `content-kind` entity, so the
+ * schema accepts any kind name, and whether anything registered it is judged
+ * once a subscriber's config is built (and, more loosely, at release).
  */
 export const CONTENT_KINDS = ["skills", "memories", "prompts", "config"] as const;
 
-/** One group of files this recipe contributes, all of the same kind. */
-export const recipeContentSchema = extensibleObject({
-  /** What the files are, which decides where they land in a subscribing project. */
-  kind: z.enum(CONTENT_KINDS),
-  /** Glob patterns, relative to the recipe folder, naming the files to contribute. */
+/**
+ * The keys that make an object a config expression (`$expr`, `$if`, `$elseif`,
+ * `$else`, each optionally qualified) or a value read from a file (`$file`).
+ * The exact list lives in plugin-expressions (specification S5); this copy only
+ * lets a manifest carry them, since the manifest is evaluated as config.
+ */
+const EXPRESSION_KEY = /^\$(?:(?:expr|if|elseif)(?::.*)?|else|file)$/s;
+
+/** Whether a value is an object holding at least one expression key: it is evaluated as config, later. */
+export function isManifestExpression(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).some((key) => EXPRESSION_KEY.test(key))
+  );
+}
+
+/** An expression object, accepted as it is wherever a manifest's `contents` takes a value. */
+const expressionSchema = z.custom<ManifestExpression>(isManifestExpression, {
+  message: "must be a value, or an expression object ($if, $expr, $file and the others)",
+});
+
+/** A value, or an expression that gives one when the subscriber's config is built. */
+function expressible<T extends z.ZodTypeAny>(schema: T) {
+  return z.union([expressionSchema, schema]);
+}
+
+/**
+ * Content written in place of a file: `{ $inline: "...", path: "skills/x/SKILL.md" }`.
+ * `path` is required, and is the path the content is treated as having.
+ */
+export const inlineContentSchema = z.strictObject({
+  $inline: z.string(),
+  path: relativePathSchema("the path of inline content"),
+});
+
+/** A kind name: lowercase words joined by hyphens (`skills`, `claude-code-plugin`). */
+const contentKindSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/, "must be a kind name: lowercase letters, digits and hyphens");
+
+/**
+ * One group of files this recipe contributes, all of the same kind, after its
+ * expressions are evaluated: what a subscriber's config holds under
+ * `recipes.contents`.
+ */
+export const recipeContentGroupSchema = extensibleObject({
+  /** What the files are; the plugin that registered the kind decides where they land. */
+  kind: contentKindSchema,
+  /** Glob patterns, relative to the recipe folder, or inline content, naming the files to contribute. */
   include: z
-    .array(relativePathSchema("an include pattern", true))
+    .array(z.union([relativePathSchema("an include pattern", true), inlineContentSchema]))
     .min(1, "must list at least one include pattern"),
   /** Glob patterns, relative to the recipe folder, removed from the include set. */
   exclude: z.array(relativePathSchema("an exclude pattern", true)).optional(),
 });
+
+/**
+ * One group as a manifest may write it: the group itself, or any of its
+ * values, may be an expression, evaluated when a subscriber's config is built.
+ */
+export const recipeContentSchema = expressible(
+  extensibleObject({
+    kind: expressible(contentKindSchema),
+    include: z
+      .array(expressible(z.union([relativePathSchema("an include pattern", true), inlineContentSchema])))
+      .min(1, "must list at least one include pattern"),
+    exclude: expressible(z.array(expressible(relativePathSchema("an exclude pattern", true)))).optional(),
+  })
+);
+
+// --- Edits --------------------------------------------------------------------------------------
+
+/**
+ * One declared edit to a document file (specification S12): `file` and one or
+ * more operation keys, or a file-less operation such as
+ * `ensureDirectoryExists`. Only the outer shape is checked here; the editor
+ * plugin checks the operations. An entry may be an expression.
+ */
+export const recipeEditSchema = expressible(
+  z.record(z.string(), z.unknown()).superRefine((entry, ctx) => {
+    if (entry.file !== undefined && (typeof entry.file !== "string" || entry.file.length === 0)) {
+      if (!isManifestExpression(entry.file)) {
+        ctx.addIssue({ code: "custom", path: ["file"], message: "must be a file path" });
+      }
+    }
+
+    if (Object.keys(entry).filter((key) => key !== "file").length === 0) {
+      ctx.addIssue({ code: "custom", message: "names no operation; an edit holds 'file' and at least one operation" });
+    }
+  })
+);
 
 // --- Recipe plugins and requirements -----------------------------------------------------------
 
@@ -201,6 +288,8 @@ export function createRecipeManifestSchema(check: DependencyRefChecker = acceptA
   plugin: recipePluginSchema.optional(),
   /** What this recipe needs that is not a recipe. */
   requires: recipeRequirementsSchema.optional(),
+  /** Declared edits to document files, appended to the subscriber's `editor.edits`. */
+  edits: z.array(recipeEditSchema).optional(),
   });
 }
 
@@ -214,11 +303,88 @@ export const recipeManifestSchema = createRecipeManifestSchema();
 /** A validated recipe manifest. */
 export type RecipeManifest = z.infer<typeof recipeManifestSchema>;
 
-/** One validated content group from a recipe manifest. */
+/** One validated content group from a recipe manifest, as written (it may hold expressions). */
 export type RecipeContent = z.infer<typeof recipeContentSchema>;
 
-/** What a content group contributes. */
-export type ContentKind = (typeof CONTENT_KINDS)[number];
+/** One content group after its expressions are evaluated. */
+export type RecipeContentGroup = z.infer<typeof recipeContentGroupSchema>;
+
+/** An object holding a config expression key, evaluated when a subscriber's config is built. */
+export type ManifestExpression = { readonly [key: `$${string}`]: unknown };
+
+/** What a content group contributes: a built-in kind, or one a plugin registers. */
+export type ContentKind = (typeof CONTENT_KINDS)[number] | (string & {});
+
+/**
+ * Checks one evaluated content group, throwing a ConfigError that names the
+ * label and the path of every bad field.
+ *
+ * @param value - The group after its expressions were evaluated.
+ * @param sourceLabel - Where it came from: `acme/widget contents[0]`.
+ */
+export function parseRecipeContentGroup(value: unknown, sourceLabel: string): RecipeContentGroup {
+  return parseFormat(recipeContentGroupSchema, value, sourceLabel, "content group");
+}
+
+/**
+ * Every kind a manifest's `contents` may give, as written: each literal kind,
+ * and each kind inside an expression's branches. Used where the manifest
+ * cannot be evaluated (a release), so every branch counts.
+ *
+ * ```ts
+ * possibleContentKinds([{ kind: "skills", include: ["a"] }, { $if: { expr: "x", then: { kind: "notes", include: ["b"] } } }]);
+ * // -> ["skills", "notes"]
+ * ```
+ */
+export function possibleContentKinds(contents: readonly unknown[]): string[] {
+  const found = new Set<string>();
+  const kindsOf = (value: unknown): void => {
+    if (typeof value === "string") {
+      found.add(value);
+    } else if (isManifestExpression(value)) {
+      branchValues(value).forEach(kindsOf);
+    }
+  };
+  const groupsOf = (value: unknown): void => {
+    if (isManifestExpression(value)) {
+      branchValues(value).forEach(groupsOf);
+    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      kindsOf((value as Record<string, unknown>).kind);
+    }
+  };
+
+  contents.forEach(groupsOf);
+
+  return [...found];
+}
+
+/**
+ * Every value an expression object could give, as written: each branch's
+ * `then` and the `$else`. A `$expr` or a `$file` gives nothing knowable here.
+ */
+export function branchValues(expression: Record<string, unknown>): unknown[] {
+  const values: unknown[] = [];
+  const branch = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(branch);
+    } else if (typeof value === "object" && value !== null) {
+      const block = value as Record<string, unknown>;
+
+      if ("then" in block) values.push(block.then);
+      if ("$then" in block) values.push(block.$then);
+    }
+  };
+
+  for (const [key, value] of Object.entries(expression)) {
+    if (/^\$(?:if|elseif)(?::.*)?$/s.test(key)) {
+      branch(value);
+    } else if (key === "$else") {
+      values.push(value);
+    }
+  }
+
+  return values;
+}
 
 /**
  * Validates a parsed recipe manifest, throwing a ConfigError that names the
