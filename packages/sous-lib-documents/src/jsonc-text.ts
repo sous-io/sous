@@ -135,7 +135,8 @@ class JsoncEditor {
 
                 const length = container.children?.length ?? 0;
                 const index = patch.index === "end" ? length : patch.index;
-                const entry = this.takeRemoved(whereOf(path), patch.value) ?? this.format(patch.value, this.childIndent(container));
+                const entry =
+                    this.takeRemoved(whereOf(path), patch.value) ?? this.format(patch.value, this.childIndent(container), this.oneLineAmong(container, index));
 
                 return this.insertElement(container, index, entry);
             }
@@ -177,7 +178,7 @@ class JsoncEditor {
 
         const container = this.node(path.slice(0, depth));
         const reused = missing.length === 1 ? this.takeRemoved(whereOf(path.slice(0, depth), missing[0] as string), nested) : undefined;
-        const entry = reused ?? `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container))}`;
+        const entry = reused ?? `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container), this.oneLineAmong(container))}`;
 
         return this.insertElement(container, container.children?.length ?? 0, entry);
     }
@@ -190,7 +191,44 @@ class JsoncEditor {
     }
 
     private replaceValue(node: Node, value: JsonValue): Edit[] {
-        return [{ offset: node.offset, length: node.length, content: this.format(value, lineIndent(this.text, node.offset)) }];
+        const container = node.parent?.type === "property" ? node.parent.parent : node.parent;
+        const oneLine = (isFilled(node) && this.onOneLine(node)) || (container !== undefined && isFilled(container) && this.onOneLine(container));
+
+        return [{ offset: node.offset, length: node.length, content: this.format(value, lineIndent(this.text, node.offset), oneLine) }];
+    }
+
+    /**
+     * Whether a value added to a container is written on one line: the container is on one line,
+     * or (a list) the item next to where it goes is an object or list on one line.
+     *
+     * ```jsonc
+     * "people": [
+     *     { "id": 1 },      // a new item here is written { "id": 2 }, like this one
+     * ]
+     * ```
+     */
+    private oneLineAmong(container: Node, index?: number): boolean {
+        if (!isFilled(container)) {
+            return false;
+        }
+
+        if (this.onOneLine(container)) {
+            return true;
+        }
+
+        if (container.type !== "array") {
+            return false;
+        }
+
+        const children = container.children!;
+        const at = index === undefined ? children.length : index;
+        const neighbour = children[at - 1] ?? children[at];
+
+        return neighbour !== undefined && isFilled(neighbour) && this.onOneLine(neighbour);
+    }
+
+    private onOneLine(node: Node): boolean {
+        return !this.text.slice(node.offset, node.offset + node.length).includes("\n");
     }
 
     private rename(path: PathSegment[], from: string, to: string): Edit[] {
@@ -342,8 +380,8 @@ class JsoncEditor {
         return lineIndent(this.text, container.offset) + this.layout.unit;
     }
 
-    private format(value: JsonValue, indent: string): string {
-        return stringify(value, indent, this.layout);
+    private format(value: JsonValue, indent: string, oneLine = false): string {
+        return oneLine ? oneLineText(value) : stringify(value, indent, this.layout);
     }
 
     private lineBreakLength(offset: number): number {
@@ -367,6 +405,30 @@ function stringify(value: JsonValue, indent: string, layout: TextLayout): string
     }
 
     return JSON.stringify(value, null, layout.unit).replace(/\n/g, layout.eol + indent);
+}
+
+/**
+ * JSON text for a value on one line, spaced the usual way.
+ *
+ * oneLineText({ id: 2, tags: ["a"] });   // '{ "id": 2, "tags": ["a"] }'
+ */
+function oneLineText(value: JsonValue): string {
+    if (Array.isArray(value)) {
+        return `[${value.map(oneLineText).join(", ")}]`;
+    }
+
+    if (isJsonObject(value)) {
+        const entries = Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}: ${oneLineText(item)}`);
+
+        return entries.length === 0 ? "{}" : `{ ${entries.join(", ")} }`;
+    }
+
+    return JSON.stringify(value);
+}
+
+/** Whether a parsed node is an object or a list with something in it. */
+function isFilled(node: Node): boolean {
+    return (node.type === "object" || node.type === "array") && (node.children?.length ?? 0) > 0;
 }
 
 function isEmpty(value: JsonValue): boolean {

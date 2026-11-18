@@ -305,6 +305,24 @@ describe("TextDocument (JSONC)", () => {
             .replace('"range": "^1.3.0"', '"range": "^1.4.0"')
             .replace('"repos": []', '"repos": ["github.com/acme/recipes"]'));
     });
+
+    /**
+     * An object or list written where its neighbours sit on one line should sit on one line too:
+     * inside a one-line container, in place of a one-line value, or in a list beside a one-line
+     * item. Anywhere else it is spread over lines as before.
+     *
+     * [{ "id": 1 }] in a multi-line list; append { id: 2 } -> { "id": 2 } on its own line
+     */
+    it("should write an object on one line among one-line neighbours", () => {
+        const text = '{\n    "people": [\n        { "id": 1, "tags": { "a": true } }\n    ],\n    "other": 1\n}\n';
+
+        expect(edit(text, "jsonc", (doc) => doc.atPath("people").append({ id: 2, tags: ["x"] }))).toBe(
+            text.replace('{ "id": 1, "tags": { "a": true } }', '{ "id": 1, "tags": { "a": true } },\n        { "id": 2, "tags": ["x"] }'),
+        );
+        expect(edit(text, "jsonc", (doc) => doc.atPath("people[0]").set({ id: 3 }))).toBe(text.replace('{ "id": 1, "tags": { "a": true } }', '{ "id": 3 }'));
+        expect(edit(text, "jsonc", (doc) => doc.atPath("people[0].more").set({ b: 2 }))).toBe(text.replace('{ "a": true } }', '{ "a": true }, "more": { "b": 2 } }'));
+        expect(edit(text, "jsonc", (doc) => doc.atPath("other").set({ b: 2 }))).toBe(text.replace('"other": 1', '"other": {\n        "b": 2\n    }'));
+    });
 });
 
 describe("TextDocument (JSONC moves)", () => {

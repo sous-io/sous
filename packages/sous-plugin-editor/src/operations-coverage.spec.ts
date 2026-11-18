@@ -171,7 +171,12 @@ const VALUE_CASES: Case[] = [
         jsonc: change(JSONC, ['"scalar": "one"', '"scalar": [\n        "one"\n    ]']),
         yaml: change(YAML, ["scalar: one", "scalar:\n  - one"]),
     },
-    { op: "unwrapList", params: { path: "single" }, yaml: change(YAML, ["single:\n  - only", "single: only"]) },
+    {
+        op: "unwrapList",
+        params: { path: "single" },
+        jsonc: change(JSONC, ['"single": ["only"]', '"single": "only"']),
+        yaml: change(YAML, ["single:\n  - only", "single: only"]),
+    },
     // Lists.
     { op: "upsertWhere", params: { path: "people", match: { id: 3 }, item: { id: 3, name: "cy" } }, ...ADDED_CY },
     { op: "ensureItemWhere", params: { path: "people", match: { id: 3 }, item: { id: 3, name: "cy" } }, ...ADDED_CY },
@@ -267,17 +272,7 @@ const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
             'deleteKeys {"keys":["mode","count"]}',
             'keepOnlyKeys {"path":"options","keys":["nested"]}',
         ].flatMap((name) => ["jsonc", "yaml"].map((kind) => [`${name} ${kind}`, "a deleted key comes back at the end of its object"])),
-        ...[
-            'upsertWhere {"path":"people","match":{"id":3},"item":{"id":3,"name":"cy"}}',
-            'ensureItemWhere {"path":"people","match":{"id":3},"item":{"id":3,"name":"cy"}}',
-            'ensureItemWhere {"path":"people","match":{"id":2},"item":{"id":2,"name":"robert"}}',
-            'replaceWhere {"path":"people","where":{"id":2},"item":{"id":2,"name":"robert"}}',
-            'mergeWhere {"path":"people","where":{"id":1},"value":{"tags":{"c":true}}}',
-            'remove {"path":"people","where":{"id":2}}',
-            'removeWhere {"path":"people","where":{"id":2}}',
-            'ensureNoItemWhere {"path":"people","where":{"id":1}}',
-            'dedupeBy {"path":"people","by":"id"}',
-        ].map((name) => [`${name} jsonc`, "JSONC: an object written among one-line objects is spread over several lines"]),
+        ['unwrapList {"path":"single"} jsonc', "JSONC: a list put back where a plain value is now is spread over several lines"],
     ],
 );
 
