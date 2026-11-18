@@ -243,21 +243,31 @@ describe("TextDocument (surgical YAML)", () => {
     });
 
     /**
-     * An edit the editor cannot make line by line, here a node an alias points at, should
-     * fall back to reprinting the whole document, and say so.
+     * An edit the editor cannot make line by line, here a key written with `?`, should fall
+     * back to reprinting the whole document, and say so.
      */
     it("should fall back to a reprint when it cannot edit surgically", () => {
-        const doc = parseDocument("base: &b\n  x: 1\nother: *b\n", "yaml");
-
-        doc.atPath("base.x").set(2);
-        expect(doc.reprinted()).toBe(true);
-        expect(doc.toString()).toBe(reprintYaml("base: &b\n  x: 1\nother: *b\n", { op: "setKey", path: "base", key: "x", value: 2 }));
-
-        const explicit = parseDocument("? a\n: 1\n", "yaml");
+        const explicit = parseDocument("? a\n: 1\nb: 2 # kept\n", "yaml");
 
         explicit.atPath("a").set(2);
         expect(explicit.reprinted()).toBe(true);
-        expect(explicit.value()).toEqual({ a: 2 });
+        expect(explicit.value()).toEqual({ a: 2, b: 2 });
+        expect(explicit.toString()).toBe(reprintYaml("? a\n: 1\nb: 2 # kept\n", { op: "setKey", path: "", key: "a", value: 2 }));
+        expect(explicit.toString()).toContain("# kept");
+    });
+
+    /**
+     * Anchors and aliases: an edit elsewhere is surgical, and an edit below an alias replaces
+     * the alias with its own value; an edit to a value an anchor shares with its aliases should
+     * be refused, since it would change every copy, where before it changed them silently.
+     */
+    it("should refuse to edit a value shared through an anchor", () => {
+        const text = "base: &b\n  x: 1\nother: *b\nplain: 1\n";
+
+        expect(edit(text, (doc) => doc.atPath("plain").set(2))).toBe(text.replace("plain: 1", "plain: 2"));
+        expect(edit(text, (doc) => doc.atPath("other.x").set(3))).toBe(text.replace("other: *b", "other:\n  x: 3"));
+        expect(() => parseDocument(text, "yaml").atPath("base.x").set(2)).toThrow("cannot be edited at base.x");
+        expect(() => parseDocument(text, "yaml").atPath("base").delete()).toThrow("anchor (&name)");
     });
 });
 

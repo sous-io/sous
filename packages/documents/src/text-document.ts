@@ -7,6 +7,7 @@ import { applyPatch } from "./apply.js";
 import { BaseDocument } from "./document.js";
 import { joinFrontmatter, splitFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 import { getAtPath } from "./json.js";
+import { formatPath, parsePath } from "./path.js";
 import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
 import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
 import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from "./types.js";
@@ -118,19 +119,52 @@ export class TextDocument extends BaseDocument {
 
     /**
      * Edits the YAML text surgically, and checks the result reads back as the expected value.
-     * When it cannot, or the check fails, reprints the whole document instead.
+     * When it cannot, or the check fails, reprints the whole document instead, and checks that.
+     *
+     * @throws Error when neither text reads back as the expected value: an edit to a value a YAML
+     *   anchor (`&name`) shares with its aliases (`*name`), which would change every copy.
      */
     private editYaml(patch: Patch, after: JsonValue, style: YamlStyle): string {
-        const surgical = editYamlText(this.text, patch, after, style, this.removed);
+        let surgical: string | undefined;
+
+        try {
+            surgical = editYamlText(this.text, patch, after, style, this.removed);
+        } catch {
+            // A path through an alias, say, which the text editor does not follow.
+            surgical = undefined;
+        }
 
         if (surgical !== undefined && readsAs(surgical, after)) {
             return surgical;
         }
 
+        let reprinted: string | undefined;
+        let cause: unknown;
+
+        try {
+            reprinted = reprintYaml(this.text, patch);
+        } catch (error) {
+            cause = error;
+        }
+
+        if (reprinted === undefined || !readsAs(reprinted, after)) {
+            throw new Error(`The YAML document cannot be edited at ${describeTarget(patch)}: the value there is shared `
+                + "through a YAML anchor (&name) and its aliases (*name), or reached through one, so it cannot be changed in one place.",
+            cause === undefined ? undefined : { cause });
+        }
+
         this.reprints++;
 
-        return reprintYaml(this.text, patch);
+        return reprinted;
     }
+}
+
+/** Where a primitive acts, as a path for a message. */
+function describeTarget(patch: Patch): string {
+    const last = "key" in patch ? patch.key : "index" in patch ? patch.index : undefined;
+    const where = last === undefined ? patch.path : formatPath([...parsePath(patch.path), ...(last === "end" ? [] : [last])]);
+
+    return where === "" ? "the root" : where;
 }
 
 /** Whether YAML text parses, as one document, to exactly this value, key order included. */
@@ -141,7 +175,12 @@ function readsAs(text: string, value: JsonValue): boolean {
         return false;
     }
 
-    return JSON.stringify(doc.toJS() ?? {}) === JSON.stringify(value);
+    try {
+        return JSON.stringify(doc.toJS() ?? {}) === JSON.stringify(value);
+    } catch {
+        // An alias whose anchor the edit removed.
+        return false;
+    }
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 import {
     Document,
+    isAlias,
     isMap,
     isScalar,
     isSeq,
@@ -295,6 +296,13 @@ class YamlTextEditor {
 
     edits(patch: Patch): TextEdit[] | undefined {
         const path = parsePath(patch.path);
+
+        // A change below an alias (`*name`) writes the alias's value out in its place, changed.
+        for (let depth = 1; depth <= path.length; depth++) {
+            if (isAlias(this.node(path.slice(0, depth)))) {
+                return this.replaceValue(path.slice(0, depth));
+            }
+        }
 
         switch (patch.op) {
             case "setKey":
