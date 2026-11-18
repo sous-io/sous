@@ -8,13 +8,15 @@
  * helper is a function declaration, and the definitions are made when `operations.ts` asks.
  */
 
-import { deepEqual, isJsonObject, isPathPrefix, parsePath, type DocNode, type JsonObject, type JsonValue } from "@sous-io/sous-lib-documents";
+import { deepEqual, formatPath, isJsonObject, isPathPrefix, parsePath, type DocNode, type JsonObject, type JsonValue, type PathSegment } from "@sous-io/sous-lib-documents";
 import { EditNotPossible, OperationParamsError, type AliasDefinition, type OperationContext, type OperationDefinition } from "./operations.js";
 
 /** The chain methods of these operations; `ValueOperations` in `chain.ts` extends this. */
 export interface RelocateOperations<R> {
     /** The value at `to` is a copy of this one. With `ifMissing: true`, only a missing `to` is filled. */
     copy(to: string, options?: { ifMissing?: boolean }): R;
+    /** This value moves to `to`. With `ifMissing: true`, it moves only when `to` is missing. */
+    move(to: string, options?: { ifMissing?: boolean }): R;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -94,7 +96,7 @@ function nodeAt(ctx: OperationContext, path: string): DocNode {
 
 /** Whether a record says the operation changed something. */
 function acted(record: JsonValue | undefined): boolean {
-    return isJsonObject(record) && record.changed === true;
+    return isJsonObject(record) && (record.changed === true || record.moved === true);
 }
 
 /** The earlier record when it changed something, so a rollback goes back to before Sous first acted. */
@@ -103,7 +105,7 @@ function keepEarlier(previous: JsonValue, next: JsonValue): JsonValue {
 }
 
 // ---------------------------------------------------------------------------------------------
-// copy
+// copy and move
 // ---------------------------------------------------------------------------------------------
 
 /**
@@ -132,6 +134,12 @@ function normalizeDestination(raw: JsonObject, operation: string): JsonObject {
 
         if (isPathPrefix(a, b) || isPathPrefix(b, a)) {
             throw new OperationParamsError(`'${operation}': 'to' (${to}) and 'path' (${from}) overlap; one holds the other.`);
+        }
+
+        // An item taken out of a list by its index is a different item on the next build, once the
+        // items after it have moved up: the move would take one item after another.
+        if (operation === "move" && typeof a.at(-1) === "number") {
+            throw new OperationParamsError(`'move' moves the value at a key, and ${from} is a list item; use 'moveItem' to move an item within its list.`);
         }
     }
 
@@ -212,6 +220,124 @@ function copyDefinition(): OperationDefinition {
     });
 }
 
+/** The parent path and the key of a path that ends in a key, or `undefined` when it ends in an index. */
+function splitKey(path: string): { parent: PathSegment[]; key: string } | undefined {
+    const segments = parsePath(path);
+    const last = segments[segments.length - 1];
+
+    return typeof last === "string" ? { parent: segments.slice(0, -1), key: last } : undefined;
+}
+
+/** Whether a move is a rename: both paths end in keys of the same object. */
+function sameObject(ctx: OperationContext, from: string, to: string): { fromKey: string; toKey: string } | undefined {
+    const a = splitKey(from);
+    const b = splitKey(to);
+
+    if (a === undefined || b === undefined || formatPath(a.parent) !== formatPath(b.parent)) {
+        return undefined;
+    }
+
+    return isJsonObject(ctx.session.document().atPath(a.parent).get()) ? { fromKey: a.key, toKey: b.key } : undefined;
+}
+
+/** Where a key sits, so a rollback can put it back there: the key just before it, or `first`. */
+function placeOf(node: DocNode): JsonObject {
+    const keys = node.parent().keys();
+    const at = keys.indexOf(node.path[node.path.length - 1] as string);
+
+    return at <= 0 ? { first: true } : { after: keys[at - 1]! };
+}
+
+/** Puts a moved value back at its key, in the place {@link placeOf} recorded. */
+function putBack(node: DocNode, record: JsonObject): void {
+    const value = record.value ?? null;
+    const last = node.path[node.path.length - 1] as string;
+    const parent = node.parent();
+    const existed = node.exists();
+
+    node.set(value);
+
+    if (existed) {
+        return;
+    }
+
+    if (record.first === true) {
+        parent.moveKeyFirst(last);
+    } else if (typeof record.after === "string") {
+        parent.moveKeyAfter(last, record.after);
+    }
+}
+
+function moveDefinition(): OperationDefinition {
+    return definition({
+        name: "move",
+        order: 20,
+        scope: "document",
+        summary:
+            "The value at `path` moves to `to`, replacing what `to` held (recorded, and restored on a rollback). Within one object it is a rename, keeping the value's text, comments and place. Nothing happens while `path` is missing. With `ifMissing: true`, it moves only when `to` is missing.",
+        params: ["to", "ifMissing"],
+        args: ["to"],
+        normalize: (raw) => normalizeDestination(raw, "move"),
+        up(ctx, params) {
+            const source = ctx.node();
+
+            if (!source.exists()) {
+                return { moved: false };
+            }
+
+            const to = params.to as string;
+            const target = nodeAt(ctx, to);
+            const existed = target.exists();
+
+            if (params.ifMissing === true && existed) {
+                return { moved: false };
+            }
+
+            const value = source.get()!;
+            const replaced: JsonObject = existed ? { existed: true, previous: target.get()! } : { existed: false };
+            const rename = sameObject(ctx, ctx.path, to);
+
+            if (rename !== undefined) {
+                // The library renames the key in place: its text, its comments and its place stay,
+                // and a key already called `toKey` is removed.
+                source.rename(rename.toKey);
+
+                return { moved: true, renamed: true, ...replaced };
+            }
+
+            checkItemTarget("move", target);
+
+            const place = placeOf(source);
+
+            source.delete();
+            target.set(value);
+
+            return { moved: true, value, ...place, ...replaced };
+        },
+        down(ctx, params, record) {
+            if (!acted(record)) return;
+
+            const entry = record as JsonObject;
+            const source = ctx.node();
+            const target = nodeAt(ctx, params.to as string);
+
+            if (entry.renamed === true) {
+                const key = splitKey(ctx.path)!.key;
+
+                if (target.exists() && !source.exists()) {
+                    target.rename(key);
+                }
+            } else {
+                putBack(source, entry);
+            }
+
+            restoreRecorded(target, entry);
+        },
+        mergeRecords: keepEarlier,
+        assertions: (params, path) => (params.ifMissing === true ? [] : [{ check: "exists", arg: false, path }]),
+    });
+}
+
 // ---------------------------------------------------------------------------------------------
 // Registering
 // ---------------------------------------------------------------------------------------------
@@ -224,5 +350,8 @@ function copyDefinition(): OperationDefinition {
  * ```
  */
 export function registerRelocateOperations(definitions: OperationDefinition[], _aliases: AliasDefinition[]): void {
-    definitions.push(copyDefinition());
+    definitions.push(
+        copyDefinition(),
+        moveDefinition(),
+    );
 }

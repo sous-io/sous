@@ -134,6 +134,7 @@ action once, when the entry is first applied.
 | 20 | `setIfEquals` | `value`, `equals` | |
 | 20 | `renameKey` | `name` | |
 | 20 | `copy` | `to`, `ifMissing` | |
+| 20 | `move` | `to`, `ifMissing` | |
 | 25 | `merge` | `value`, `ifMissing` | `ensureKeys`, `deepMerge`; with `ifMissing: true`: `mergeIfMissing` |
 | 25 | `replaceWhere`, `updateWhere`, `mergeWhere` | `where`, `item` or `value` | |
 | 30 | `upsertWhere` | `match`, `item` | `ensureItemWhere` |
@@ -221,6 +222,34 @@ settings.at("env.ACME_HOME").copy("env.ACME_HOME_FALLBACK", { ifMissing: true })
 When you know the value when you write the entry, `set` says the same thing directly. `copy` is for
 a value that is only known from the file. A `to` that names a list item (`steps[1]`) replaces that
 item; to add to a list, use `ensureIncludes`. `copy` has no automatic assertion.
+
+### Moving a value
+
+`move` takes the value at `path` to `to`. Within one object it is a rename: the key keeps its
+place, its value's text and the comment on its line. To another object, the value is written at
+`to` in the file's style, and a comment on the moved key's own line stays behind (the document
+library keeps a key's text only within its own object). A value already at `to` is replaced; with
+`ifMissing: true` it is kept, and nothing moves. Nothing happens while `path` is missing.
+
+```yaml
+- file: .claude/settings.json
+  move:
+    path: env.ACME_DIR        # the old name
+    to: acme.dir
+```
+
+```ts
+settings.at("env.ACME_DIR").move("acme.dir");
+```
+
+When the entry goes away, the value goes back to `path`, in its old place among the keys, and what
+`to` held is put back. Its automatic assertion is that `path` no longer exists, so another edit
+that brings the old key back is reported.
+
+Other ways to say it: within one object, `renameKey` does the same (`renameKey: { path:
+env.ACME_DIR, name: ACME_HOME }`), but leaves both keys alone when the new name is taken. When you
+know the value, `set` at `to` plus `delete` at `path` says the same thing. `path` must end in a key:
+an item of a list is moved within its list with `moveItem`.
 
 ## Assertions
 

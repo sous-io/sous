@@ -167,7 +167,7 @@ time.
 | --- | --- |
 | 0 | `ensureFileExists`, `ensureDirectoryExists` |
 | 10 | `ensureObject`, `ensureList`, `wrapInList`, `unwrapList` |
-| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey`, `copy` (`ifMissing`) |
+| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey`, `copy` (`ifMissing`), `move` (`ifMissing`) |
 | 25 | `merge` (`ifMissing`), `replaceWhere`, `updateWhere`, `mergeWhere` |
 | 30 | `upsertWhere` |
 | 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`) |
@@ -218,7 +218,14 @@ naming a list item replaces an item that is there (one past the end is skipped w
 It has no automatic assertion: the value is only known from the file, and a missing `path` is not
 an error.
 
-Not built yet, from the list Luke accepted: `move`, `insertBeforeWhere`,
+`move` takes the value at `path` (which must end in a key) to `to`. Within one object it is the
+library's rename, keeping the key's place, text and comments, and `down` renames it back. To
+another place it is a delete and a set; `down` sets the value back at `path` and moves the key back
+after the key that came before it, and restores what `to` held. A value already at `to` is
+replaced unless `ifMissing: true`. Nothing happens while `path` is missing. Its automatic assertion
+is that `path` does not exist (none with `ifMissing`, where the source may stay).
+
+Not built yet, from the list Luke accepted: `insertBeforeWhere`,
 `insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
 `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
@@ -464,5 +471,9 @@ entry or a created file, or when the file already exists. The agent's fix, in th
 ### 2026-11-18: The operations that relocate values
 
 From the list Luke accepted, built in `operations-relocate.ts` and registered with the others:
-`copy` (`to`, `ifMissing`). It replaces a value already at `to` by default, like `set`, and
-`ifMissing: true` keeps it, like `set`'s option. The agent's choices; not yet reviewed by Luke.
+`copy` (`to`, `ifMissing`) and `move` (`to`, `ifMissing`). Both replace a value already at `to`
+by default, like `set`, and `ifMissing: true` keeps it, like `set`'s option. A `move` within one
+object is a rename, which keeps the key's text and comments; a move to another object cannot keep a
+comment on the key's own line, since the library reuses a key's old text only in its own object.
+`move` refuses a `path` that is a list item: on the next build the index names the next item, so
+the move would repeat on a different item. The agent's choices; not yet reviewed by Luke.

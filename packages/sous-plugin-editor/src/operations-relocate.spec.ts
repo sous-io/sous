@@ -229,3 +229,133 @@ other:
         expect(read(tmp.path, "s.yaml")).toBe(ENV_YAML.replace("  KEEP: 1\n", "  KEEP: 1\n  MODE: strict\n"));
     });
 });
+
+describe("move", () => {
+    /**
+     * Within one object, a move is a rename: the key keeps its place, its value's text and the
+     * comment on its line.
+     *
+     * move: { path: env.OLD_DIR, to: env.DIR }
+     */
+    it("should rename within one object, keeping the text and comment, in JSONC and YAML", async () => {
+        const jsonc = await roundTrip("s.jsonc", ENV_JSONC, { move: { path: "env.OLD_DIR", to: "env.DIR" } });
+
+        expect(jsonc.after).toBe(ENV_JSONC.replace('"OLD_DIR"', '"DIR"'));
+        expect(jsonc.afterAgain).toBe(jsonc.after);
+        expect(jsonc.undone).toBe(ENV_JSONC);
+
+        const yaml = await roundTrip("s.yaml", ENV_YAML, { move: { path: "env.OLD_DIR", to: "env.DIR" } });
+
+        expect(yaml.after).toBe(ENV_YAML.replace("OLD_DIR:", "DIR:"));
+        expect(yaml.undone).toBe(ENV_YAML);
+    });
+
+    /**
+     * To another object, the value is written at `to` and taken away from `path`; a rollback
+     * puts it back in its old place.
+     *
+     * move: { path: env.MODE, to: other.MODE }
+     */
+    it("should move a value to another object and put it back in its place", async () => {
+        const text = '{\n    "env": {\n        "MODE": "strict",\n        "DIR": "/tmp/a"\n    },\n    "other": {}\n}\n';
+        const jsonc = await roundTrip("s.jsonc", text, { move: { path: "env.MODE", to: "other.MODE" } });
+
+        expect(jsonc.after).toBe('{\n    "env": {\n        "DIR": "/tmp/a"\n    },\n    "other": {\n        "MODE": "strict"\n    }\n}\n');
+        expect(jsonc.afterAgain).toBe(jsonc.after);
+        expect(jsonc.undone).toBe(text);
+
+        const yaml = "env:\n  A: 1\n  MODE: strict # kept\n  DIR: /tmp/a\nother:\n  KEEP: 1\n";
+        const moved = await roundTrip("s.yaml", yaml, { move: { path: "env.MODE", to: "other.MODE" } });
+
+        expect(moved.after).toBe("env:\n  A: 1\n  DIR: /tmp/a\nother:\n  KEEP: 1\n  MODE: strict\n");
+        // The comment on the moved key's line does not travel to another object (the library
+        // keeps a key's text only within its own object); every other byte comes back.
+        expect(moved.undone).toBe("env:\n  A: 1\n  MODE: strict\n  DIR: /tmp/a\nother:\n  KEEP: 1\n");
+    });
+
+    /**
+     * A value can be moved into a list item's place, replacing the item; a rollback puts both back.
+     */
+    it("should move a value over a list item and put both back", async () => {
+        const text = "tools:\n  - read\n  - write\nprimary: bash\n";
+        const { after, undone } = await roundTrip("s.yaml", text, { move: { path: "primary", to: "tools[1]" } });
+
+        expect(after).toBe("tools:\n  - read\n  - bash\n");
+        expect(undone).toBe(text);
+    });
+
+    /**
+     * A value already at `to` is replaced; with `ifMissing: true` it is kept, and nothing moves.
+     */
+    it("should replace the destination, or with ifMissing leave both alone", async () => {
+        const replaced = await roundTrip("s.yaml", ENV_YAML, { move: { path: "env.MODE", to: "other.KEEP" } });
+
+        expect(replaced.after).toBe("# Settings for the demo.\nenv:\n  OLD_DIR: /tmp/a # where it goes\nother:\n  KEEP: strict\n");
+        expect(replaced.undone).toBe(ENV_YAML);
+
+        const renamedOver = await roundTrip("s.jsonc", ENV_JSONC, { move: { path: "env.OLD_DIR", to: "env.MODE" } });
+
+        expect(renamedOver.after).toBe(ENV_JSONC.replace('"OLD_DIR": "/tmp/a",', '"MODE": "/tmp/a"').replace('\n        "MODE": "strict"', ""));
+        expect(renamedOver.undone).toBe(ENV_JSONC);
+
+        const kept = await roundTrip("s.yaml", ENV_YAML, { move: { path: "env.MODE", to: "other.KEEP", ifMissing: true } });
+
+        expect(kept.after).toBe(ENV_YAML);
+        expect(kept.applied.result.assertions.filter((assertion) => !assertion.passed)).toEqual([]);
+    });
+
+    /**
+     * Nothing at `path`: nothing moves, and the automatic assertion (`path` does not exist) holds.
+     */
+    it("should do nothing when the source is missing", async () => {
+        const { after, applied } = await roundTrip("s.jsonc", ENV_JSONC, { move: { path: "env.NOPE", to: "other.NOPE" } });
+
+        expect(after).toBe(ENV_JSONC);
+        expect(applied.result.assertions).toEqual([
+            expect.objectContaining({ path: "env.NOPE", check: "exists", automatic: true, passed: true }),
+        ]);
+    });
+
+    /**
+     * The automatic assertion catches a later edit that puts the old key back.
+     */
+    it("should warn when a later edit brings the source back", async () => {
+        write(tmp.path, "s.yaml", ENV_YAML);
+
+        const { result } = await apply(tmp.path, [
+            { entry: { file: "s.yaml", move: { path: "env.MODE", to: "other.MODE" } } },
+            { entry: { file: "s.yaml", set: { path: "env.MODE", value: "loose" } }, by: "someone-else" },
+        ]);
+
+        expect(result.assertions.find((assertion) => assertion.check === "exists" && assertion.path === "env.MODE")?.passed).toBe(false);
+    });
+
+    /**
+     * `to` is required and may not overlap `path`; an item moved within its own list is a job for
+     * `moveItem`.
+     */
+    it("should refuse a missing or overlapping destination", () => {
+        expect(() => resolveOperation("move", { path: "a" })).toThrow(/needs 'to'/);
+        expect(() => resolveOperation("move", { path: "a", to: "a.b" })).toThrow(/overlap/);
+        expect(() => resolveOperation("move", { path: "list[0]", to: "other" })).toThrow(/moveItem/);
+        expect(OPERATIONS.get("move")!.assertions({ to: "b" }, "a")).toEqual([{ check: "exists", arg: false, path: "a" }]);
+        expect(OPERATIONS.get("move")!.assertions({ to: "b", ifMissing: true }, "a")).toEqual([]);
+    });
+
+    /**
+     * The chain records the same entry: `settings.at("env.OLD_DIR").move("env.DIR")`.
+     */
+    it("should be recorded by the chain and applied", async () => {
+        write(tmp.path, "s.yaml", ENV_YAML);
+
+        const entries = recorded((config) => {
+            editor(config).file("s.yaml").at("env.OLD_DIR").move("env.DIR");
+        });
+
+        expect(entries).toEqual([{ file: "s.yaml", move: { path: "env.OLD_DIR", to: "env.DIR" } }]);
+
+        await applyRecorded(entries);
+
+        expect(read(tmp.path, "s.yaml")).toBe(ENV_YAML.replace("OLD_DIR:", "DIR:"));
+    });
+});
