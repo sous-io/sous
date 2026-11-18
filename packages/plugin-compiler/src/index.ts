@@ -135,3 +135,5 @@ export { describeNamespaceProblem, IncludeService, planInclude, resolveIncludeFi
 export { INCLUDE_LINE_PATTERN, looksLikeIncludeLine, resolveOutputPath, splitAliasKey, splitIncludeQuery, templateTwin } from "./paths.js";
 export { hashContent, isProtectedPath } from "./state.js";
 export type * from "./types.js";
+export { Backups, BackupClock, backupRelativePath, backupStamp } from "./backups.js";
+export { createTokenCounter, type TokenCounter } from "./tokens.js";
