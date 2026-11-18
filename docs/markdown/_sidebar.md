@@ -15,6 +15,7 @@
   - [Contributing a change](repositories-contributing.md)
   - [Authoring a repository](repositories-authoring.md)
   - [Recipe variables](repositories-variables.md)
+  - [Handlers](handlers.md)
   - [Providers](repositories-providers.md)
   - [File formats](repositories-file-formats.md)
   - [Troubleshooting](repositories-troubleshooting.md)
@@ -30,6 +31,7 @@
   - [Which plugin does what](architecture/specifications/S6-concerns-and-owners.md)
   - [Everything sous can do](architecture/specifications/S7-capabilities.md)
   - [One config build per harness](architecture/specifications/S8-per-harness-config-builds.md)
+  - [Handlers](architecture/specifications/S13-handlers.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -56,3 +58,4 @@
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
   - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)
   - [0024: One config build per harness](adrs/0024-one-config-build-per-harness.md)
+  - [0034: Handlers](adrs/0034-handlers.md)

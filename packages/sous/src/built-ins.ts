@@ -14,6 +14,7 @@ import { recipesPlugin } from "@sous-io/plugin-recipes";
 import { recipeAnswersPlugin } from "@sous-io/plugin-recipe-answers";
 import { skillsPlugin } from "@sous-io/plugin-skills";
 import { memoriesPlugin } from "@sous-io/plugin-memories";
+import { handlersPlugin } from "@sous-io/sous-plugin-handlers";
 import { buildPlugin } from "@sous-io/plugin-build";
 import { harnessesPlugin } from "@sous-io/plugin-harnesses";
 import { authoringPlugin } from "@sous-io/plugin-authoring";
@@ -75,6 +76,7 @@ export const BUILT_IN_PLUGINS: readonly PluginDefinition[] = [
     recipeAnswersPlugin,
     skillsPlugin,
     memoriesPlugin,
+    handlersPlugin,
     buildPlugin,
     harnessesPlugin,
     authoringPlugin,

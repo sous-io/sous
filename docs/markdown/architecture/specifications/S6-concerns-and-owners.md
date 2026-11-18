@@ -163,6 +163,7 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | `plugin-build` | the `build`, `prune` and `clear` intents, preparing for a build, watch mode, the PID file, the runtime context file |
 | `plugin-skills` | skills: where they come from, the `skill-target` entity, the compilation targets for them |
 | `plugin-memories` | memories: selecting them, the `memory-target` entity, the compilation targets for them, the `#memories` name |
+| `sous-plugin-handlers` | handlers: the `handler` entity, `recipes.handlers`, the helpers a handler receives, `handlers.system`, the intents that run each purpose, when `migrate`, `uninstall` and `check` on subscribing run (S13) |
 | `plugin-harnesses` | the `harness` entity, launching a harness, headless runs, the `tools` settings |
 | `plugin-authoring` | releasing, submitting and contributing to recipe repositories, scaffolding one |
 | `plugin-init` | setting a project up for sous (`sous init`): importing its existing agent files, scaffolding its `.sous/` |
@@ -230,6 +231,7 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
 | `plugin-compiler` | `plugin-liquid`, `plugin-refs`, `plugin-variables`, `plugin-host` |
 | `plugin-skills` | `plugin-compiler`, `plugin-recipes` |
 | `plugin-memories` | `plugin-compiler`, `plugin-recipes`, `plugin-refs` |
+| `sous-plugin-handlers` | `plugin-host`, `plugin-recipes` |
 | `plugin-build` | `plugin-compiler`, `plugin-recipes`, `plugin-recipe-answers`, `plugin-git` |
 | `plugin-harnesses` | `plugin-build`, `plugin-host` |
 | `plugin-authoring` | `plugin-recipes`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git`, `plugin-init`, `plugin-config-files` |
@@ -983,6 +985,13 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-18: Handlers
+
+`sous-plugin-handlers` is a new built-in plugin, owning handlers (S13): functions a recipe or plugin
+provides for a purpose. It sits above `plugin-host` and `plugin-recipes`, and loads after
+`plugin-memories`, before `plugin-build`. Approved by Luke with the handlers design (2026-11-17 and
+2026-11-18).
 
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 

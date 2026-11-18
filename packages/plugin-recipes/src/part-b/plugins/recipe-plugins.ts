@@ -40,8 +40,11 @@ export function pluginBundleOf(recipe: ActiveRecipeEntity): { file: string; type
     return { file, ...(types !== undefined && fs.existsSync(types) ? { types } : {}) };
 }
 
-/** A path inside a recipe, after links are followed, or `undefined` when it leaves the recipe. */
-function insideRecipe(dir: string, relative: string): string | undefined {
+/**
+ * A path inside a recipe, after links are followed, or `undefined` when it leaves the recipe.
+ * Also used for the files a recipe's `handlers` name (sous-plugin-handlers).
+ */
+export function insideRecipe(dir: string, relative: string): string | undefined {
     if (path.isAbsolute(relative)) {
         return undefined;
     }

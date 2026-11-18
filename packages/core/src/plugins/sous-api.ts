@@ -123,6 +123,13 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
         intents,
         services,
         entities,
+        handlers: {
+            // A handler is a `handler` entity; sous-plugin-handlers defines the kind and runs them.
+            add(purpose, definition) {
+                host.addEntity("handler", { ...definition, purpose }, record);
+                note("handler", `${purpose}: ${definition.id}`);
+            },
+        },
         plugins: {
             async add(source) {
                 await host.addPlugin(source, record);
