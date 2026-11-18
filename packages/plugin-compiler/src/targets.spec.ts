@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CompilationTarget, CompileProblem } from "./types.js";
-import { resolveOutputs, yieldToConfigTargets, type CompileUnit } from "./targets.js";
+import type { CompilationFile, CompilationSettings, CompilationTarget, CompileProblem } from "./types.js";
+import { unitsOf, yieldToConfigTargets, type CompileUnit } from "./targets.js";
 
 /** A unit writing the given files, with the given origin. */
 function unit(name: string, destinations: string[], origin?: CompileUnit["origin"]): CompileUnit {
@@ -63,43 +63,56 @@ describe("yieldToConfigTargets", () => {
     });
 });
 
-describe("resolveOutputs", () => {
-    const env = { resolver: { scope: () => ({}) } } as unknown as Parameters<typeof resolveOutputs>[3];
-    /** Spells `${claudeSkillsDir}` the way the project's config would, so two spellings reach one path. */
-    const toPath = (value: string) => value.replace("${claudeSkillsDir}", "/project/.claude/skills");
+describe("unitsOf", () => {
+    const env = { resolver: { scope: (request: { extra?: Record<string, string> }) => ({ base: "1", ...(request.extra ?? {}) }) }, projectRoot: "/project" };
     const target = (outputs: CompilationTarget["outputs"]): CompilationTarget => ({ id: "skills", entryPoint: "/project/a.md", outputs }) as CompilationTarget;
+    /** Two outputs of one source that resolved to one file (written `/project/.claude/skills` and `${claudeSkillsDir}`). */
+    const settings = (outputs: CompilationTarget["outputs"], extra: Partial<CompilationFile> = {}): CompilationSettings => ({
+        includeSourceComments: false,
+        overwriteUntracked: true,
+        targets: [target(outputs)],
+        files: [0, 1].map((output) => ({ target: "skills", targetIndex: 0, source: "/project/a.md", output, destination: "/project/.claude/skills/a.md", ...extra })),
+        listing: { targets: 1, problems: [] },
+    });
 
-    it("keeps the first of two outputs that resolve to the same file", () => {
-        const problems: CompileProblem[] = [];
-        const outputs = resolveOutputs(
-            target([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}" }]),
-            0,
-            { source: "/project/a.md", globBase: "/project" },
-            env,
-            undefined,
-            toPath,
-            problems,
-        );
+    /** One unit per source; of two outputs that write the same file, the first is kept. */
+    it("should keep the first of two outputs that write the same file", () => {
+        const { units, problems } = unitsOf(settings([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}" }]), env);
 
-        expect(outputs.map((output) => [output.index, output.destination])).toEqual([[0, "/project/.claude/skills/a.md"]]);
+        expect(units).toHaveLength(1);
+        expect(units[0]!.outputs.map((output) => [output.index, output.destination])).toEqual([[0, "/project/.claude/skills/a.md"]]);
         expect(problems).toEqual([]);
     });
 
-    it("warns when the dropped output has different transforms", () => {
-        const problems: CompileProblem[] = [];
-        const outputs = resolveOutputs(
-            target([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}", transforms: ["strip"] }]),
-            0,
-            { source: "/project/a.md", globBase: "/project" },
-            env,
-            undefined,
-            toPath,
-            problems,
-        );
+    /** A dropped output with different transforms is reported, never lost silently. */
+    it("should warn when the dropped output has different transforms", () => {
+        const { units, problems } = unitsOf(settings([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}", transforms: ["strip"] }]), env);
 
-        expect(outputs).toHaveLength(1);
+        expect(units[0]!.outputs).toHaveLength(1);
         expect(problems).toEqual([
             expect.objectContaining({ level: "warning", target: "skills", file: "/project/.claude/skills/a.md", message: expect.stringContaining("Outputs 0 and 1") }),
+        ]);
+    });
+
+    /** An entry's `_vars` (from `compilation.varOverrides`) are laid over the output's scope, so they win. */
+    it("should lay an entry's _vars over the output's variables", () => {
+        const { units } = unitsOf(settings([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "/x" }], { _vars: { base: "2", tool: "claude" } }), env);
+
+        expect(units[0]!.outputs[0]!.vars).toEqual({ base: "2", tool: "claude" });
+    });
+
+    /** The listing's problems are returned; a target added after the listing is an error, not silence. */
+    it("should return the listing's problems and report a target the listing never saw", () => {
+        const late: CompilationSettings = {
+            ...settings([{ destinationDir: "/x" }]),
+            targets: [target([{ destinationDir: "/x" }]), { id: "late", entryPoint: "/project/b.md", outputs: [] }],
+            listing: { targets: 1, problems: [{ level: "warning", message: "Glob pattern matched no files", target: "skills", targetIndex: 0 }] },
+        };
+        const { problems } = unitsOf(late, env);
+
+        expect(problems).toEqual([
+            { level: "warning", message: "Glob pattern matched no files", target: "skills" },
+            expect.objectContaining({ level: "error", target: "late", message: expect.stringContaining("were never listed") }),
         ]);
     });
 });

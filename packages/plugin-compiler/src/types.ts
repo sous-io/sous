@@ -73,10 +73,63 @@ export interface CompilationTarget {
     outputs: CompilationOutput[];
 }
 
+/**
+ * One file a build writes: one output of one source of one target. Sous lists them while it builds
+ * the config (the `compiler.files` contributor matches each `entryGlob` against the disk then), so
+ * the config says which files a build writes, and the compiler reads these instead of matching
+ * globs itself.
+ *
+ * ```jsonc
+ * // sous config get compilation.files
+ * [{ "target": "projectSkills", "targetIndex": 0, "source": "/p/.sous/skills/review/SKILL.tpl.md",
+ *    "output": 0, "destination": "/p/.claude/skills/review/SKILL.md" }]
+ * ```
+ */
+export interface CompilationFile {
+    /** The target's name: its id, or its index as text. */
+    target: string;
+    /** The target's index in `compilation.targets`. */
+    targetIndex: number;
+    /** The source file, absolute; for a `content` target, a path named after its id under the project root. */
+    source: string;
+    /** The output's index in the target's `outputs`. */
+    output: number;
+    /** The file it writes, absolute, from before any transform. */
+    destination: string;
+    /** The output's harness, when it has one. */
+    harness?: string;
+    /**
+     * Variables `compilation.varOverrides` sets for this file (the `compiler.var-overrides`
+     * contributor). They win over the output's own `_vars`.
+     */
+    _vars?: Record<string, string>;
+}
+
+/** A problem found while listing the files, reported when a build runs. */
+export interface CompilationFileProblem extends CompileProblem {
+    /** The target's index, when the problem belongs to one. */
+    readonly targetIndex?: number;
+}
+
+/** What listing the files of the targets found, beside the files themselves. */
+export interface CompilationListing {
+    /**
+     * How many targets were listed. A target at a later index was added after the listing (by a
+     * contributor in a later config stage), so it has no files, and a build says so.
+     */
+    targets: number;
+    /** What went wrong: a variable no one sets, a glob that matched nothing. */
+    problems: CompilationFileProblem[];
+}
+
 /** The `compilation` config key, with its defaults filled in. */
 export interface CompilationSettings {
     /** Variables of the compilation scope. */
     _vars?: Record<string, string>;
+    /** Every file a build writes, listed while the config is built. Set by Sous. */
+    files?: CompilationFile[];
+    /** What listing the files found. Set by Sous. */
+    listing?: CompilationListing;
     /** Default `false`. */
     includeSourceComments: boolean;
     /** Overwrites files the compiler did not write, taking ownership. Default `true`; `false` opts out. */

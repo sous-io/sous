@@ -102,10 +102,43 @@ export const targetSchema = z
         }
     });
 
+/** One entry of `compilation.files`, which the `compiler.files` contributor sets. */
+const fileSchema = z
+    .object({
+        target: z.string(),
+        targetIndex: z.number().int().min(0),
+        source: z.string(),
+        output: z.number().int().min(0),
+        destination: z.string(),
+        harness: z.string().optional(),
+        _vars: varsSchema.optional(),
+    })
+    .strict();
+
+const listingSchema = z
+    .object({
+        targets: z.number().int().min(0),
+        problems: z.array(
+            z
+                .object({
+                    level: z.enum(["error", "warning"]),
+                    message: z.string(),
+                    target: z.string().optional(),
+                    file: z.string().optional(),
+                    line: z.number().optional(),
+                    targetIndex: z.number().int().min(0).optional(),
+                })
+                .strict(),
+        ),
+    })
+    .strict();
+
 /** The `compilation` key. */
 export const compilationSchema = z
     .object({
         _vars: varsSchema.optional(),
+        files: z.array(fileSchema).optional().describe("Every file a build writes, listed while the config is built. Set by sous; anything written here is replaced."),
+        listing: listingSchema.optional().describe("What listing compilation.files found. Set by sous."),
         includeSourceComments: z.boolean().default(false),
         overwriteUntracked: z
             .boolean()

@@ -1,16 +1,15 @@
 /**
- * Turning the config's compilation targets into units to compile: one per source file (an
- * `entryGlob` target gives one per file it matches), each with its outputs resolved, `${var}`
- * substituted. Reads the disk only to expand globs.
+ * Turning the files the config lists (`compilation.files`, one entry per output of each source,
+ * listed while the config was built) into units to compile: one per source, each with its outputs
+ * and the variables each renders with. Reads nothing from disk: the `compiler.files` contributor
+ * already matched every glob.
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import type { VarScope, VariablesResolver } from "@sous-io/plugin-variables/types";
-import { resolveAliasPrefix, type AliasMap } from "./aliases.js";
-import { expandPattern, type Globs } from "./globs.js";
-import { resolveOutputPath } from "./paths.js";
-import type { CompilationOrigin, CompilationSettings, CompilationTarget, CompileProblem } from "./types.js";
+import { targetName } from "./files.js";
+import type { CompilationFile, CompilationOrigin, CompilationSettings, CompilationTarget, CompileProblem } from "./types.js";
+
+export { targetName };
 
 /** One output of a unit, resolved. */
 export interface UnitOutput {
@@ -38,6 +37,7 @@ export interface CompileUnit {
     readonly label: string;
     /** The template text of a `content` target. */
     readonly content?: string;
+    /** Where a `content` target's relative includes resolve: the project root. */
     readonly globBase?: string;
     readonly includeSourceComments: boolean;
     /** The target's variables: what `${var}` in its include paths is substituted from. */
@@ -47,50 +47,149 @@ export interface CompileUnit {
     readonly outputs: UnitOutput[];
 }
 
-/** What expanding targets needs. */
-export interface ExpandEnvironment {
-    readonly resolver: Pick<VariablesResolver, "scope" | "substituteStrict" | "normalizePath">;
-    readonly aliases: AliasMap;
-    readonly globs: Globs;
-    /** Relative paths resolve against it. */
+/** What making units needs. */
+export interface UnitEnvironment {
+    readonly resolver: Pick<VariablesResolver, "scope">;
+    /** Where a `content` target's includes resolve. */
     readonly projectRoot: string;
 }
 
-/** The units of every target, and what went wrong expanding them. */
-export interface ExpandResult {
+/** The units of the targets, and the problems listing their files found. */
+export interface UnitsResult {
     readonly units: CompileUnit[];
     readonly problems: CompileProblem[];
 }
 
-/** A target's name: its id, or its index. */
-export function targetName(target: Pick<CompilationTarget, "id">, index: number): string {
-    return target.id ?? String(index);
-}
-
 /**
- * Expands targets into units.
+ * The units of the targets, from the files the config lists. The problems the listing found are
+ * returned with them, and so is a target added after the listing, which has no files.
  *
- * @param only - The indexes of the targets to expand; default every one.
+ * @param only - The indexes of the targets to compile; default every one.
  */
-export function expandTargets(settings: CompilationSettings, env: ExpandEnvironment, only?: ReadonlySet<number>): ExpandResult {
-    const units: CompileUnit[] = [];
+export function unitsOf(settings: CompilationSettings, env: UnitEnvironment, only?: ReadonlySet<number>): UnitsResult {
     const problems: CompileProblem[] = [];
+    const listing = settings.listing;
+    const wanted = (index: number | undefined) => index === undefined || only === undefined || only.has(index);
+
+    for (const { targetIndex, ...problem } of listing?.problems ?? []) {
+        if (wanted(targetIndex)) {
+            problems.push(problem);
+        }
+    }
 
     settings.targets.forEach((target, index) => {
-        if (only !== undefined && !only.has(index)) {
-            return;
-        }
-
-        const name = targetName(target, index);
-
-        try {
-            units.push(...expandTarget(settings, target, index, env, problems));
-        } catch (error) {
-            problems.push({ level: "error", message: error instanceof Error ? error.message : String(error), target: name });
+        if (wanted(index) && index >= (listing?.targets ?? 0)) {
+            problems.push({
+                level: "error",
+                message: `The files of target ${targetName(target, index)} were never listed: it was added after the compiler listed every target's files (by a contributor in a later config stage), so it is not compiled.`,
+                target: targetName(target, index),
+            });
         }
     });
 
+    const groups = new Map<string, CompilationFile[]>();
+
+    for (const file of settings.files ?? []) {
+        if (!wanted(file.targetIndex) || settings.targets[file.targetIndex] === undefined) {
+            continue;
+        }
+
+        const key = `${file.targetIndex}\u0000${file.source}`;
+        const group = groups.get(key);
+
+        if (group === undefined) {
+            groups.set(key, [file]);
+        } else {
+            group.push(file);
+        }
+    }
+
+    const units: CompileUnit[] = [];
+    const failed = new Set<number>();
+
+    for (const files of groups.values()) {
+        const index = files[0]!.targetIndex;
+
+        if (failed.has(index)) {
+            continue;
+        }
+
+        const target = settings.targets[index]!;
+
+        try {
+            units.push(unitOf(settings, target, index, files, env, problems));
+        } catch (error) {
+            // A variable that cannot be resolved (an unset `_env` value) fails the whole target, once.
+            failed.add(index);
+            problems.push({ level: "error", message: error instanceof Error ? error.message : String(error), target: targetName(target, index) });
+        }
+    }
+
     return { units: yieldToConfigTargets(units, problems), problems };
+}
+
+/** One source's unit: its outputs, in their order, each with the variables it renders with. */
+function unitOf(
+    settings: CompilationSettings,
+    target: CompilationTarget,
+    index: number,
+    files: readonly CompilationFile[],
+    env: UnitEnvironment,
+    problems: CompileProblem[],
+): CompileUnit {
+    const name = targetName(target, index);
+    const scopeKey = target.origin?.recipe;
+    const keyed = scopeKey === undefined ? {} : { scopeKey };
+    const source = files[0]!.source;
+    const outputs: UnitOutput[] = [];
+
+    for (const file of files) {
+        const output = target.outputs[file.output];
+
+        if (output === undefined) {
+            continue;
+        }
+
+        const transforms = output.transforms ?? [];
+        const kept = outputs.find((existing) => existing.destination === file.destination);
+
+        // When several outputs write the same file, the first one is kept; a dropped one that has
+        // different transforms is reported, so it is never lost silently.
+        if (kept !== undefined) {
+            if (JSON.stringify(kept.transforms) !== JSON.stringify(transforms)) {
+                problems.push({
+                    level: "warning",
+                    message: `Outputs ${kept.index} and ${file.output} of target ${name} both write ${file.destination}, with different transforms. Only output ${kept.index} is used.`,
+                    target: name,
+                    file: file.destination,
+                });
+            }
+
+            continue;
+        }
+
+        // A `compilation.varOverrides` rule's variables are laid over the output's own, so they win.
+        const vars = env.resolver.scope({ level: "output", target: index, output: file.output, ...keyed, ...(file._vars === undefined ? {} : { extra: file._vars }) });
+
+        outputs.push({ index: file.output, destination: file.destination, vars, transforms, ...(file.harness === undefined ? {} : { harness: file.harness }) });
+    }
+
+    const base = {
+        targetIndex: index,
+        targetName: name,
+        includeSourceComments: target.includeSourceComments ?? settings.includeSourceComments,
+        scope: env.resolver.scope({ level: "target", target: index, ...keyed }),
+        transforms: target.transforms ?? [],
+        ...(target.origin === undefined ? {} : { origin: target.origin }),
+        source,
+        outputs,
+    };
+
+    if (target.content !== undefined) {
+        return { ...base, label: target.id ?? name, content: target.content, globBase: env.projectRoot };
+    }
+
+    return { ...base, label: source };
 }
 
 /**
@@ -133,135 +232,4 @@ export function yieldToConfigTargets(units: readonly CompileUnit[], problems: Co
 
         return outputs.length === 0 ? [] : [{ ...unit, outputs }];
     });
-}
-
-function expandTarget(
-    settings: CompilationSettings,
-    target: CompilationTarget,
-    index: number,
-    env: ExpandEnvironment,
-    problems: CompileProblem[],
-): CompileUnit[] {
-    const where = `compilation.targets[${index}]`;
-    const name = targetName(target, index);
-    const scopeKey = target.origin?.recipe;
-    const scope = env.resolver.scope({ level: "target", target: index, ...(scopeKey === undefined ? {} : { scopeKey }) });
-    const toPath = (value: string, context: string, inScope: VarScope = scope) =>
-        path.resolve(env.projectRoot, env.resolver.normalizePath(env.resolver.substituteStrict(value, inScope, context)));
-    const sources = [target.entryPoint, target.entryGlob, target.content].filter((source) => source !== undefined).length;
-
-    if (sources !== 1) {
-        throw new Error(`${where}: a target must have exactly one of 'entryPoint', 'entryGlob' or 'content'.`);
-    }
-
-    if (target.content !== undefined && target.id === undefined) {
-        throw new Error(`${where}: a target whose source is 'content' needs an 'id', which names it in errors.`);
-    }
-
-    const base = {
-        targetIndex: index,
-        targetName: name,
-        includeSourceComments: target.includeSourceComments ?? settings.includeSourceComments,
-        scope,
-        transforms: target.transforms ?? [],
-        ...(target.origin === undefined ? {} : { origin: target.origin }),
-    };
-    const outputsFor = (unit: { source: string; globBase?: string }) => resolveOutputs(target, index, unit, env, scopeKey, toPath, problems);
-
-    if (target.content !== undefined) {
-        const source = path.join(env.projectRoot, target.id!);
-        const unit = { source, globBase: env.projectRoot };
-
-        return [{ ...base, source, label: target.id!, content: target.content, globBase: env.projectRoot, outputs: outputsFor(unit) }];
-    }
-
-    if (target.entryPoint !== undefined) {
-        const source = toPath(target.entryPoint, `${where}.entryPoint`);
-        const globBase = target.globBase === undefined ? undefined : toPath(target.globBase, `${where}.globBase`);
-        const unit = { source, ...(globBase === undefined ? {} : { globBase }) };
-
-        return [{ ...base, source, label: source, ...(globBase === undefined ? {} : { globBase }), outputs: outputsFor(unit) }];
-    }
-
-    // A leading alias (`#project/skills/**`) gives one pattern per alias base; the first base
-    // that matches any file wins, as the first existing candidate of an include does.
-    const rawPattern = env.resolver.substituteStrict(target.entryGlob!, scope, `${where}.entryGlob`);
-    const candidates = resolveAliasPrefix(env.resolver.normalizePath(rawPattern), env.aliases).map((candidate) =>
-        path.resolve(env.projectRoot, candidate),
-    );
-    let pattern = candidates[0]!;
-    let files: string[] = [];
-
-    for (const candidate of candidates) {
-        const matches = expandPattern(env.globs, candidate, { dot: false });
-
-        if (matches.length > 0) {
-            pattern = candidate;
-            files = matches;
-            break;
-        }
-    }
-
-    const globBase = target.globBase === undefined ? path.resolve(env.globs.staticBase(pattern.split(path.sep).join("/"))) : toPath(target.globBase, `${where}.globBase`);
-
-    // A target whose folder does not exist yet (the project-skills target `sous init` writes,
-    // before the first skill) has nothing to compile, which is not a mistake worth a warning on
-    // every build. A folder that exists but matches nothing still gets one.
-    if (files.length === 0 && fs.existsSync(globBase)) {
-        problems.push({ level: "warning", message: `Glob pattern matched no files:\n${candidates.join("\n")}`, target: name });
-    }
-
-    return files.map((source) => ({ ...base, source, label: source, globBase, outputs: outputsFor({ source, globBase }) }));
-}
-
-/**
- * A target's outputs for one source, destinations substituted. When several outputs
- * resolve to the same file, the first one is kept; a dropped one that has different transforms is
- * reported as a warning in `problems`, so it is never lost silently.
- */
-export function resolveOutputs(
-    target: CompilationTarget,
-    targetIndex: number,
-    unit: { source: string; globBase?: string },
-    env: ExpandEnvironment,
-    scopeKey: string | undefined,
-    toPath: (value: string, context: string, scope?: VarScope) => string,
-    problems: CompileProblem[] = [],
-): UnitOutput[] {
-    const outputs: UnitOutput[] = [];
-
-    target.outputs.forEach((output, index) => {
-        const vars = env.resolver.scope({ level: "output", target: targetIndex, output: index, ...(scopeKey === undefined ? {} : { scopeKey }) });
-        const where = `compilation.targets[${targetIndex}].outputs[${index}]`;
-
-        const resolved = {
-            ...(output.destinationFile === undefined ? {} : { destinationFile: toPath(output.destinationFile, `${where}.destinationFile`, vars) }),
-            ...(output.destinationDir === undefined ? {} : { destinationDir: toPath(output.destinationDir, `${where}.destinationDir`, vars) }),
-        };
-        const destination = resolveOutputPath(unit, resolved);
-
-        if (destination === undefined) {
-            return;
-        }
-
-        const transforms = output.transforms ?? [];
-        const kept = outputs.find((existing) => existing.destination === destination);
-
-        if (kept === undefined) {
-            outputs.push({ index, destination, vars, transforms, ...(output.harness === undefined ? {} : { harness: output.harness }) });
-
-            return;
-        }
-
-        if (JSON.stringify(kept.transforms) !== JSON.stringify(transforms)) {
-            problems.push({
-                level: "warning",
-                message: `Outputs ${kept.index} and ${index} of target ${targetName(target, targetIndex)} both write ${destination}, with different transforms. Only output ${kept.index} is used.`,
-                target: targetName(target, targetIndex),
-                file: destination,
-            });
-        }
-    });
-
-    return outputs;
 }
