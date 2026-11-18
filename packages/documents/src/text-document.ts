@@ -1,13 +1,13 @@
 /**
- * Documents edited as text: JSON, JSONC and YAML files, changed surgically so comments, key order
- * and formatting are kept.
+ * Documents edited as text: JSON, JSONC and YAML files, changed surgically so every line an edit
+ * does not touch stays as it was.
  */
-import type { Document } from "yaml";
+import { parseDocument as parseYamlModel } from "yaml";
 import { applyPatch } from "./apply.js";
 import { BaseDocument } from "./document.js";
 import { getAtPath } from "./json.js";
 import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
-import { editYaml, parseYamlText, yamlValue } from "./yaml-text.js";
+import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
 import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from "./types.js";
 
 /**
@@ -24,24 +24,28 @@ import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from
 export class TextDocument extends BaseDocument {
     private current: JsonValue;
     private text: string;
-    private readonly yaml: Document | undefined;
+    private readonly original: string;
     private readonly layout: TextLayout;
-    /** Whether any YAML edit was made; until one is, the original text is given back byte for byte. */
-    private yamlEdited = false;
-    /** The text of properties and items JSON edits removed, reused when the same value is put back. */
+    private readonly yamlStyle: YamlStyle | undefined;
+    /** The text of keys and items YAML edits removed, reused when the same value is put back. */
+    private readonly removed: RemovedText[] = [];
     private readonly removedJsonc: RemovedJsoncText[] = [];
+    private edited = false;
+    private reprints = 0;
 
     constructor(text: string, readonly format: DocumentFormat) {
         super();
+        this.original = text;
+
         this.text = text;
         this.layout = detectLayout(text);
 
         if (format === "yaml") {
-            this.yaml = parseYamlText(text);
-            this.current = yamlValue(this.yaml);
+            this.current = yamlValue(parseYamlText(text));
+            this.yamlStyle = detectYamlStyle(text);
         } else {
-            this.yaml = undefined;
             this.current = parseJsoncText(text);
+            this.yamlStyle = undefined;
         }
     }
 
@@ -50,14 +54,21 @@ export class TextDocument extends BaseDocument {
         return this.current;
     }
 
-    /** The edited text. */
+    /** The edited text. Until something changes, the original text, byte for byte. */
     override toString(): string {
-        if (this.yaml === undefined || !this.yamlEdited) {
-            return this.text;
+        if (!this.edited) {
+            return this.original;
         }
 
-        // The yaml package reprints the whole document; flow collections keep their tight padding.
-        return this.yaml.toString({ flowCollectionPadding: false });
+        return this.text;
+    }
+
+    /**
+     * Whether an edit to this YAML document could not be made surgically, so the whole document
+     * was reprinted (comments kept, spacing and layout possibly changed). Always `false` for JSON.
+     */
+    reprinted(): boolean {
+        return this.reprints > 0;
     }
 
     protected readAt(path: readonly PathSegment[]): JsonValue | undefined {
@@ -77,17 +88,41 @@ export class TextDocument extends BaseDocument {
             return problem;
         }
 
-        if (this.yaml !== undefined) {
-            editYaml(this.yaml, patch);
-            this.yamlEdited = true;
-        } else {
-            this.text = editJsoncText(this.text, patch, before, after, this.layout, this.removedJsonc);
-        }
-
+        this.text = this.yamlStyle === undefined
+            ? editJsoncText(this.text, patch, before, after, this.layout, this.removedJsonc)
+            : this.editYaml(patch, after, this.yamlStyle);
         this.current = after;
+        this.edited = true;
 
         return undefined;
     }
+
+    /**
+     * Edits the YAML text surgically, and checks the result reads back as the expected value.
+     * When it cannot, or the check fails, reprints the whole document instead.
+     */
+    private editYaml(patch: Patch, after: JsonValue, style: YamlStyle): string {
+        const surgical = editYamlText(this.text, patch, after, style, this.removed);
+
+        if (surgical !== undefined && readsAs(surgical, after)) {
+            return surgical;
+        }
+
+        this.reprints++;
+
+        return reprintYaml(this.text, patch);
+    }
+}
+
+/** Whether YAML text parses, as one document, to exactly this value, key order included. */
+function readsAs(text: string, value: JsonValue): boolean {
+    const doc = parseYamlModel(text);
+
+    if (doc.errors.length > 0) {
+        return false;
+    }
+
+    return JSON.stringify(doc.toJS() ?? {}) === JSON.stringify(value);
 }
 
 /**
