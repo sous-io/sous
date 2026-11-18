@@ -81,6 +81,7 @@ contents:                           # what a subscriber actually receives
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 | `plugin` | no | A sous plugin the recipe ships: `bundle`, the path of one self-contained bundled file, and optionally `types`, its `.d.ts` file; see [Recipes that ship sous plugins](repositories-authoring.md#recipes-that-ship-sous-plugins) |
 | `requires` | no | `requires.plugins` maps npm sous plugin names to version ranges the recipe needs |
+| `handlers` | no | For each purpose (`check`, `configure`, `beforeBuild`, `afterBuild`, `uninstall`, `migrate`), a list of `{ file, handler }`: a self-contained JavaScript file in the recipe and the function it exports, run in the order listed; see [Handlers](handlers.md) |
 
 ```yaml
 plugin:
@@ -89,6 +90,10 @@ plugin:
 requires:
     plugins:
         sous-plugin-claude-code: "^1.0.0"
+handlers:
+    check:
+        - file: handlers/prerequisites.js
+          handler: checkCommands
 ```
 
 `contents[].kind` is `skills`, `memories`, `prompts` or `config`; a sous plugin is not a content kind but the
@@ -421,6 +426,7 @@ varMappings:
 | `enabled: false` | either of the two above | The opt-out for the entries sous provides itself, the `sous-recipes` repository and the `core` subscription |
 | `store` | fixed fields | Plain numbers, all optional; the values sous ships are defaults, not assumptions |
 | `recipes` | content kind | What each kind does; see [recipes: what each content kind does](#recipes-what-each-content-kind-does) |
+| `recipes.handlers` | a list | Written by sous while the config is built: one `{ recipe, purpose, file, handler }` entry for each handler a subscribed recipe from a trusted repository lists; see [Handlers](handlers.md) |
 | `varMappings` | environment variable name | Binds one name to one recipe variable, written `namespace/recipe/variableName` with an optional `repo:` qualifier |
 
 A repository's `url` may be a URL or an absolute path to one on this machine, read by the `local` provider
