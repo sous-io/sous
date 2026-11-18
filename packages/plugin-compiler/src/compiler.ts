@@ -78,6 +78,8 @@ export interface CompileDependencies {
     readonly refsParser?: RefsParser;
     /** Writes `<!-- from: -->` comments relative to it. */
     readonly projectRoot: string;
+    /** What templates read as `host.platform`. Default: Node's `process.platform`; only tests pass another. */
+    readonly platform?: string;
 }
 
 /** How a run behaves. */
@@ -112,6 +114,8 @@ export class CompileRun extends Reporting(Object) {
     private includeStack: string[] = [];
     private sourceComments = false;
     private unit: CompileUnit | undefined;
+    /** The output being rendered. */
+    private output: UnitOutput | undefined;
     private errorCount = 0;
 
     constructor(
@@ -258,10 +262,12 @@ export class CompileRun extends Reporting(Object) {
         const transforms = [...unit.transforms, ...output.transforms];
         // A rendered output depends on its variables as much as on its source, so they are part of
         // its source hash; so are the secret names, which decide what a scope-dumping tag hides.
+        // The values sous gives every template (the platform, the output's harness) count too.
         const sourceHash = rendersAnything
             ? hashContent(
                   `${contentHash}\n${stableVarsFingerprint(output.vars)}\n` +
-                      `secrets:${JSON.stringify([...this.deps.secretNames].sort())}` +
+                      `secrets:${JSON.stringify([...this.deps.secretNames].sort())}\n` +
+                      `globals:${JSON.stringify(this.templateGlobals(output))}` +
                       (output.transforms.length > 0 ? `\ntransforms:${JSON.stringify(output.transforms)}` : ""),
               )
             : output.transforms.length > 0
@@ -299,6 +305,11 @@ export class CompileRun extends Reporting(Object) {
         }
 
         const errorsBefore = this.errorCount;
+
+        // What `sousOutputPath`, `sousOutputDir` and `harness.id` read while this output renders,
+        // in its own file and in every file it includes.
+        this.output = output;
+
         const content = await this.expand(unit.source, output.vars, root);
 
         if (this.errorCount > errorsBefore) {
@@ -619,7 +630,7 @@ export class CompileRun extends Reporting(Object) {
         if (node.isTpl) {
             const dir = path.dirname(node.path);
 
-            text = await this.render(text, { ...vars, sousTemplatePath: node.path, sousTemplateDir: dir }, [...new Set([dir, entryDir])], node.path);
+            text = await this.render(text, { ...vars, sousTemplatePath: node.path, sousTemplateDir: dir, ...this.outputPathVars() }, [...new Set([dir, entryDir])], node.path);
         }
 
         for (const [marker, child] of markers) {
@@ -636,11 +647,32 @@ export class CompileRun extends Reporting(Object) {
         return text;
     }
 
+    /**
+     * `sousOutputPath` and `sousOutputDir`: the file the output being rendered is written to, and its
+     * directory, from before any transform. An included file sees the output it is included into.
+     */
+    private outputPathVars(): Record<string, string> {
+        if (this.output === undefined) {
+            return {};
+        }
+
+        return { sousOutputPath: this.output.destination, sousOutputDir: path.dirname(this.output.destination) };
+    }
+
+    /**
+     * The objects every template can read: `host.platform` (the value config expressions read) and
+     * `harness.id` (the harness the output belongs to, or `""`). A variable of the same name the
+     * project sets wins over them.
+     */
+    private templateGlobals(output: UnitOutput | undefined = this.output): { host: { platform: string }; harness: { id: string } } {
+        return { host: { platform: this.deps.platform ?? process.platform }, harness: { id: output?.harness ?? "" } };
+    }
+
     private async render(content: string, vars: VarScope, roots: string[], fromFile: string): Promise<string> {
         try {
             const engine = this.deps.createEngine({ roots, scope: { ...(this.unit?.scope ?? {}), ...vars }, fromFile });
 
-            return (await engine.parseAndRender(content, vars)) as string;
+            return (await engine.parseAndRender(content, { ...this.templateGlobals(), ...vars })) as string;
         } catch (error) {
             this.recordError("Template rendering error", { file: fromFile }, { subject: fromFile, cause: messageOf(error) });
 

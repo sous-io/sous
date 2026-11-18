@@ -124,3 +124,85 @@ describe("executable sources stay executable", () => {
         expect(fs.statSync(project.at("out", "tool.py")).mode & 0o777).toBe(0o755);
     });
 });
+
+describe("what a template can read about its output", () => {
+    /** One source rendered to two outputs reads each output's own path and directory. */
+    it("should give each output its own sousOutputPath and sousOutputDir", async () => {
+        project = makeProject();
+        const source = project.write("src/where.tpl.md", "{{ sousOutputPath }}|{{ sousOutputDir }}");
+
+        const { result } = await compileOnce(project, {
+            targets: [{ entryPoint: source, outputs: [{ destinationDir: project.at(".claude") }, { destinationFile: project.at(".codex", "AGENTS.md") }] }],
+        });
+
+        expect(result.ok).toBe(true);
+        expect(project.read(".claude/where.md")).toBe(`${project.at(".claude", "where.md")}|${project.at(".claude")}`);
+        expect(project.read(".codex/AGENTS.md")).toBe(`${project.at(".codex", "AGENTS.md")}|${project.at(".codex")}`);
+    });
+
+    /** A file included by another reads the path of the output it is included into. */
+    it("should give an included file the path of the output it is included into", async () => {
+        project = makeProject();
+        project.write("src/part.tpl.md", "part for {{ sousOutputPath }}");
+        const source = project.write("src/main.md", "@./part.tpl.md\n");
+
+        const { result } = await compileOnce(project, { targets: [{ entryPoint: source, outputs: [{ destinationFile: project.at("out", "MAIN.md") }] }] });
+
+        expect(result.ok).toBe(true);
+        expect(project.read("out/MAIN.md")).toBe(`part for ${project.at("out", "MAIN.md")}\n`);
+    });
+
+    /** A transform that renames the file does not change what the template read: the path from before it. */
+    it("should give the path from before a transform renames the file", async () => {
+        project = makeProject();
+        const source = project.write("src/a.tpl.md", "{{ sousOutputPath }}");
+        const rename = {
+            id: "rename",
+            transform: (file: { source: string; destination: string; content: string }) => ({ ...file, destination: file.destination.replace("a.md", "b.md") }),
+        };
+
+        const { result } = await compileOnce(
+            project,
+            { targets: [{ entryPoint: source, outputs: [{ destinationDir: project.at("out"), transforms: ["rename"] }] }] },
+            {},
+            { register: (sous) => sous.entities.add("compilation-transform", rename) },
+        );
+
+        expect(result.ok).toBe(true);
+        expect(project.read("out/b.md")).toBe(project.at("out", "a.md"));
+    });
+
+    /** `host.platform` is Node's platform, the value config expressions read. */
+    it("should give templates host.platform", async () => {
+        project = makeProject();
+        const source = project.write("p.tpl.md", "{{ host.platform }}");
+
+        await compileOnce(project, { targets: [{ entryPoint: source, outputs: [{ destinationFile: project.at("out.md") }] }] });
+
+        expect(project.read("out.md")).toBe(process.platform);
+    });
+
+    /** `harness.id` is the output's harness, and empty for an output that belongs to none. */
+    it("should give templates harness.id, empty when the output has no harness", async () => {
+        project = makeProject();
+        const source = project.write("h.tpl.md", '{% if harness.id == "claude-code" %}skill tool{% else %}plain words [{{ harness.id }}]{% endif %}');
+
+        const { result } = await compileOnce(project, {
+            targets: [{ entryPoint: source, outputs: [{ destinationFile: project.at("claude.md"), harness: "claude-code" }, { destinationFile: project.at("none.md") }] }],
+        });
+
+        expect(result.ok).toBe(true);
+        expect(project.read("claude.md")).toBe("skill tool");
+        expect(project.read("none.md")).toBe("plain words []");
+    });
+
+    /** A project variable named `host` wins over the one sous gives, so an existing template keeps working. */
+    it("should let a project variable named host win", async () => {
+        project = makeProject();
+        const source = project.write("p.tpl.md", "{{ host }}");
+
+        await compileOnce(project, { targets: [{ entryPoint: source, outputs: [{ destinationFile: project.at("out.md"), _vars: { host: "example.com" } }] }] });
+
+        expect(project.read("out.md")).toBe("example.com");
+    });
+});

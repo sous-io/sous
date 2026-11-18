@@ -22,6 +22,8 @@ export interface UnitOutput {
     readonly vars: VarScope;
     /** Its own `transforms`, applied after the target's. */
     readonly transforms: readonly string[];
+    /** The harness it belongs to (`harness` on the output), which templates read as `harness.id`. */
+    readonly harness?: string;
 }
 
 /** One source to compile, and where it goes. */
@@ -250,7 +252,7 @@ export function resolveOutputs(
         const kept = outputs.find((existing) => existing.destination === destination);
 
         if (kept === undefined) {
-            outputs.push({ index, destination, vars, transforms });
+            outputs.push({ index, destination, vars, transforms, ...(output.harness === undefined ? {} : { harness: output.harness }) });
 
             return;
         }

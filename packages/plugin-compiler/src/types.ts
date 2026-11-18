@@ -39,6 +39,12 @@ export interface CompilationOutput {
     destinationDir?: string;
     /** `compilation-transform` ids applied to this output, after the target's own. */
     transforms?: string[];
+    /**
+     * The harness this output belongs to (`claude-code`, `codex`): set by the contributors that
+     * write a harness's skills or memories. Templates read it as `harness.id`, which is `""` for an
+     * output that belongs to none.
+     */
+    harness?: string;
 }
 
 /**

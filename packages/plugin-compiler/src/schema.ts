@@ -20,6 +20,7 @@ const outputSchema = z
         destinationFile: z.string().optional(),
         destinationDir: z.string().optional(),
         transforms: z.array(z.string()).optional(),
+        harness: z.string().min(1).optional().describe("The harness this output belongs to (claude-code, codex). Templates read it as harness.id."),
     })
     .strict();
 
