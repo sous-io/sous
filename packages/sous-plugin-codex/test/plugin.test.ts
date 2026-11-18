@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
-import type { HostProcesses } from "@sous-io/plugin-host/types";
-import harnessesPlugin from "@sous-io/plugin-harnesses";
+import type { HostProcesses } from "@sous-io/sous-plugin-host/types";
+import harnessesPlugin from "@sous-io/sous-plugin-harnesses";
 import codexPlugin from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -48,23 +48,23 @@ afterEach(() => {
 
 const stubs: PluginDefinition[] = [
     definePlugin({
-        name: "@sous-io/plugin-host",
+        name: "@sous-io/sous-plugin-host",
         version: packageJson.version,
         register: (sous) => sous.services.add("host.processes", () => processes, { lifetime: "singleton" }),
     }),
     definePlugin({
-        name: "@sous-io/plugin-build",
+        name: "@sous-io/sous-plugin-build",
         version: packageJson.version,
         register: (sous) => sous.intents.add({ intent: "build", handle: () => IntentOutputs.of({ ok: true }) as never }),
     }),
-    // The kinds plugin-skills and plugin-memories own.
+    // The kinds sous-plugin-skills and sous-plugin-memories own.
     definePlugin({
-        name: "@sous-io/plugin-skills",
+        name: "@sous-io/sous-plugin-skills",
         version: packageJson.version,
         register: (sous) => sous.entities.define("skill-target", jsonSchema({ type: "object", required: ["id", "directory"] })),
     }),
     definePlugin({
-        name: "@sous-io/plugin-memories",
+        name: "@sous-io/sous-plugin-memories",
         version: packageJson.version,
         register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "outputPath"] })),
     }),

@@ -1,8 +1,8 @@
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { createHttp } from "@sous-io/plugin-host";
+import { createHttp } from "@sous-io/sous-plugin-host";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { RepositoryReadRequest } from "@sous-io/plugin-recipes/types";
+import type { RepositoryReadRequest } from "@sous-io/sous-plugin-recipes/types";
 import { httpReadStrategy, isSignInPage } from "./http-strategy.js";
 import { hostContext, recordedHttp, type RecordedRoute } from "./testing.js";
 import { canonicalRepository } from "./urls.js";

@@ -6,8 +6,8 @@
 import { cp, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
-import type { RecipeDownloadAttempt, RecipeDownloadProblem, RepositoryHostContext } from "@sous-io/plugin-recipes/types";
-import type {} from "@sous-io/plugin-git/types";
+import type { RecipeDownloadAttempt, RecipeDownloadProblem, RepositoryHostContext } from "@sous-io/sous-plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-git/types";
 import { firstLine } from "./http-strategy.js";
 
 /** What to fetch. */
@@ -127,7 +127,7 @@ export function cloneAttempt(url: string, error: unknown): RecipeDownloadAttempt
     return { url, host, problem: problemOf(reason), reason };
 }
 
-/** The exit code a command that could not start gets (`plugin-host`'s `NOT_FOUND_EXIT_CODE`). */
+/** The exit code a command that could not start gets (`sous-plugin-host`'s `NOT_FOUND_EXIT_CODE`). */
 const GIT_NOT_FOUND_EXIT_CODE = 127;
 
 /** What a `git.runner` error holds, read without depending on its class. */

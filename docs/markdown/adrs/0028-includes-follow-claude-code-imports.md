@@ -64,5 +64,5 @@ Luke's direction:
 - A project that relied on the bytewise order of a glob's files gets a different order.
 - The compiler reads Markdown structure through its own small scanner, `markdown.ts`, because the
   in-place replacement needs offsets a parser library's tokens do not give.
-- `sous init`'s import of a project's agent files (`plugin-init`) still finds includes by the old
+- `sous init`'s import of a project's agent files (`sous-plugin-init`) still finds includes by the old
   whole-line rule; it is not changed by this record.

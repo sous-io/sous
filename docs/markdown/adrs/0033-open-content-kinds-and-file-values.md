@@ -23,7 +23,7 @@ config value had no way to hold a literal `${...}` that belongs to another tool.
 >
 >   -- **Luke Chavers** in an agent session (2026-11-17)
 
-- An entity kind, `content-kind` (`{ id, description }`), defined by plugin-recipes, which
+- An entity kind, `content-kind` (`{ id, description }`), defined by sous-plugin-recipes, which
   registers the four existing kinds. A plugin adds a kind by adding an entity and responds to the
   `recipes.contents` entries of that kind.
 - In a subscriber's project, an unregistered kind is a `ConfigError` judged once config building

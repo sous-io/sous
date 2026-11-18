@@ -12,7 +12,7 @@ import { definePlugin } from "@sous-io/plugin-api";
 export default definePlugin({
     name: "sous-plugin-diagrams",
     version: "1.0.0",
-    dependsOn: { "@sous-io/plugin-skills": "^1.0.0" },
+    dependsOn: { "@sous-io/sous-plugin-skills": "^1.0.0" },
 
     register(sous) {
         // 1. A config contributor: adds to the config while it is built.
@@ -55,7 +55,7 @@ When two contributors set the same key, the one whose patch applies last wins. P
 sous.config.contribute({
     id: "diagrams/fixups",
     applyOrder: 3000,                   // after plugins left at the default (2000)
-    after: ["@sous-io/plugin-skills"],  // and after every contributor of plugin-skills, whatever its number
+    after: ["@sous-io/sous-plugin-skills"],  // and after every contributor of sous-plugin-skills, whatever its number
     contribute(config) {
         config.atPath("diagrams.enabled").setValue(true);
     },
@@ -89,7 +89,7 @@ const { rendered } = await ctx.run("diagrams.render", { only: "intro" });
 - `src/intents.ts`, `src/events.ts`, `src/services.ts`, `src/entities.ts`: what each registry takes.
 - `src/registry.ts`: the interfaces plugins add types to.
 - `src/errors.ts`, `src/reporter.ts`, `src/prompter.ts`: the error classes, and how a plugin reports and asks.
-- Real examples: any `packages/plugin-*` directory, for instance `packages/plugin-inspect`.
+- Real examples: any `packages/sous-plugin-*` directory, for instance `packages/sous-plugin-inspect`.
 
 ## Testing
 

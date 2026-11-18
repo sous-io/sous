@@ -16,8 +16,8 @@
  */
 
 import type { Context, Sous } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-recipes/types";
-import type { LockChange } from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
+import type { LockChange } from "@sous-io/sous-plugin-recipes/types";
 
 /** A version change waiting for the new version's files. */
 interface PendingMigration {

@@ -7,8 +7,8 @@
  */
 
 import { definePlugin, HANDLER_PURPOSES, jsonSchema, type Context, type HandlerPurpose, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-host/types";
-import type {} from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-host/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
 import { configureContributor } from "./configure.js";
 import { checkHandlersCheck } from "./doctor-check.js";
 import { registerLifecycle } from "./lifecycle.js";
@@ -125,8 +125,8 @@ export const handlersPlugin: PluginDefinition = definePlugin({
     version: packageJson.version,
     description: "Handlers: functions a recipe or plugin provides for a purpose, the helpers they receive, and the intents that run them.",
     dependsOn: {
-        "@sous-io/plugin-host": `^${packageJson.version}`,
-        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-host": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-recipes": `^${packageJson.version}`,
         "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 

@@ -54,7 +54,7 @@ function configure(prompt: string, recipes: unknown = undefined, fileName = "AGE
     [
       "export const config = {",
       '  repos: { "sous-recipes": { enabled: false } },',
-      '  plugins: { options: { "@sous-io/plugin-claude-code": { memories: false } } },',
+      '  plugins: { options: { "@sous-io/sous-plugin-claude-code": { memories: false } } },',
       '  _vars: { projectRoot: "${sousDir}/.." },',
       recipes === undefined ? "" : `  recipes: ${JSON.stringify(recipes)},`,
       "  compilation: { targets: [{",

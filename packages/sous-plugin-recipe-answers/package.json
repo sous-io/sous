@@ -1,0 +1,39 @@
+{
+  "name": "@sous-io/sous-plugin-recipe-answers",
+  "version": "1.0.19",
+  "description": "Recipe variable definitions, the answer ladder, asking for answers, answer files and variable mappings.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/sous-plugin-recipes": "workspace:*",
+    "@sous-io/sous-plugin-confd": "workspace:*",
+    "@sous-io/sous-plugin-config-files": "workspace:*",
+    "@sous-io/sous-plugin-formats": "workspace:*",
+    "@sous-io/sous-plugin-refs": "workspace:*",
+    "@sous-io/sous-plugin-variables": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

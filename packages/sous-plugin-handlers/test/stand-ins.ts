@@ -1,6 +1,6 @@
 /**
  * Test helpers: a project in a temporary directory, recipes with handler files, and an engine
- * with sous-plugin-handlers, the real plugin-host, and a stand-in for plugin-recipes (the
+ * with sous-plugin-handlers, the real sous-plugin-host, and a stand-in for sous-plugin-recipes (the
  * `active-recipe` entities, the `repos` key, and the intents that write the lockfile, which fire
  * `recipes.locked`).
  */
@@ -10,8 +10,8 @@ import os from "node:os";
 import path from "node:path";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
 import { createEngine, type Engine } from "@sous-io/core";
-import { hostPlugin } from "@sous-io/plugin-host";
-import type { LockDiff } from "@sous-io/plugin-recipes/types";
+import { hostPlugin } from "@sous-io/sous-plugin-host";
+import type { LockDiff } from "@sous-io/sous-plugin-recipes/types";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import handlersPlugin from "../src/index.js";
 
@@ -87,7 +87,7 @@ export function recipe(root: string, key: string, options: RecipeFixture = {}): 
     };
 }
 
-/** What the stand-in for plugin-recipes serves; tests change it between builds. */
+/** What the stand-in for sous-plugin-recipes serves; tests change it between builds. */
 export interface RecipesState {
     recipes: Array<Record<string, unknown>>;
     /** The trusted repositories, by short name. */
@@ -100,7 +100,7 @@ export function diff(changes: Partial<LockDiff>): LockDiff {
 }
 
 /**
- * Stands in for plugin-recipes: the `active-recipe` entities and `repos`, from `state`, and three
+ * Stands in for sous-plugin-recipes: the `active-recipe` entities and `repos`, from `state`, and three
  * intents that write the lockfile the way the real ones do: `subscription.update` (moves pins,
  * then rebuilds the config), `subscription.remove` (drops pins, then rebuilds) and
  * `subscription.add` (adds pins, then rebuilds). Each takes the diff and the next state as input
@@ -126,7 +126,7 @@ export function recipesStandIn(state: RecipesState, next: { diff?: LockDiff; rec
     };
 
     return definePlugin({
-        name: "@sous-io/plugin-recipes",
+        name: "@sous-io/sous-plugin-recipes",
         version: "1.0.19",
         register(sous) {
             sous.entities.add("config-key", { id: "recipes", schema: jsonSchema({}) });

@@ -7,10 +7,10 @@
  * that never uses Codex gets no `AGENTS.override.md` and no extra config build.
  */
 
-import type {} from "@sous-io/plugin-host/types";
-import type { HarnessEntity, ToolSettings } from "@sous-io/plugin-harnesses/types";
-import type { MemoryTargetEntity } from "@sous-io/plugin-memories/types";
-import type { SkillTargetEntity } from "@sous-io/plugin-skills/types";
+import type {} from "@sous-io/sous-plugin-host/types";
+import type { HarnessEntity, ToolSettings } from "@sous-io/sous-plugin-harnesses/types";
+import type { MemoryTargetEntity } from "@sous-io/sous-plugin-memories/types";
+import type { SkillTargetEntity } from "@sous-io/sous-plugin-skills/types";
 
 /** The harness's id, the key of its settings under `tools`, and what outputs for Codex are marked with. */
 export type CodexHarnessId = "codex";

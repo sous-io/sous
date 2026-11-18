@@ -13,16 +13,16 @@ describe("order and stages", () => {
         const order: string[] = [];
         const record = (id: string) => () => void order.push(id);
         const { engine } = makeEngine([
-            contributorsPlugin("@sous-io/plugin-skills", [{ id: "z-skills", contribute: record("z-skills") }]),
+            contributorsPlugin("@sous-io/sous-plugin-skills", [{ id: "z-skills", contribute: record("z-skills") }]),
             contributorsPlugin(
-                "plugin-claude-code",
+                "sous-plugin-claude-code",
                 [
                     { id: "claude-code/defaults", contribute: record("claude-code/defaults") },
                     { id: "claude-code/late-fixups", after: ["confd/*"], contribute: record("claude-code/late-fixups") },
                 ],
-                { after: ["@sous-io/plugin-skills"] },
+                { after: ["@sous-io/sous-plugin-skills"] },
             ),
-            contributorsPlugin("plugin-confd", [
+            contributorsPlugin("sous-plugin-confd", [
                 { id: "confd/500", contribute: record("confd/500") },
                 { id: "confd/610", after: ["confd/500"], contribute: record("confd/610") },
             ]),
@@ -43,11 +43,11 @@ describe("order and stages", () => {
         const order: string[] = [];
         const record = (id: string) => () => void order.push(id);
         const { engine, reporter } = makeEngine([
-            contributorsPlugin("plugin-confd", [
+            contributorsPlugin("sous-plugin-confd", [
                 { id: "confd/700", after: ["*", "confd/610"], contribute: record("confd/700") },
                 { id: "confd/610", after: ["*", "config-files.main"], contribute: record("confd/610") },
             ]),
-            contributorsPlugin("plugin-config-files", [{ id: "config-files.main", after: ["*"], contribute: record("config-files.main") }]),
+            contributorsPlugin("sous-plugin-config-files", [{ id: "config-files.main", after: ["*"], contribute: record("config-files.main") }]),
             contributorsPlugin("plugin-x", [
                 { id: "zzz-plugin", contribute: record("zzz-plugin") },
                 { id: "late-fixups", after: ["confd/*"], contribute: record("late-fixups") },

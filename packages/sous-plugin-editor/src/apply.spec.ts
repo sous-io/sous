@@ -179,7 +179,7 @@ describe("applyEdits()", () => {
 
         const { result, reporter } = await apply(tmp.path, [
             { entry: { file: ".claude/settings.json", recipe: "a/one", set: { path: "env.MODE", value: "strict" } } },
-            { entry: { file: ".claude/settings.json", set: { path: "env.MODE", value: "loose" } }, by: "@sous-io/plugin-config-files" },
+            { entry: { file: ".claude/settings.json", set: { path: "env.MODE", value: "loose" } }, by: "@sous-io/sous-plugin-config-files" },
         ]);
 
         expect(result.ok).toBe(true);

@@ -23,10 +23,10 @@
   },
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
-    "@sous-io/plugin-recipes": "workspace:*",
-    "@sous-io/plugin-refs": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*",
-    "@sous-io/plugin-git": "workspace:*"
+    "@sous-io/sous-plugin-recipes": "workspace:*",
+    "@sous-io/sous-plugin-refs": "workspace:*",
+    "@sous-io/sous-plugin-host": "workspace:*",
+    "@sous-io/sous-plugin-git": "workspace:*"
   },
   "devDependencies": {},
   "engines": {

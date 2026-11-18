@@ -79,7 +79,7 @@ when its name ended in `.sh`.
 - `match` and `exclude` each take one entry or a list; an entry is a glob, or a regular expression when written
   between two slashes, the convention `recipes.memories.first` and `recipes.memories.exclude` already use.
   Luke: "we should also allow one or more `exclude` globs or regexs, perhaps? Just in case the user needs to
-  fine tune the application?" The matcher moved from `plugin-memories` to `plugin-host`, so both use one
+  fine tune the application?" The matcher moved from `sous-plugin-memories` to `sous-plugin-host`, so both use one
   implementation.
 - A rule WINS over an output's own variables, so a project can change a variable on outputs it did not write,
   such as ones a plugin generated. Luke had called these "variable value overrides" from the start.

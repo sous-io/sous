@@ -24,7 +24,7 @@ Claude Code alone.
   project's JSON, JSONC and YAML config files surgically, and names any code file that sets it.
 - Every output written for Claude Code is marked `harness: "claude-code"`, so the merge of the per-harness config
   builds takes it from Claude Code's build.
-- `@sous-io/plugin-claude-code` registers and consumes two content kinds:
+- `@sous-io/sous-plugin-claude-code` registers and consumes two content kinds:
   - `claude-code-plugin`. Luke: "ideally, Sous will allow either approach. Either a directly installed plugin, or a
     plugin provided by a skill." Each folder under the include pattern's fixed part is written to
     `.claude/skills/<folder>`.
@@ -47,4 +47,4 @@ Rejected by Luke: a generic plugin kind owned by Claude Code's plugin; a generic
   `exclude` carrying `harness.id != 'claude-code'`; both get the reload line.
 - Projects with `tools.claude` in a config file sous cannot edit must rename the key by hand; the migration says
   which file.
-- `plugin-claude-code` now depends on `plugin-recipes`, `plugin-compiler` and `sous-plugin-migrations`.
+- `sous-plugin-claude-code` now depends on `sous-plugin-recipes`, `sous-plugin-compiler` and `sous-plugin-migrations`.

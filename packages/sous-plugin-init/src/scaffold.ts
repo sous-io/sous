@@ -1,0 +1,260 @@
+/**
+ * Scaffolding a project's `.sous/` directory, which is what `sous init` does: the primary config
+ * (`sous.config.jsonc`), the memories source (`MEMORIES.tpl.md`), a starter memory, the two answers
+ * files and the sous-managed ignore blocks.
+ *
+ * The scaffold is planned in memory first and only then written. It refuses to touch a project that
+ * is already set up: a `.sous/` directory holding a primary config is left exactly as it is. Any
+ * other file the scaffold would write that already exists is kept as it is and reported. Three files
+ * are merged rather than replaced: `.sous/.gitignore` and the project-root `.gitignore`, whose
+ * sous-managed blocks are applied by `host.gitignore`, so running the scaffold over an existing
+ * ignore file never duplicates an entry; and the project's `package.json`, when there is one.
+ *
+ * Once written, the config is read back through `config-files.loader`, so a scaffold sous itself
+ * cannot load is never reported as a success.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { ConfigError, type Context } from "@sous-io/plugin-api";
+import "@sous-io/sous-plugin-config-files/types";
+import "@sous-io/sous-plugin-host/types";
+import { planPackageJson } from "./package-json.js";
+import {
+    buildConfigJsonc,
+    buildEnvDefaults,
+    buildEnvLocalExample,
+    buildMemoriesSource,
+    buildRepoStarterMemory,
+    buildStarterMemory,
+    CONFD_DIR_NAME,
+    CONFIG_FILE_NAME,
+    ENV_DEFAULTS_NAME,
+    ENV_LOCAL_NAME,
+    MEMORIES_SOURCE_RELATIVE_PATH,
+    SOUS_DIR_NAME,
+    ROOT_IGNORE_LINES,
+    STARTER_MEMORY_RELATIVE_PATH,
+    type ScaffoldContext,
+} from "./templates.js";
+import type { PackageJsonOutcome } from "./types.js";
+
+/** The lockfile's name inside `.sous/`. */
+const LOCKFILE_NAME = "sous.lock.json";
+
+/** The lines of the sous-managed block in `.sous/.gitignore`: what stays on this machine. */
+export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.edits.json", "sous.pid", ENV_LOCAL_NAME, "repos/", "backups/"];
+
+/** The names a recipe repository's manifest may have, at its root. */
+const REPO_MANIFEST_NAMES = ["sous.repo.yaml", "sous.repo.yml", "sous.repo.json", "sous.repo.jsonc"];
+
+/** Whether `root` is a sous recipe repository: it holds a repo manifest. */
+export function isRecipeRepository(root: string): boolean {
+    return REPO_MANIFEST_NAMES.some((name) => fs.existsSync(path.join(root, name)));
+}
+
+/** What to scaffold, and where. */
+export interface ScaffoldOptions {
+    /** The project root; the `.sous/` directory goes inside it. */
+    root: string;
+    name: string;
+    dryRun: boolean;
+    /** Whether to write a starter memory: nothing was imported. */
+    starterMemory?: boolean;
+}
+
+/** What a scaffold did. */
+export interface ScaffoldOutcome {
+    readonly sousDir: string;
+    readonly configPath: string;
+    /** Every file written (or, in a dry run, that would be), absolute. */
+    readonly files: string[];
+    /** Files left as they were because they existed. */
+    readonly kept: string[];
+    readonly packageJson: PackageJsonOutcome;
+}
+
+/** The `.sous/` directory a project root would hold. */
+export function sousDirFor(root: string): string {
+    return path.join(path.resolve(root), SOUS_DIR_NAME);
+}
+
+/** The directories from `start` up to the filesystem root. */
+export function ancestors(start: string): string[] {
+    const found: string[] = [];
+    let directory = path.resolve(start);
+
+    for (;;) {
+        found.push(directory);
+
+        const parent = path.dirname(directory);
+
+        if (parent === directory) {
+            return found;
+        }
+
+        directory = parent;
+    }
+}
+
+/**
+ * Refuses to scaffold a `.sous/` directory that already holds a primary config. The config is what
+ * makes a directory a sous project, so that is what is checked; a `.sous/` holding only, say, task
+ * files is a fine place to set one up.
+ *
+ * @throws ConfigError when a config is there.
+ */
+export function assertNoExistingConfig(ctx: Context, root: string): void {
+    const existing = ctx.services.get("config-files.loader").findMain(sousDirFor(root));
+
+    if (existing !== undefined) {
+        throw new ConfigError(`${root} is already set up for sous.`, {
+            details: [`${existing} exists, and sous will not overwrite it.`, "Edit that config instead, or run 'sous init' in another directory."],
+        });
+    }
+}
+
+/**
+ * The config of the nearest project above `root`, when `root` would sit inside one; its project
+ * root comes with it.
+ */
+export function findEnclosingProject(ctx: Context, root: string): { root: string; configPath: string } | undefined {
+    const loader = ctx.services.get("config-files.loader");
+
+    for (const directory of ancestors(root).slice(1)) {
+        const configPath = loader.findMain(sousDirFor(directory));
+
+        if (configPath !== undefined) {
+            return { root: directory, configPath };
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * Writes the scaffold (or, in a dry run, works out what it would write).
+ *
+ * @throws ConfigError when a config is already there, the package.json cannot be read, or the
+ *   written config does not load.
+ */
+export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): Promise<ScaffoldOutcome> {
+    const identity = ctx.services.get("host.package").identity();
+    const root = path.resolve(options.root);
+    const sousDir = sousDirFor(root);
+    const configPath = path.join(sousDir, CONFIG_FILE_NAME);
+    const context: ScaffoldContext = { name: options.name, sousVersion: identity.version };
+
+    assertNoExistingConfig(ctx, root);
+
+    // Planned first, so a package.json that cannot be read stops the run before anything is written.
+    const dependency = planPackageJson(root, identity.name, identity.version);
+    const planned: Array<{ file: string; contents: string }> = [
+        { file: configPath, contents: buildConfigJsonc(context) },
+        { file: path.join(sousDir, MEMORIES_SOURCE_RELATIVE_PATH), contents: buildMemoriesSource() },
+        ...(options.starterMemory === true
+            ? [{ file: path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), contents: isRecipeRepository(root) ? buildRepoStarterMemory(context) : buildStarterMemory(context) }]
+            : []),
+        { file: path.join(sousDir, ENV_DEFAULTS_NAME), contents: buildEnvDefaults(context) },
+        { file: path.join(sousDir, `${ENV_LOCAL_NAME}.example`), contents: buildEnvLocalExample(context) },
+    ];
+    const files: string[] = [];
+    const kept: string[] = [];
+
+    if (!options.dryRun) {
+        // sous's own directories, each with its README and pointer files.
+        for (const [kind, directory] of [["sous-dir", sousDir], ["confd", path.join(sousDir, CONFD_DIR_NAME)]] as const) {
+            const ensured = await ctx.services.get("host.directories").ensureKnown(kind, directory);
+
+            files.push(...ensured.wrote.map((name) => path.join(ensured.path, name)));
+        }
+    }
+
+    for (const { file, contents } of planned) {
+        if (fs.existsSync(file)) {
+            kept.push(file);
+            continue;
+        }
+
+        if (!options.dryRun) {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, contents, "utf8");
+        }
+
+        files.push(file);
+    }
+
+    const ignore = await ctx.services.get("host.gitignore").write(path.join(sousDir, ".gitignore"), IGNORE_BLOCK_LINES, { dryRun: options.dryRun });
+
+    if (ignore.changed) {
+        files.push(ignore.file);
+    }
+
+    // What a build writes outside .sous/ is build output, so git ignores it. Written once, here;
+    // no build keeps this block current.
+    const rootIgnore = await ctx.services.get("host.gitignore").write(path.join(root, ".gitignore"), ROOT_IGNORE_LINES, { dryRun: options.dryRun });
+
+    if (rootIgnore.changed) {
+        files.push(rootIgnore.file);
+    }
+
+    if (dependency.contents !== undefined && dependency.file !== undefined) {
+        if (!options.dryRun) {
+            fs.writeFileSync(dependency.file, dependency.contents, "utf8");
+        }
+
+        files.push(dependency.file);
+    }
+
+    const lockfile = stampMigratedVersion(ctx, sousDir, identity.version, options.dryRun);
+
+    if (lockfile !== undefined) {
+        files.push(lockfile);
+    }
+
+    if (!options.dryRun && !kept.includes(configPath)) {
+        await verifyScaffold(ctx, configPath);
+    }
+
+    return { sousDir, configPath, files, kept, packageJson: dependency.outcome };
+}
+
+/**
+ * Records the running version as `migratedVersion` in `.sous/sous.lock.json`, so a new project has
+ * no pending migrations. The project does not exist yet for `recipes.lock`, the lockfile's owner,
+ * so the file is written the way that owner writes it: through `formats.lockfile`, in its one
+ * stable form. A lockfile already there keeps everything it pins. Returns the file when it
+ * changes (or, in a dry run, would).
+ */
+export function stampMigratedVersion(ctx: Context, sousDir: string, version: string, dryRun: boolean): string | undefined {
+    const format = ctx.services.get("formats.lockfile");
+    const file = path.join(sousDir, LOCKFILE_NAME);
+    const existing = fs.existsSync(file) ? format.parse(JSON.parse(fs.readFileSync(file, "utf8")), file) : format.empty();
+
+    if (existing.migratedVersion === version) {
+        return undefined;
+    }
+
+    if (!dryRun) {
+        fs.mkdirSync(sousDir, { recursive: true });
+        fs.writeFileSync(file, format.stringify({ ...existing, migratedVersion: version }), "utf8");
+    }
+
+    return file;
+}
+
+/**
+ * Loads the written config through the loader every build uses, so the scaffold is never reported
+ * as a success unless sous can actually read it. A failure here is a bug in the scaffold, and is
+ * reported as one.
+ */
+async function verifyScaffold(ctx: Context, configPath: string): Promise<void> {
+    try {
+        await ctx.services.get("config-files.loader").load(configPath);
+    } catch (error) {
+        throw new ConfigError(`The config 'sous init' wrote at ${configPath} does not load.`, {
+            details: ["This is a bug in sous; please report it. The loader said:", ...(error instanceof Error ? error.message : String(error)).split("\n").map((line) => `  ${line}`)],
+            cause: error,
+        });
+    }
+}

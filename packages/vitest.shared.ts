@@ -17,7 +17,7 @@ const sourceAliases: Record<string, string> = {
 };
 
 /**
- * Every `packages/plugin-*` and `packages/sous-plugin-*` package, by its `@sous-io/...` name: its root and its `types`
+ * `packages/plugin-api` and every `packages/sous-plugin-*` package, by its `@sous-io/...` name: its root and its `types`
  * entry, each resolved to source.
  */
 function pluginAliases(): Record<string, string> {

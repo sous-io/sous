@@ -9,7 +9,7 @@ specification is recorded under "Changes".
 
 How the compiler finds the includes in a source file, resolves them, and puts each file's text in
 the output; the order of the files a glob include gives; and what happens when an include names
-nothing. The owner is `plugin-compiler` (S6, "Compiler"): `paths.ts` holds the rules for a reference
+nothing. The owner is `sous-plugin-compiler` (S6, "Compiler"): `paths.ts` holds the rules for a reference
 and the file types, `markdown.ts` reads the Markdown structure, `globs.ts` holds the order,
 `includes.ts` resolves a path, and `compiler.ts` reads a file and its includes.
 
@@ -132,7 +132,7 @@ would for Claude Code: backticks, or a backslash before the `@`.
 
 ### 8. The order of a glob's files
 
-`compareIncludeOrder(left, right)` in `globs.ts`, exported by `plugin-compiler`:
+`compareIncludeOrder(left, right)` in `globs.ts`, exported by `sous-plugin-compiler`:
 
 - At each folder its own files come first, then its sub-folders, with the same rule inside each.
 - Names are compared one character at a time, ignoring case: `10-setup` before `2-setup`, `0002`
@@ -155,7 +155,7 @@ memories/Api/routes.md
 memories/zeta/last.md
 ```
 
-The memories of one recipe (`plugin-memories`) are ordered by the same function. The order between
+The memories of one recipe (`sous-plugin-memories`) are ordered by the same function. The order between
 two recipes is unchanged: dependencies first, ties by recipe name in raw character codes.
 
 ## Where Sous Departs From Claude Code

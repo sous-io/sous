@@ -4,8 +4,8 @@
  * It tries the SSH address first, then HTTPS.
  */
 
-import type {} from "@sous-io/plugin-git/types";
-import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
+import type {} from "@sous-io/sous-plugin-git/types";
+import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 import type { ExplainedReadStrategy } from "./types.js";
 
 /** Lines of git's error output that say what went wrong, most telling first. */

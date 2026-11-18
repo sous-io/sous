@@ -15,7 +15,7 @@
  */
 
 import type { BuiltConfig, ConfigBuilder, Context, Environment, HandlerPurpose, ProjectInfo } from "@sous-io/plugin-api";
-import type { ProcessResult } from "@sous-io/plugin-host/types";
+import type { ProcessResult } from "@sous-io/sous-plugin-host/types";
 
 export type { HandlerPurpose } from "@sous-io/plugin-api";
 

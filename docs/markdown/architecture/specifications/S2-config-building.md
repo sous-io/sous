@@ -77,8 +77,8 @@ sous.entities.add("config-key", {
 });
 ```
 
-Config files are contributors too. `plugin-config-files` finds `sous.config.*` and adds a
-contributor for it. `plugin-confd` finds the `conf.d` files and adds one contributor per file, named
+Config files are contributors too. `sous-plugin-config-files` finds `sous.config.*` and adds a
+contributor for it. `sous-plugin-confd` finds the `conf.d` files and adds one contributor per file, named
 after the file (`confd/610-mac.jsonc`). Recipe config files, the built-in entries and the environment
 come in the same way, from the plugins that own them (S6).
 
@@ -111,7 +111,7 @@ come in the same way, from the plugins that own them (S6).
    it reads may say so with `monitors`, which stays available, though no built-in plugin needs it.
 
     ```ts
-    // plugin-confd: one contributor per file
+    // sous-plugin-confd: one contributor per file
     contribute: (config) => config.root().merge(file.data),   // reads the root, so monitors everything
     ```
 
@@ -194,10 +194,10 @@ Rules:
 11. No events fire while the config is being built (S1).
 
 ```text
-pass 1:  contributors [config-files:sous.config.jsonc, plugin-recipes, skills]
+pass 1:  contributors [config-files:sous.config.jsonc, sous-plugin-recipes, skills]
          skills reads skill-target entities: [claude-code]
-         plugin-recipes loads sous-plugin-codex, which adds skill-target "codex"
-pass 2:  contributors [config-files:sous.config.jsonc, plugin-recipes, sous-plugin-codex, skills]
+         sous-plugin-recipes loads sous-plugin-codex, which adds skill-target "codex"
+pass 2:  contributors [config-files:sous.config.jsonc, sous-plugin-recipes, sous-plugin-codex, skills]
          skills re-runs: the skill-target list it read changed
 pass 3:  nothing anyone read changed → done
 ```
@@ -247,12 +247,12 @@ longer use `"*"`; it stays for any plugin that needs it.
 
 ```ts
 export default definePlugin({
-    name: "plugin-claude-code",
-    after: ["plugin-skills"],                    // default for every contributor this plugin adds
+    name: "sous-plugin-claude-code",
+    after: ["sous-plugin-skills"],                    // default for every contributor this plugin adds
 
     register(sous) {
         sous.config.contribute({
-            id: "claude-code/defaults",          // inherits: after plugin-skills
+            id: "claude-code/defaults",          // inherits: after sous-plugin-skills
             contribute(config) {
                 // ...
             },
@@ -269,9 +269,9 @@ export default definePlugin({
 });
 ```
 
-**The user's files apply last.** `plugin-config-files` adds a contributor for `sous.config.*`, with
+**The user's files apply last.** `sous-plugin-config-files` adds a contributor for `sous.config.*`, with
 apply order 89900, and one for each patch file beside it, with the same number (their ids,
-`config-files/<file name>`, sort after `config-files.main`). `plugin-confd` adds one contributor per
+`config-files/<file name>`, sort after `config-files.main`). `sous-plugin-confd` adds one contributor per
 `conf.d` file, with apply order 90000 plus the number the file's name starts with
 (`500-repos.jsonc` applies at 90500, `610-browser.jsonc` at 90610); a name that starts with no
 number gets 90500, and a number above 9999 counts as 9999 (apply order 99999), with a `debug` report
@@ -289,7 +289,7 @@ bytewise file-name order of today, and files with the same number apply in id or
 (`confd/<file name>`), bytewise.
 
 ```ts
-// plugin-confd
+// sous-plugin-confd
 for (const file of listConfdFiles(project)) {
     sous.config.contribute({
         id: `confd/${file.name}`,
@@ -328,10 +328,10 @@ result: false. In a project whose files don't set it: true.
 ```
 
 ```text
-pass 1:  plugin-skills        adds compilation targets for .claude/skills
+pass 1:  sous-plugin-skills        adds compilation targets for .claude/skills
          confd/610-mac        patch applied last
-         plugin-recipes       loads sous-plugin-codex, which adds skill-target "codex"
-pass 2:  plugin-skills        re-runs: the skill-target list changed; adds a target for .codex/skills
+         sous-plugin-recipes       loads sous-plugin-codex, which adds skill-target "codex"
+pass 2:  sous-plugin-skills        re-runs: the skill-target list changed; adds a target for .codex/skills
          confd/610-mac        re-runs: the config changed; it still applies last, so its patch still wins
 pass 3:  nothing changed → done
 ```
@@ -388,7 +388,7 @@ longer run and their patches are dropped.
 >
 >   -- **Luke Chavers** in an agent session (2026-10-25)
 
-`plugin-recipes` is a contributor that downloads the subscribed recipes the config needs, so their
+`sous-plugin-recipes` is a contributor that downloads the subscribed recipes the config needs, so their
 config files, plugins and content can join the loop. Downloads are cached, so later passes find them
 already there. On a machine with no network and nothing downloaded yet, building the config fails
 and says what it could not download.
@@ -425,7 +425,7 @@ const preview = await ctx.engine.buildConfig({
 
 ### No child process
 
-`plugin-config-files` and `plugin-confd` load every file in-process. `config-kernel.mjs` goes away.
+`sous-plugin-config-files` and `sous-plugin-confd` load every file in-process. `config-kernel.mjs` goes away.
 
 - `.json`, `.jsonc` and `.yaml` files are parsed; `.js` and `.ts` files are imported in the main
   process.
@@ -671,7 +671,7 @@ result                           false     (settled after 1 pass)
 
 ### Patch files
 
-`plugin-config-files` and `plugin-confd` also read files of raw patches, such as
+`sous-plugin-config-files` and `sous-plugin-confd` also read files of raw patches, such as
 `conf.d/720-my-special-thing.patch.json` and `conf.d/721-my-list-of-things.patch.jsonl`. Such a file
 is a contributor whose operations come from the file instead of being computed.
 

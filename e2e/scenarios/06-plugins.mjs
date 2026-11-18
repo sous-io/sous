@@ -37,12 +37,12 @@ export default {
     await t.step("plugins show lists the built-in plugins", () => {
       const r = expectExit(t.sous(["plugins", "show"]));
       const text = r.stdout + r.stderr;
-      for (const name of ["@sous-io/plugin-recipes", "@sous-io/plugin-compiler", "@sous-io/plugin-cli"]) expectIncludes(text, name, "plugins show");
+      for (const name of ["@sous-io/sous-plugin-recipes", "@sous-io/sous-plugin-compiler", "@sous-io/sous-plugin-cli"]) expectIncludes(text, name, "plugins show");
     });
 
     await t.step("plugins show <name> shows one plugin at the running version", () => {
-      const r = expectExit(t.sous(["plugins", "show", "@sous-io/plugin-git"]));
-      expectIncludes(r.stdout + r.stderr, "@sous-io/plugin-git", "plugins show");
+      const r = expectExit(t.sous(["plugins", "show", "@sous-io/sous-plugin-git"]));
+      expectIncludes(r.stdout + r.stderr, "@sous-io/sous-plugin-git", "plugins show");
       expectIncludes(r.stdout + r.stderr, t.sousVersion.replace(/^v/, ""), "plugins show version");
     });
 
@@ -109,7 +109,7 @@ export default {
     });
 
     await t.step("a recipe that ships a sous plugin adds its command once the repository is trusted", () => {
-      const repo = path.join(t.root, "plugin-recipes");
+      const repo = path.join(t.root, "sous-plugin-recipes");
       t.sh(`git init -q ${repo}`);
       expectExit(t.sous(["repo", "init", repo, "--name", "plugrepo", "--namespace", "plug", "--no-hooks"], { cwd: t.root }));
       const manifestPath = "recipes/plug/example/sous.recipe.yaml";

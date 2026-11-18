@@ -90,7 +90,7 @@ A `memory-target` entity, id `codex`, harness `codex`:
 A relative path in either option is put under `${projectRoot}`; one that starts with a variable or is
 absolute is kept as written. The option `memories: false` adds no memory target.
 
-What these fields do belongs to `@sous-io/plugin-memories`, whose contributor turns the entity into a
+What these fields do belongs to `@sous-io/sous-plugin-memories`, whose contributor turns the entity into a
 compilation target: the file named by `prependWith` comes first (skipped silently when missing), then
 the memories, from `.sous/MEMORIES.tpl.md` or its default; the output is marked `harness: "codex"`
 from the entity's `harness`, so the merge of S8 takes it from the Codex build; and an existing file

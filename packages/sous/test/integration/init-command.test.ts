@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { SOUS_VERSION } from "../utils/package-info.js";
-import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "../../../plugin-host/src/gitignore.js";
+import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "../../../sous-plugin-host/src/gitignore.js";
 
 import { binPath } from "../utils/sous-bin.js";
 

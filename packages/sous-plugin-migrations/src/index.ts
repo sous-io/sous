@@ -10,7 +10,7 @@
 
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity } from "@sous-io/sous-plugin-doctor";
-import type {} from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
 import { pendingNotice } from "./notice.js";
 import { DEFAULT_ORDER, isVersion } from "./pending.js";
 import { valuesOf } from "./run.js";

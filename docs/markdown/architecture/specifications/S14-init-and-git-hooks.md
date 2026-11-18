@@ -6,7 +6,7 @@ specification is recorded under "Changes".
 **Serves:** G3 (versatility, always), G4 (predictable and observable), G8 (every core feature works
 without any particular agent tool), G10 (config as desired state).
 
-**Related:** S2 (config building), S6 (concerns and owners: `plugin-init` and the `package-manager`
+**Related:** S2 (config building), S6 (concerns and owners: `sous-plugin-init` and the `package-manager`
 entity).
 
 ## What This Specifies
@@ -157,7 +157,7 @@ a worktree is created, or a branch is checked out
 ### The command
 
 Luke: "I want a new command: `sous init hooks` that all of this is packaged in." It is the intent
-`init.hooks` in `plugin-init`.
+`init.hooks` in `sous-plugin-init`.
 
 - **With a `package.json`:** Husky is added as a dev dependency (`^9.1.7`), with no detection of other
   hook managers. Luke: "`sous init hooks` installs Husky when package.json is there, or a plain hook when
@@ -183,7 +183,7 @@ Luke: "I want a new command: `sous init hooks` that all of this is packaged in."
   hooks`, which honours `core.hooksPath`) runs `sous build` directly, and nothing without a `sous`
   command.
 - **The package manager** is detected through the `package-manager` entities (`ownerOf` in
-  `plugin-update`), which gain `installCommand` and `afterInstallScript`, "so that a) the appropriate
+  `sous-plugin-update`), which gain `installCommand` and `afterInstallScript`, "so that a) the appropriate
   command is added to the hooks, and b) so the package manager's `install` can be run at the end."
 - **The install at the end.** Sous asks before running it; `--install` and `--yes` run it,
   `--no-install` skips it. Luke: "`--yes`, again, runs them automatically (as needed)." Running it
@@ -263,7 +263,7 @@ fi
 
 ### 2026-11-18: How `sous doctor` tells that a project was set up with hooks
 
-Nothing records the choice, so the `git-hooks` doctor check (order 500, in `plugin-init`) reads what
+Nothing records the choice, so the `git-hooks` doctor check (order 500, in `sous-plugin-init`) reads what
 `sous init hooks` committed: a file in `.husky/` holding Sous's marked block. The hooks are on in a
 clone when git's hooks folder (`git rev-parse --git-path hooks`) is Husky's `.husky/_` and it exists,
 which Husky's own command sets up when the package script runs it during an install. A fresh clone

@@ -39,7 +39,7 @@ the stand-ins for the engine.
    - `it("should ...")`: test names always start with "should"
    - Assert on a `BufferedReporter`'s messages, never on captured console output
 
-6. **Run the tests.** `pnpm --filter @sous-io/plugin-<name> test` must pass for the package,
+6. **Run the tests.** `pnpm --filter @sous-io/sous-plugin-<name> test` must pass for the package,
    and `pnpm typecheck` must pass.
 
 7. **Verify coverage.** Run `pnpm test:coverage` and check the SUT's row in the

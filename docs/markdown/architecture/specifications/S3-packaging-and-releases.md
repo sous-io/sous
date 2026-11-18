@@ -28,7 +28,7 @@ packages/
     documents/                surgical JSON, JSONC and YAML editing; the config builder is built on it
     plugin-api/               the plugin interface (see "The Plugin Interface")
     sous/                     the published package: the bin, the built-in plugin list, the bundle
-    plugin-<concern>/         one package per built-in plugin
+    sous-plugin-<concern>/    one package per built-in plugin
 ```
 
 S6 (concerns and owners), section "Packages", lists every package and what it holds.
@@ -38,11 +38,11 @@ looked up by name. At compile time it may import another plugin's types, and not
 
 ```ts
 // Allowed: a type-only import of another plugin's published types.
-import type {} from "@sous-io/plugin-compiler/types";
+import type {} from "@sous-io/sous-plugin-compiler/types";
 
 // Rejected: another package's code. The package's "exports" map lists only "." and "./types",
 // so this fails to resolve.
-import { StateFile } from "@sous-io/plugin-compiler/src/state-file.js";
+import { StateFile } from "@sous-io/sous-plugin-compiler/src/state-file.js";
 ```
 
 Every package is kept, one per concern, even when it is small (ruled 2026-10-25).
@@ -114,8 +114,8 @@ Decided for the plugin:
   example for a new first-party app. It stays in the bundle too.
 
 ```text
-@sous-io/sous 2.4.0              bundles @sous-io/plugin-compiler     (always, through 2.x)
-@sous-io/plugin-compiler 2.4.0   also on npm, for a first-party app   (added in 2.4)
+@sous-io/sous 2.4.0              bundles @sous-io/sous-plugin-compiler     (always, through 2.x)
+@sous-io/sous-plugin-compiler 2.4.0   also on npm, for a first-party app   (added in 2.4)
 ```
 
 ### The bundler

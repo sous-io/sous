@@ -11,7 +11,7 @@ results go to standard output.
 
 ## Context
 
-An intent returned plain data, and plugin-cli held a "view" for every intent that turned that data
+An intent returned plain data, and sous-plugin-cli held a "view" for every intent that turned that data
 into output. So the CLI had to know every plugin's result types, a plugin could not say how its own
 result is shown, and nothing separated a command's result from the messages it printed while it ran.
 

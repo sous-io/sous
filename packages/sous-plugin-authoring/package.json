@@ -1,0 +1,45 @@
+{
+  "name": "@sous-io/sous-plugin-authoring",
+  "version": "1.0.19",
+  "description": "Releasing, submitting and contributing to recipe repositories, and scaffolding one.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/documents": "workspace:*",
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/sous-plugin-config-files": "workspace:*",
+    "@sous-io/sous-plugin-formats": "workspace:*",
+    "@sous-io/sous-plugin-git": "workspace:*",
+    "@sous-io/sous-plugin-init": "workspace:*",
+    "@sous-io/sous-plugin-recipes": "workspace:*",
+    "@sous-io/sous-plugin-refs": "workspace:*",
+    "@sous-io/sous-plugin-variables": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-plugin-cli": "workspace:*",
+    "@sous-io/sous-plugin-host": "workspace:*",
+    "@types/semver": "^7.8.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

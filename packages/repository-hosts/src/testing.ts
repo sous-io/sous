@@ -6,9 +6,9 @@
 
 import { BufferedReporter, definePlugin, NotFoundError } from "@sous-io/plugin-api";
 import type { BuiltConfig, Environment, PluginDefinition, ProjectInfo, SousSchema } from "@sous-io/plugin-api";
-import type { GitResult, GitRunner, GitRunOptions } from "@sous-io/plugin-git/types";
-import type { HostHttp, HostProcesses, HostSousHome, HttpRequest, HttpResponse, ProcessOptions, ProcessResult } from "@sous-io/plugin-host/types";
-import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadOutcome, RepositoryReadRequest, RepositoryToken } from "@sous-io/plugin-recipes/types";
+import type { GitResult, GitRunner, GitRunOptions } from "@sous-io/sous-plugin-git/types";
+import type { HostHttp, HostProcesses, HostSousHome, HttpRequest, HttpResponse, ProcessOptions, ProcessResult } from "@sous-io/sous-plugin-host/types";
+import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadOutcome, RepositoryReadRequest, RepositoryToken } from "@sous-io/sous-plugin-recipes/types";
 import packageJson from "../package.json" with { type: "json" };
 
 /** One recorded HTTP response. */
@@ -247,11 +247,11 @@ const anything = {
 
 /**
  * Stand-ins for the plugins a host plugin depends on, for loading it into a real engine:
- * plugin-recipes (defining `repository-host`), plugin-host and plugin-git. `options` sets
+ * sous-plugin-recipes (defining `repository-host`), sous-plugin-host and sous-plugin-git. `options` sets
  * `plugins.options` for the plugins named.
  *
  * ```ts
- * createEngine({ builtIns: [...standInPlugins({ "@sous-io/plugin-gitlab": { hosts: ["git.example.com"] } }), gitlabPlugin] });
+ * createEngine({ builtIns: [...standInPlugins({ "@sous-io/sous-plugin-gitlab": { hosts: ["git.example.com"] } }), gitlabPlugin] });
  * ```
  */
 export function standInPlugins(options: Record<string, unknown> = {}): PluginDefinition[] {
@@ -259,7 +259,7 @@ export function standInPlugins(options: Record<string, unknown> = {}): PluginDef
 
     return [
         definePlugin({
-            name: "@sous-io/plugin-recipes",
+            name: "@sous-io/sous-plugin-recipes",
             version,
             register(sous) {
                 sous.entities.define("repository-host", anything);
@@ -275,9 +275,9 @@ export function standInPlugins(options: Record<string, unknown> = {}): PluginDef
                 });
             },
         }),
-        definePlugin({ name: "@sous-io/plugin-host", version, register() {} }),
-        definePlugin({ name: "@sous-io/plugin-git", version, register() {} }),
-        definePlugin({ name: "@sous-io/plugin-formats", version, register() {} }),
+        definePlugin({ name: "@sous-io/sous-plugin-host", version, register() {} }),
+        definePlugin({ name: "@sous-io/sous-plugin-git", version, register() {} }),
+        definePlugin({ name: "@sous-io/sous-plugin-formats", version, register() {} }),
     ];
 }
 

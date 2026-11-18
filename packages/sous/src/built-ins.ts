@@ -1,43 +1,43 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
-import { cliPlugin } from "@sous-io/plugin-cli";
-import { hostPlugin } from "@sous-io/plugin-host";
-import { gitPlugin } from "@sous-io/plugin-git";
-import { refsPlugin } from "@sous-io/plugin-refs";
-import { variablesPlugin } from "@sous-io/plugin-variables";
-import { liquidPlugin } from "@sous-io/plugin-liquid";
-import { formatsPlugin } from "@sous-io/plugin-formats";
-import { expressionsPlugin } from "@sous-io/plugin-expressions";
-import { configFilesPlugin } from "@sous-io/plugin-config-files";
-import { confdPlugin } from "@sous-io/plugin-confd";
-import { compilerPlugin } from "@sous-io/plugin-compiler";
-import { recipesPlugin } from "@sous-io/plugin-recipes";
-import { recipeAnswersPlugin } from "@sous-io/plugin-recipe-answers";
-import { skillsPlugin } from "@sous-io/plugin-skills";
-import { memoriesPlugin } from "@sous-io/plugin-memories";
+import { cliPlugin } from "@sous-io/sous-plugin-cli";
+import { hostPlugin } from "@sous-io/sous-plugin-host";
+import { gitPlugin } from "@sous-io/sous-plugin-git";
+import { refsPlugin } from "@sous-io/sous-plugin-refs";
+import { variablesPlugin } from "@sous-io/sous-plugin-variables";
+import { liquidPlugin } from "@sous-io/sous-plugin-liquid";
+import { formatsPlugin } from "@sous-io/sous-plugin-formats";
+import { expressionsPlugin } from "@sous-io/sous-plugin-expressions";
+import { configFilesPlugin } from "@sous-io/sous-plugin-config-files";
+import { confdPlugin } from "@sous-io/sous-plugin-confd";
+import { compilerPlugin } from "@sous-io/sous-plugin-compiler";
+import { recipesPlugin } from "@sous-io/sous-plugin-recipes";
+import { recipeAnswersPlugin } from "@sous-io/sous-plugin-recipe-answers";
+import { skillsPlugin } from "@sous-io/sous-plugin-skills";
+import { memoriesPlugin } from "@sous-io/sous-plugin-memories";
 import { handlersPlugin } from "@sous-io/sous-plugin-handlers";
-import { buildPlugin } from "@sous-io/plugin-build";
-import { harnessesPlugin } from "@sous-io/plugin-harnesses";
-import { authoringPlugin } from "@sous-io/plugin-authoring";
-import { initPlugin } from "@sous-io/plugin-init";
-import { updatePlugin } from "@sous-io/plugin-update";
+import { buildPlugin } from "@sous-io/sous-plugin-build";
+import { harnessesPlugin } from "@sous-io/sous-plugin-harnesses";
+import { authoringPlugin } from "@sous-io/sous-plugin-authoring";
+import { initPlugin } from "@sous-io/sous-plugin-init";
+import { updatePlugin } from "@sous-io/sous-plugin-update";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import { migrationsPlugin } from "@sous-io/sous-plugin-migrations";
-import { inspectPlugin } from "@sous-io/plugin-inspect";
-import { mcpPlugin } from "@sous-io/plugin-mcp";
-import { npmPlugin } from "@sous-io/plugin-npm";
-import { pnpmPlugin } from "@sous-io/plugin-pnpm";
-import { yarnPlugin } from "@sous-io/plugin-yarn";
-import { githubPlugin } from "@sous-io/plugin-github";
-import { gitlabPlugin } from "@sous-io/plugin-gitlab";
-import { localPlugin } from "@sous-io/plugin-local";
-import { claudeCodePlugin } from "@sous-io/plugin-claude-code";
+import { inspectPlugin } from "@sous-io/sous-plugin-inspect";
+import { mcpPlugin } from "@sous-io/sous-plugin-mcp";
+import { npmPlugin } from "@sous-io/sous-plugin-npm";
+import { pnpmPlugin } from "@sous-io/sous-plugin-pnpm";
+import { yarnPlugin } from "@sous-io/sous-plugin-yarn";
+import { githubPlugin } from "@sous-io/sous-plugin-github";
+import { gitlabPlugin } from "@sous-io/sous-plugin-gitlab";
+import { localPlugin } from "@sous-io/sous-plugin-local";
+import { claudeCodePlugin } from "@sous-io/sous-plugin-claude-code";
 import { codexPlugin } from "@sous-io/sous-plugin-codex";
 import { editorPlugin } from "@sous-io/sous-plugin-editor";
 import packageJson from "../package.json" with { type: "json" };
 
 /**
  * Loads the plugins named in `SOUS_PLUGINS` (separated by commas), for one run, by adding them to
- * `plugins.load`. A stopgap until `plugin-config-files` owns the `SOUS_*` variables; a project's
+ * `plugins.load`. A stopgap until `sous-plugin-config-files` owns the `SOUS_*` variables; a project's
  * files can list plugins the same way.
  */
 export const envPluginsPlugin: PluginDefinition = definePlugin({

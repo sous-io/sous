@@ -272,7 +272,7 @@ describe("the config loop", () => {
                 contribute: (config) => config.atPath("compilation.includeSourceComments").setValue(true),
             },
         ]);
-        const userFile = contributorsPlugin("plugin-config-files", [
+        const userFile = contributorsPlugin("sous-plugin-config-files", [
             {
                 id: "config-files.main",
                 contribute: (config) => config.root().merge({ compilation: { includeSourceComments: false } }),
@@ -317,7 +317,7 @@ describe("the config loop", () => {
             },
         ];
         const order: string[] = [];
-        const confd = plugin("plugin-confd", (sous) => {
+        const confd = plugin("sous-plugin-confd", (sous) => {
             let previous = "config-files.main";
 
             for (const file of files) {
@@ -334,7 +334,7 @@ describe("the config loop", () => {
                 previous = id;
             }
         });
-        const main = contributorsPlugin("plugin-config-files", [
+        const main = contributorsPlugin("sous-plugin-config-files", [
             {
                 id: "config-files.main",
                 contribute: (config) => {
@@ -419,7 +419,7 @@ describe("the config loop", () => {
         const codex = plugin("sous-plugin-codex", (sous) => {
             sous.entities.add("skill-target", { id: "codex" });
         });
-        const skills = plugin("plugin-skills", (sous) => {
+        const skills = plugin("sous-plugin-skills", (sous) => {
             sous.entities.define("skill-target", { "~standard": { version: 1, vendor: "t", validate: (value) => ({ value }) } });
             sous.entities.add("skill-target", { id: "claude-code" });
             sous.config.contribute({
@@ -435,8 +435,8 @@ describe("the config loop", () => {
                 },
             });
         });
-        const recipes = contributorsPlugin("plugin-recipes", [
-            { id: "plugin-recipes", contribute: (config) => config.atPath("plugins.load").append("sous-plugin-codex") },
+        const recipes = contributorsPlugin("sous-plugin-recipes", [
+            { id: "sous-plugin-recipes", contribute: (config) => config.atPath("plugins.load").append("sous-plugin-codex") },
         ]);
         const { engine } = makeEngine([keysPlugin("compilation"), recipes, skills], {
             importModule: async () => ({ default: codex }),
@@ -770,7 +770,7 @@ describe("the config loop", () => {
                 return { id: name, after, contribute: (config: import("@sous-io/plugin-api").ConfigBuilder) => config.apply(parsePatchFile(text, kind, name)) };
             }),
         ];
-        const { engine } = makeEngine([keysPlugin("compilation", "tools", "_vars"), contributorsPlugin("plugin-confd", contributors)]);
+        const { engine } = makeEngine([keysPlugin("compilation", "tools", "_vars"), contributorsPlugin("sous-plugin-confd", contributors)]);
 
         const built = await engine.buildConfig();
 

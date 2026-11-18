@@ -208,7 +208,7 @@ first real need appears.
   `forHarness("")` gives the build with no harness, before the merge.
 - `ConfigLayer.build` and `Contribution.build` (`string`): the build a change was made in.
 - The entity kind `harness-list` (`{ id, path, description? }`), defined by core.
-- The entity kind `harness` is defined by `@sous-io/plugin-harnesses`; core only reads its ids.
+- The entity kind `harness` is defined by `@sous-io/sous-plugin-harnesses`; core only reads its ids.
 
 ## Seeing It
 

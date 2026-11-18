@@ -252,7 +252,7 @@ reported; the removal stands. A recipe or plugin removed by hand gets no call:
 
 ### 2026-11-18: The build order, as built
 
-The `build` intent (`plugin-build`) now runs the purposes in the order above. What the agent decided
+The `build` intent (`sous-plugin-build`) now runs the purposes in the order above. What the agent decided
 while joining the pieces, not yet reviewed by Luke:
 
 - The `check` handlers run after the recipes are prepared (pinned, fetched, restored), since a
@@ -264,7 +264,7 @@ while joining the pieces, not yet reviewed by Luke:
 - `sous prune` (a build that compiles nothing) runs no handler and no edit.
 - Watch mode runs every step on each rebuild, a partial one included, with the flags it started
   with. A partial rebuild may rewrite a file a recipe edits, so the editor must run after it.
-- The handlers and the editor run only when their plugins are loaded: `plugin-build` asks whether
+- The handlers and the editor run only when their plugins are loaded: `sous-plugin-build` asks whether
   the intent exists, so a build without them is the compiler alone.
 - The flags `--ignore-failed-checks`, `--ignore-failed-assertions` and `--keep-going` are on
   `sous build` only. The other commands that build (`init`, `launch`, `subscription add`) pass none,

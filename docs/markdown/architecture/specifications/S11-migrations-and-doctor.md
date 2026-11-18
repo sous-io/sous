@@ -20,12 +20,12 @@ command reports a project's health, and every command says when migrations are w
 | Concern | Owner |
 |---|---|
 | Migrations: registering them, deciding what is pending, running them, the notice | `@sous-io/sous-plugin-migrations` |
-| The version a project last migrated to, stored in `sous.lock.json` | `@sous-io/plugin-recipes` (`recipes.lock`), the lockfile's owner; the migrations plugin decides what the value means |
+| The version a project last migrated to, stored in `sous.lock.json` | `@sous-io/sous-plugin-recipes` (`recipes.lock`), the lockfile's owner; the migrations plugin decides what the value means |
 | `sous doctor`: the `doctor-check` entity kind, running checks, asking before fixes | `@sous-io/sous-plugin-doctor` |
 | Each check | The plugin that owns what it checks; the doctor plugin's own checks read other owners only through their services and intents |
-| Upgrading sous itself (`sous upgrade`) | `@sous-io/plugin-update` |
-| Updating a project's recipes (`sous update`) | `@sous-io/plugin-recipes` |
-| Command words, aliases and help | `@sous-io/plugin-cli` |
+| Upgrading sous itself (`sous upgrade`) | `@sous-io/sous-plugin-update` |
+| Updating a project's recipes (`sous update`) | `@sous-io/sous-plugin-recipes` |
+| Command words, aliases and help | `@sous-io/sous-plugin-cli` |
 
 ## Migrations
 
@@ -220,7 +220,7 @@ never be migrated. The agent's change; not yet reviewed by Luke.
 
 ### 2026-11-18: The `_if` migration
 
-`plugin-compiler` adds `compiler/if-to-expression` at version `1.0.20` (the release after 1.0.19,
+`sous-plugin-compiler` adds `compiler/if-to-expression` at version `1.0.20` (the release after 1.0.19,
 so it is pending for every project migrated by 1.0.19 or earlier, whether the next release is a
 patch or a minor). In each `.json`, `.jsonc`, `.yaml` or `.yml` file among `sous.config.*` and
 `conf.d/` (patch files left out), every item of an `outputs` list holding `_if` becomes
@@ -233,7 +233,7 @@ Luke's ruling that `_if` is removed and existing configs are converted by a migr
 
 ### 2026-11-18: The git hooks, check handlers and assertions checks are built
 
-The three checks at 500, 600 and 700 are built, each by its owner: `plugin-init` (`git-hooks`, see
+The three checks at 500, 600 and 700 are built, each by its owner: `sous-plugin-init` (`git-hooks`, see
 S14), `sous-plugin-handlers` (`check-handlers`, see S13) and `sous-plugin-editor` (`assertions`,
 see S9). Each owner depends on `sous-plugin-doctor`.
 

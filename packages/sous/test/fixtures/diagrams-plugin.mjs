@@ -6,7 +6,7 @@ import { z } from "zod";
 export default definePlugin({
     name: "sous-plugin-diagrams",
     version: "1.0.0",
-    dependsOn: { "@sous-io/plugin-cli": "*" },
+    dependsOn: { "@sous-io/sous-plugin-cli": "*" },
 
     register(sous) {
         sous.entities.add("cli-group", { id: "diagrams", command: ["diagrams"], summary: "Render the project's diagrams" });

@@ -167,7 +167,7 @@ export interface ConfigBuilder extends Reporter {
  * ```ts
  * sous.config.contribute({
  *     id: "diagrams",
- *     after: ["@sous-io/plugin-skills"],
+ *     after: ["@sous-io/sous-plugin-skills"],
  *
  *     contribute(config) {
  *         if (config.atPath("diagrams.enabled").valueOr(true)) {

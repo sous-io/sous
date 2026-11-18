@@ -15,7 +15,7 @@ describe("the engine handle", () => {
         let handleSeen: import("@sous-io/plugin-api").EngineHandle | undefined;
         const { engine } = makeEngine(
             [
-                plugin("plugin-cli", (sous) => {
+                plugin("sous-plugin-cli", (sous) => {
                     handleSeen = sous.engine;
                     sous.intents.add({ intent: "version", summary: "Print the version", handle: (_input, ctx) => valued(ctx.engine.app.version) });
                     sous.frontEnds.add({
@@ -41,13 +41,13 @@ describe("the engine handle", () => {
 
         expect(handle).toBe(engine.handle);
         expect(handle.config).toBe(engine.config);
-        expect(handle.intents.list().map((info) => [info.definition.intent, info.plugin])).toEqual([["version", "plugin-cli"]]);
+        expect(handle.intents.list().map((info) => [info.definition.intent, info.plugin])).toEqual([["version", "sous-plugin-cli"]]);
         expect(engine.intentCatalog.get("version")?.definition.summary).toBe("Print the version");
         expect((await handle.submit({ intent: "version" })).toPlain()).toEqual({ value: "1.0.0" });
         expect(handle.timings.get("intent:version")?.count).toBe(2);
-        expect(handle.plugins().map((info) => info.name)).toEqual(["plugin-cli"]);
+        expect(handle.plugins().map((info) => info.name)).toEqual(["sous-plugin-cli"]);
         await expect(handle.whenBackgroundIntentsReturn()).resolves.toBeUndefined();
-        expect(engine.frontEnd("cli").plugin).toBe("plugin-cli");
+        expect(engine.frontEnd("cli").plugin).toBe("sous-plugin-cli");
     });
 
     /**

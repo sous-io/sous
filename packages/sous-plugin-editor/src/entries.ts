@@ -264,7 +264,7 @@ export interface ItemOwner {
 }
 
 /** The plugins whose contributors apply the project's own config files. */
-const PROJECT_PLUGINS = new Set(["@sous-io/plugin-config-files", "@sous-io/plugin-confd"]);
+const PROJECT_PLUGINS = new Set(["@sous-io/sous-plugin-config-files", "@sous-io/sous-plugin-confd"]);
 
 /** How a declarer is named: the recipe, `project` for the project's config files, or the plugin. */
 export function declarerLabel(owner: ItemOwner | undefined, recipe: string | undefined): string {

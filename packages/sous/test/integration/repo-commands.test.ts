@@ -5,10 +5,10 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import YAML from "yaml";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
-import { parseIndexFile } from "../../../plugin-formats/src/formats/index-file.js";
-import { parseRecipeManifest } from "../../../plugin-formats/src/formats/recipe-manifest.js";
-import { parseRepoManifest } from "../../../plugin-formats/src/formats/repo-manifest.js";
-import { parseLinksMap, type LinksMap } from "../../../plugin-formats/src/formats/links-map.js";
+import { parseIndexFile } from "../../../sous-plugin-formats/src/formats/index-file.js";
+import { parseRecipeManifest } from "../../../sous-plugin-formats/src/formats/recipe-manifest.js";
+import { parseRepoManifest } from "../../../sous-plugin-formats/src/formats/repo-manifest.js";
+import { parseLinksMap, type LinksMap } from "../../../sous-plugin-formats/src/formats/links-map.js";
 import {
   readManagedLayer,
   REPOS_LAYER_FILENAME,

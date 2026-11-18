@@ -29,7 +29,7 @@ Every rule below is marked as ruled by the user (quoted), decided in the plannin
 - Config building (S2) decides when expressions are evaluated: each config file's contributor (the
   code that adds that file to the config) evaluates them before it adds the file's values, and
   evaluates the file again whenever a variable it read changes.
-- `plugin-expressions` owns which expression languages exist. Each language is an
+- `sous-plugin-expressions` owns which expression languages exist. Each language is an
   `expression-language` entity (an object of a kind a plugin defines; see S1, the engine); Liquid is the first and the default. A plugin can add a
   language by adding an entity.
 

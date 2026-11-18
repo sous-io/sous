@@ -40,7 +40,7 @@ describe("services", () => {
      */
     it("should stack wrappers in plugin order and use a replacement", async () => {
         const { engine } = makeEngine([
-            plugin("plugin-git", (sous) => sous.services.add("git.runner", () => ({ name: () => "git" }), { lifetime: "singleton" })),
+            plugin("sous-plugin-git", (sous) => sous.services.add("git.runner", () => ({ name: () => "git" }), { lifetime: "singleton" })),
             plugin("logger", (sous) => sous.services.wrap("git.runner", (inner) => ({ name: () => `log(${(inner as { name(): string }).name()})` }))),
             plugin("tracer", (sous) => sous.services.wrap("git.runner", (inner) => ({ name: () => `trace(${(inner as { name(): string }).name()})` }))),
             plugin("fast", (sous) => sous.services.replace("git.runner", () => ({ name: () => "fast-git" }), { lifetime: "singleton" })),
@@ -56,7 +56,7 @@ describe("services", () => {
      * picks one, and sous warns on every build that the other may not work.
      */
     it("should refuse two replacements unless services.replace picks one", async () => {
-        const original = plugin("plugin-git", (sous) => sous.services.add("git.runner", () => "git"));
+        const original = plugin("sous-plugin-git", (sous) => sous.services.add("git.runner", () => "git"));
         const fast = plugin("sous-plugin-fast-git", (sous) => sous.services.replace("git.runner", () => "fast"));
         const lfs = plugin("sous-plugin-git-lfs", (sous) => sous.services.replace("git.runner", () => "lfs"));
         const error = (await makeEngine([original, fast, lfs]).engine.buildConfig().catch((e) => e)) as ConflictError;
@@ -207,8 +207,8 @@ describe("entities", () => {
     it("should check entries against their kind's schema", async () => {
         const harness = jsonSchema({ type: "object", required: ["id"], properties: { id: { type: "string" }, command: { type: "string", default: "claude" } } });
         const ok = makeEngine([
-            plugin("plugin-harnesses", (sous) => sous.entities.define("harness", harness)),
-            plugin("plugin-claude-code", (sous) => sous.entities.add("harness", { id: "claude" })),
+            plugin("sous-plugin-harnesses", (sous) => sous.entities.define("harness", harness)),
+            plugin("sous-plugin-claude-code", (sous) => sous.entities.add("harness", { id: "claude" })),
         ]);
         const built = await ok.engine.buildConfig();
 
@@ -218,7 +218,7 @@ describe("entities", () => {
 
         await expect(
             makeEngine([
-                plugin("plugin-harnesses", (sous) => sous.entities.define("harness", harness)),
+                plugin("sous-plugin-harnesses", (sous) => sous.entities.define("harness", harness)),
                 plugin("bad", (sous) => sous.entities.add("harness", { id: "x", command: 3 } as never)),
             ]).engine.buildConfig(),
         ).rejects.toThrow('bad added a "harness" entity "x" that does not match its schema.');
@@ -281,7 +281,7 @@ describe("entities", () => {
     it("should let entity methods read the built config through ctx", async () => {
         const { engine } = makeEngine([
             keysPlugin("tools"),
-            plugin("plugin-claude-code", (sous) => {
+            plugin("sous-plugin-claude-code", (sous) => {
                 sous.config.contribute({ id: "t", contribute: (config) => config.atPath("tools.claude.command").set("claude-beta") });
                 sous.entities.add("harness", {
                     id: "claude",
@@ -289,7 +289,7 @@ describe("entities", () => {
                     Ctor: class {},
                 } as never);
             }),
-            plugin("plugin-harnesses", (sous) =>
+            plugin("sous-plugin-harnesses", (sous) =>
                 sous.intents.add({
                     intent: "launch",
                     handle: (_input, ctx) => IntentOutputs.of({ command: (ctx.entities.get("harness", "claude") as unknown as { launch(a: string[], c: unknown): unknown[] }).launch(["--x"], ctx) }),
@@ -300,7 +300,7 @@ describe("entities", () => {
         await engine.buildConfig();
 
         expect((await engine.submit({ intent: "launch" })).toPlain()).toEqual({ command: ["claude-beta", "--x"] });
-        expect(engine.timings.get("entity.method:harness:claude.launch")).toMatchObject({ count: 1, plugin: "plugin-claude-code" });
+        expect(engine.timings.get("entity.method:harness:claude.launch")).toMatchObject({ count: 1, plugin: "sous-plugin-claude-code" });
     });
 
     /**

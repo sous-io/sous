@@ -42,7 +42,7 @@ await esbuild.build({
 });
 
 // tiktoken loads tiktoken_bg.wasm from next to the code that loads it: the bundle.
-const compilerRequire = createRequire(path.resolve(packageDir, "../plugin-compiler/package.json"));
+const compilerRequire = createRequire(path.resolve(packageDir, "../sous-plugin-compiler/package.json"));
 
 copyFileSync(path.join(path.dirname(compilerRequire.resolve("tiktoken")), "tiktoken_bg.wasm"), path.join(path.dirname(bundleFile), "tiktoken_bg.wasm"));
 

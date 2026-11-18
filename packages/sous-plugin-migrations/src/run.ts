@@ -19,7 +19,7 @@
  */
 
 import { InputError, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, SousError, TextBlock, type Context } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
 import { isVersion, semverLess, versionReached, versionToStore } from "./pending.js";
 import type { MigrationEntity, MigrationQuestion, MigrationReport, MigrationsRunInput, MigrationsRunResult, PlannedAnswer, UnansweredQuestion } from "./types.js";
 

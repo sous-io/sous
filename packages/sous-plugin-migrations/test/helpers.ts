@@ -6,7 +6,7 @@
 
 import { BufferedReporter, definePlugin, type Prompter, type Sous } from "@sous-io/plugin-api";
 import { createEngine } from "@sous-io/core";
-import type { Lockfile } from "@sous-io/plugin-formats/types";
+import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import { migrationsPlugin } from "../src/index.js";
 import type { MigrationDefinition } from "../src/types.js";
@@ -21,7 +21,7 @@ export function emptyLock(migratedVersion?: string): Lockfile {
     return { formatVersion: 1, repos: {}, recipes: {}, ...(migratedVersion === undefined ? {} : { migratedVersion }) };
 }
 
-/** Stands in for plugin-recipes' `recipes.lock`: only what migrations use. */
+/** Stands in for sous-plugin-recipes' `recipes.lock`: only what migrations use. */
 function lockPlugin(state: LockState) {
     return definePlugin({
         name: "test-lock",

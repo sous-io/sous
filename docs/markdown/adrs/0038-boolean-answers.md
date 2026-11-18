@@ -31,7 +31,7 @@ answers (ADR 0032), the same text reached config expressions too.
   `no`, `on`, `off`, `1`, `0`), and so is a default.
 - A `variable-source` entity may name the variables it gives that are booleans (`booleans()`).
   The recipe-answers source names every boolean definition; `variables.booleans` collects them.
-- Liquid sees a declared boolean as `true` or `false`: every engine plugin-liquid builds (so every
+- Liquid sees a declared boolean as `true` or `false`: every engine sous-plugin-liquid builds (so every
   template) and the config expression evaluator. `${name}` interpolation still gives the text.
 - Only booleans change. Numbers stay text (the agent's choice; gh-161 left it open), and the
   commands that report a variable still show its stored text.

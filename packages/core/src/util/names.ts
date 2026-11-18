@@ -9,7 +9,7 @@ export const CORE_PLUGIN = "@sous-io/core";
  * A plugin's prefix: its package name without the scope and without `plugin-` or `sous-plugin-`.
  *
  * ```ts
- * pluginPrefix("@sous-io/plugin-compiler");   // "compiler"
+ * pluginPrefix("@sous-io/sous-plugin-compiler");   // "compiler"
  * pluginPrefix("sous-plugin-diagrams");       // "diagrams"
  * ```
  */

@@ -1,10 +1,10 @@
 /**
- * What the `repository-host` plugins (plugin-github, plugin-gitlab, plugin-local) share, so each
+ * What the `repository-host` plugins (sous-plugin-github, sous-plugin-gitlab, sous-plugin-local) share, so each
  * part has one implementation: taking URLs apart, the token sources and the one-line check on
  * every token command, the HTTP and git read strategies, fetching a recipe's folder, and driving a host's CLI.
  *
  * Not a plugin: a library, like `documents`. Trying the strategies in order, remembering what
- * worked and the combined error belong to `recipes.index-cache` (plugin-recipes), which reads every
+ * worked and the combined error belong to `recipes.index-cache` (sous-plugin-recipes), which reads every
  * host's `readStrategies` and `tokenSources`.
  */
 

@@ -5,7 +5,7 @@
  */
 
 import type { Environment } from "@sous-io/plugin-api";
-import type { HostProcesses } from "@sous-io/plugin-host/types";
+import type { HostProcesses } from "@sous-io/sous-plugin-host/types";
 import type { HandlersSystem } from "./types.js";
 
 /** How long `<command> --version` may take before its version counts as unreadable. */

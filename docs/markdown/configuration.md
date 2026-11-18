@@ -76,7 +76,7 @@ The Claude Code plugin's options move the file or switch it off:
 {
     "plugins": {
         "options": {
-            "@sous-io/plugin-claude-code": {
+            "@sous-io/sous-plugin-claude-code": {
                 // Where the memories file goes. Default: ${projectRoot}/.claude/rules/SOUS-MEMORIES.md
                 "memoriesOutputPath": "${projectRoot}/CLAUDE.md",
                 // false writes no memories file for Claude Code at all.

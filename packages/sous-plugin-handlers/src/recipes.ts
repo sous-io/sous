@@ -13,8 +13,8 @@
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { HANDLER_PURPOSES, SousError, type ConfigBuilder, type ContributorDefinition } from "@sous-io/plugin-api";
-import { insideRecipe } from "@sous-io/plugin-recipes";
-import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/plugin-recipes/types";
+import { insideRecipe } from "@sous-io/sous-plugin-recipes";
+import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/sous-plugin-recipes/types";
 import type { HandlerEntity, RecipeHandlerDeclaration } from "./types.js";
 
 /** The contributors' ids. */
@@ -24,7 +24,7 @@ export const RECIPE_HANDLERS_CONTRIBUTOR = "handlers/recipes";
 /** The config key holding a recipe's handlers as values. */
 export const RECIPE_HANDLERS_KEY = "recipes.handlers";
 
-/** The contributor of plugin-recipes that adds `active-recipe` entities. */
+/** The contributor of sous-plugin-recipes that adds `active-recipe` entities. */
 const FETCH_CONTRIBUTOR = "recipes.fetch";
 
 /** The active recipes that may contribute handlers: held through `subscribes`, from a trusted, switched-on repository. */

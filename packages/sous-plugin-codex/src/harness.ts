@@ -6,8 +6,8 @@
  * mode (`codex exec`) has its own output format, and nothing here has been run against Codex.
  */
 
-import { launchArguments, toolSettings } from "@sous-io/plugin-harnesses";
-import type {} from "@sous-io/plugin-host/types";
+import { launchArguments, toolSettings } from "@sous-io/sous-plugin-harnesses";
+import type {} from "@sous-io/sous-plugin-host/types";
 import type { CodexHarness } from "./types.js";
 
 /** The harness's id, and the key its settings are under. */

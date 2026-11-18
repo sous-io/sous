@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { type Budget, createEngine, DEFAULT_BUDGETS, type Engine } from "@sous-io/core";
 import type { Environment, ProjectInfo, RunPlan, TimingCategory } from "@sous-io/plugin-api";
 import { isSousError } from "@sous-io/plugin-api";
-import { projectEnvironment } from "@sous-io/plugin-config-files";
+import { projectEnvironment } from "@sous-io/sous-plugin-config-files";
 import { BUILT_IN_PLUGINS } from "./built-ins.js";
 import { findProject, locateProject, readOverrides } from "./project.js";
 import { loadsOnlyBuiltIns, recordStartupFact, startupKey } from "./startup-fact.js";

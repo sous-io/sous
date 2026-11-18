@@ -165,7 +165,7 @@ async function syncLockedCore(
   version: string,
   hash: string
 ): Promise<LockSyncResult | undefined> {
-  const { lockfileFormat } = await import("../packages/plugin-formats/src/index.js");
+  const { lockfileFormat } = await import("../packages/sous-plugin-formats/src/index.js");
   const lockfilePath = path.join(repoRoot, LOCKFILE_PATH);
   if (!fs.existsSync(lockfilePath)) return undefined;
 
@@ -199,9 +199,9 @@ async function syncLockedCore(
  * @param repoRoot - The root of the sous repository to work on.
  */
 export async function syncCoreVersion(repoRoot: string): Promise<SyncResult> {
-  const { hashDirectory } = await import("../packages/plugin-formats/src/index.js");
-  const { findRecipeManifest } = await import("../packages/plugin-formats/src/manifests.js");
-  const { setRecipeVersion } = await import("../packages/plugin-authoring/src/release/bump.js");
+  const { hashDirectory } = await import("../packages/sous-plugin-formats/src/index.js");
+  const { findRecipeManifest } = await import("../packages/sous-plugin-formats/src/manifests.js");
+  const { setRecipeVersion } = await import("../packages/sous-plugin-authoring/src/release/bump.js");
 
   const version = readSousVersion(repoRoot);
 

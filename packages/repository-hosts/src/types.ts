@@ -10,8 +10,8 @@ import type {
     RepositoryReadStrategy,
     RepositoryToken,
     RepositoryTokenSource,
-} from "@sous-io/plugin-recipes/types";
-import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
+} from "@sous-io/sous-plugin-recipes/types";
+import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 
 /** What looking for a token found: a token, or why there is none (`undefined`: say nothing). */
 export type TokenLookup = { readonly token: RepositoryToken } | { readonly missing: string | undefined };
@@ -30,5 +30,5 @@ export interface ExplainedReadStrategy extends RepositoryReadStrategy {
     fix?(repository: CanonicalRepository): string | undefined;
 }
 
-/** The `plugin-refs` types a host's methods take and give, for host plugins that import nothing else from it. */
-export type { CanonicalRepository, LocationReading, WrittenLocation } from "@sous-io/plugin-refs/types";
+/** The `sous-plugin-refs` types a host's methods take and give, for host plugins that import nothing else from it. */
+export type { CanonicalRepository, LocationReading, WrittenLocation } from "@sous-io/sous-plugin-refs/types";

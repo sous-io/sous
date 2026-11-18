@@ -254,10 +254,10 @@ describe("plugin info and names", () => {
 
     /** A service another plugin declares implementable is not warned about. */
     it("should not warn about a name the owning plugin declares implementable", async () => {
-        const compiler = plugin("@sous-io/plugin-compiler", (sous) => sous.services.add("compiler.state", () => ({})), {
+        const compiler = plugin("@sous-io/sous-plugin-compiler", (sous) => sous.services.add("compiler.state", () => ({})), {
             implementable: ["compiler.namespace-resolver"],
         });
-        const recipes = plugin("@sous-io/plugin-recipes", (sous) => sous.services.add("compiler.namespace-resolver", () => ({})));
+        const recipes = plugin("@sous-io/sous-plugin-recipes", (sous) => sous.services.add("compiler.namespace-resolver", () => ({})));
         const { engine, reporter } = makeEngine([compiler, recipes]);
         const built: BuiltConfig = await engine.buildConfig();
 

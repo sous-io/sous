@@ -18,8 +18,8 @@ afterEach(() => {
     tmp.cleanup();
 });
 
-/** Stands in for plugin-compiler and plugin-variables, which the editor depends on. */
-const standIns = (["@sous-io/plugin-compiler", "@sous-io/plugin-variables"] as const).map((name) =>
+/** Stands in for sous-plugin-compiler and sous-plugin-variables, which the editor depends on. */
+const standIns = (["@sous-io/sous-plugin-compiler", "@sous-io/sous-plugin-variables"] as const).map((name) =>
     definePlugin({ name, version: editorPlugin.version, register() {} }),
 );
 

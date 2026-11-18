@@ -1,7 +1,7 @@
 /**
  * `@sous-io/sous-plugin-editor`: edits to files Sous does not own.
  *
- * - The `editor.edits` config key: the master list. Recipes (through `plugin-recipes`), plugins
+ * - The `editor.edits` config key: the master list. Recipes (through `sous-plugin-recipes`), plugins
  *   and the project add entries to it; nothing else is read (law L8).
  * - The internal `editor.apply` intent: applies the list after the compiler, undoes what is no
  *   longer declared, checks the assertions, writes each file once and keeps the history.
@@ -14,8 +14,8 @@
 
 import path from "node:path";
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
-import { createTokenCounter } from "@sous-io/plugin-compiler";
-import type {} from "@sous-io/plugin-variables/types";
+import { createTokenCounter } from "@sous-io/sous-plugin-compiler";
+import type {} from "@sous-io/sous-plugin-variables/types";
 import { assertionsCheck } from "./doctor-check.js";
 import { applyIntent } from "./intent.js";
 import { EDITOR_CONFIG_KEY } from "./schema.js";
@@ -45,8 +45,8 @@ export const editorPlugin: PluginDefinition = definePlugin({
     version: packageJson.version,
     description: "Edits to files Sous does not own: declared, recorded, undone and checked by assertions; and the editor service.",
     dependsOn: {
-        "@sous-io/plugin-compiler": `^${packageJson.version}`,
-        "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-compiler": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-variables": `^${packageJson.version}`,
         "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 

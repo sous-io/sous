@@ -696,7 +696,7 @@
       "type": "object",
       "properties": {
         "contents": {
-          "description": "What each active recipe's manifest publishes, one entry per contents group, added by plugin-recipes (read-only in practice).",
+          "description": "What each active recipe's manifest publishes, one entry per contents group, added by sous-plugin-recipes (read-only in practice).",
           "type": "array",
           "default": [],
           "items": {

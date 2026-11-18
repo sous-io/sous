@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const scriptPath = path.join(repoRoot, "scripts", "sync-core-version.mts");

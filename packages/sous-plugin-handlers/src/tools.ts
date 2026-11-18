@@ -7,9 +7,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SousError, type ConfigBuilder, type Context, type Environment, type ProjectInfo, type ServiceReader } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-host/types";
-import type {} from "@sous-io/plugin-recipe-answers/types";
-import type {} from "@sous-io/plugin-variables/types";
+import type {} from "@sous-io/sous-plugin-host/types";
+import type {} from "@sous-io/sous-plugin-recipe-answers/types";
+import type {} from "@sous-io/sous-plugin-variables/types";
 import type { HandlerHelpers, HandlerReportEntry, HandlerTools, HandlerUtils, HandlersSystem } from "./types.js";
 
 /** The service a direct edit goes through, from `@sous-io/sous-plugin-editor`. */
@@ -71,7 +71,7 @@ export function createHelpers(sources: HelperSources, report: ReportCollector["r
         },
         process: {
             run(command, args = [], options = {}) {
-                const processes = needService<import("@sous-io/plugin-host/types").HostProcesses>(sources.services(), "host.processes", "@sous-io/plugin-host");
+                const processes = needService<import("@sous-io/sous-plugin-host/types").HostProcesses>(sources.services(), "host.processes", "@sous-io/sous-plugin-host");
 
                 return processes.run(command, args, {
                     cwd: options.cwd === undefined ? project.root : inProject(project, options.cwd),
@@ -121,7 +121,7 @@ export function createHelpers(sources: HelperSources, report: ReportCollector["r
         },
         files: {
             async removeMatching(pattern) {
-                const globs = needService<import("@sous-io/plugin-host/types").HostGlobs>(sources.services(), "host.globs", "@sous-io/plugin-host");
+                const globs = needService<import("@sous-io/sous-plugin-host/types").HostGlobs>(sources.services(), "host.globs", "@sous-io/sous-plugin-host");
                 const matched = await globs.match(pattern, { cwd: project.root, dot: true, onlyFiles: true });
 
                 for (const file of matched) {

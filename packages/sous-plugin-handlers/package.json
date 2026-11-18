@@ -24,11 +24,11 @@
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/sous-plugin-doctor": "workspace:*",
-    "@sous-io/plugin-formats": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*",
-    "@sous-io/plugin-recipe-answers": "workspace:*",
-    "@sous-io/plugin-recipes": "workspace:*",
-    "@sous-io/plugin-variables": "workspace:*"
+    "@sous-io/sous-plugin-formats": "workspace:*",
+    "@sous-io/sous-plugin-host": "workspace:*",
+    "@sous-io/sous-plugin-recipe-answers": "workspace:*",
+    "@sous-io/sous-plugin-recipes": "workspace:*",
+    "@sous-io/sous-plugin-variables": "workspace:*"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*"

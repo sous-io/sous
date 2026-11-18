@@ -5,8 +5,8 @@
 
 import { ConfigError } from "@sous-io/plugin-api";
 import type { Environment } from "@sous-io/plugin-api";
-import type { ProcessResult } from "@sous-io/plugin-host/types";
-import type { RepositoryAuthStatus, RepositoryHostCli, RepositoryHostContext } from "@sous-io/plugin-recipes/types";
+import type { ProcessResult } from "@sous-io/sous-plugin-host/types";
+import type { RepositoryAuthStatus, RepositoryHostCli, RepositoryHostContext } from "@sous-io/sous-plugin-recipes/types";
 import { commandDirectory } from "./token-sources.js";
 
 /** How to run one CLI command. */

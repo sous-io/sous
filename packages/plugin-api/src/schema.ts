@@ -6,7 +6,7 @@
  * from a schema (the CLI, MCP) also need its JSON Schema, which the Standard JSON Schema interface
  * gives; zod 4 has both.
  *
- * For plugins that want no schema library at all (core and plugin-cli among them, to keep start-up
+ * For plugins that want no schema library at all (core and sous-plugin-cli among them, to keep start-up
  * fast), {@link jsonSchema} turns a small JSON Schema into a schema sous accepts.
  */
 

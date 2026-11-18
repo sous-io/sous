@@ -6,7 +6,7 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-host/types";
+import type {} from "@sous-io/sous-plugin-host/types";
 import { targetsContributor } from "./targets.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -20,10 +20,10 @@ export const codexPlugin: PluginDefinition = definePlugin({
     version: packageJson.version,
     description: "Everything sous knows about Codex: its harness, its memories file (AGENTS.override.md) and its skills folder. Off until a project turns it on.",
     dependsOn: {
-        "@sous-io/plugin-skills": `^${packageJson.version}`,
-        "@sous-io/plugin-memories": `^${packageJson.version}`,
-        "@sous-io/plugin-harnesses": `^${packageJson.version}`,
-        "@sous-io/plugin-host": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-skills": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-memories": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-harnesses": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

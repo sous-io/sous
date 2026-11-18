@@ -10,7 +10,7 @@
 
 import path from "node:path";
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
-import type { SkillTargetEntity } from "@sous-io/plugin-skills/types";
+import type { SkillTargetEntity } from "@sous-io/sous-plugin-skills/types";
 import { codexHarness, HARNESS_ID } from "./harness.js";
 import type { CodexMemoryTarget, CodexPluginOptions } from "./types.js";
 

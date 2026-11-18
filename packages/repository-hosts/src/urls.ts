@@ -11,10 +11,10 @@
  */
 
 import { ConfigError } from "@sous-io/plugin-api";
-import { buildCanonicalRepository, defaultLocator, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/plugin-refs";
-import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
+import { buildCanonicalRepository, defaultLocator, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/sous-plugin-refs";
+import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 
-// Taking a URL apart is plugin-refs' (`refs.locations` owns locations); these are its helpers,
+// Taking a URL apart is sous-plugin-refs' (`refs.locations` owns locations); these are its helpers,
 // re-exported so a host plugin needs only this package.
 export { normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix };
 

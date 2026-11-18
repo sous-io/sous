@@ -21,7 +21,7 @@ would delete what others put there; unsubscribing must remove exactly what the r
 
 - **One built-in plugin, `@sous-io/sous-plugin-editor`, carries out edits declared as config.** Its
   master list is `editor.edits`, filled by contributors as the compiler's `compilation.targets` is:
-  a recipe's manifest `edits` through `plugin-recipes`, a plugin's own, the project's. Its internal
+  a recipe's manifest `edits` through `sous-plugin-recipes`, a plugin's own, the project's. Its internal
   intent `editor.apply` runs after the compiler in a build. A separate `editor` service serves
   direct usage, where the plugin undoes its own work.
 

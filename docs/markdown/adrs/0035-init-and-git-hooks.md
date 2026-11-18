@@ -62,4 +62,4 @@ large/complicated configs is rapidly reducing."
 - Installing Husky points git at `.husky/`, so in a project that used another hook manager, that manager's hooks
   stop running until the project sorts it out. Sous does not warn.
 - An older sous refuses a lockfile holding `migratedVersion`, since the format is strict.
-- `plugin-init` depends on `plugin-update`, for the package manager's install command.
+- `sous-plugin-init` depends on `sous-plugin-update`, for the package manager's install command.

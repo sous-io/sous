@@ -15,7 +15,7 @@ S12 (manifests as config, open content kinds), S14 (init).
 
 ## What This Specifies
 
-What `@sous-io/plugin-claude-code` gives Sous, beyond launching Claude Code:
+What `@sous-io/sous-plugin-claude-code` gives Sous, beyond launching Claude Code:
 
 1. The harness id `claude-code`, and its settings key `tools.claude-code`.
 2. Every output written for Claude Code marked with that harness.
@@ -45,16 +45,16 @@ A bare `claude` would be ambiguous beside a later harness for another Claude pro
     Available tools: claude-code, codex
   ```
 
-  (Agent's choice. The rule is general, in `plugin-harnesses`, not a special case for Claude Code.)
+  (Agent's choice. The rule is general, in `sous-plugin-harnesses`, not a special case for Claude Code.)
 
 ## 2. Outputs Marked With a Harness
 
-Every compilation output that `plugin-skills`, `plugin-memories` and `plugin-claude-code` add for Claude Code
+Every compilation output that `sous-plugin-skills`, `sous-plugin-memories` and `sous-plugin-claude-code` add for Claude Code
 carries `harness: "claude-code"`, so the merge of S8 takes it from Claude Code's config build.
 
-- `plugin-skills` marks each output written into a `skill-target` with that entity's `harness`. A directory named
+- `sous-plugin-skills` marks each output written into a `skill-target` with that entity's `harness`. A directory named
   only in `recipes.skills.outputs` has no harness, so its outputs stay unmarked.
-- `plugin-memories` marks each memory target's output with the `memory-target` entity's `harness`.
+- `sous-plugin-memories` marks each memory target's output with the `memory-target` entity's `harness`.
 - The two content kinds (section 4) mark every output `claude-code`.
 
 ## 3. The Memories File
@@ -135,7 +135,7 @@ target at all.
 
 Claude Code reads a `CLAUDE.md` in every folder it works in, so each folder Sous creates gets a one-line
 `CLAUDE.md` pointing at the folder's README. That `pointer-file` entity was a side effect of the old memory
-target (`readIn: "any-directory"`); `plugin-claude-code` now adds it directly, whether or not memories are on.
+target (`readIn: "any-directory"`); `sous-plugin-claude-code` now adds it directly, whether or not memories are on.
 
 ## 4. Content Kinds for Claude Code
 
@@ -147,7 +147,7 @@ target (`readIn: "any-directory"`); `plugin-claude-code` now adds it directly, w
 >
 >   -- **Luke Chavers** (2026-11-17)
 
-`plugin-claude-code` registers both as `content-kind` entities (S12) and its contributor `claude-code/kinds`
+`sous-plugin-claude-code` registers both as `content-kind` entities (S12) and its contributor `claude-code/kinds`
 responds to their `recipes.contents` entries. Only this plugin consumes them, so a group of either kind produces
 outputs for Claude Code alone, with no harness condition in the recipe.
 
@@ -230,7 +230,7 @@ a source of the project's own that writes `CLAUDE.md` holds the line `@#memories
   `yes`, removes each line `@#memories/**/*.md` from the project's own sources for `CLAUDE.md`; with `no`, leaves
   them and says the memories will be read twice. Sources under `.sous/memories/` that the project also compiles
   elsewhere are named in the outcome.
-- `keep`: sets `plugins.options."@sous-io/plugin-claude-code".memoriesOutputPath` to `${projectRoot}/CLAUDE.md`
+- `keep`: sets `plugins.options."@sous-io/sous-plugin-claude-code".memoriesOutputPath` to `${projectRoot}/CLAUDE.md`
   through `config.set` (in the main config when it is JSON, JSONC or YAML, else in
   `conf.d/600-claude-code-memories.jsonc`), and writes `.sous/MEMORIES.tpl.md` with only the recipes' line, so
   `CLAUDE.md` holds what it held.
@@ -258,6 +258,6 @@ a source of the project's own that writes `CLAUDE.md` holds the line `@#memories
 First version, written when the design was built. Choices the agent made where the rulings left them open,
 approved by nobody yet: no `sous launch claude` alias, with a hint instead; the default source written out line by
 line; absolute include paths; the `skip-empty` transform and the compiler's prune of an output a transform left
-out; `backupExisting` as an output field the compiler honors; the pointer file added by `plugin-claude-code`;
+out; `backupExisting` as an output field the compiler honors; the pointer file added by `sous-plugin-claude-code`;
 the migrations' version 1.0.20 and the `conf.d` file for `keep`; the migrations plugin passing earlier answers to
 `answered`.

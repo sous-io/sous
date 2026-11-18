@@ -56,7 +56,7 @@ editor second, because a recipe may edit a file the compiler writes.
 
 Everything that declares an edit becomes an entry in `editor.edits`, added by a contributor during
 config building; `editor.apply` reads only the finished config (L8, G10). A recipe's manifest
-`edits` are added by `plugin-recipes`, each entry carrying the recipe's id as `recipe`. A plugin adds
+`edits` are added by `sous-plugin-recipes`, each entry carrying the recipe's id as `recipe`. A plugin adds
 its own. A project writes them in its config files.
 
 > "Given that our separate plugin is declarative and has a state, then a plugin can just write to
@@ -111,7 +111,7 @@ edits:
 >   -- **Luke Chavers** in an agent session (2026-11-17)
 
 - On the entry: `file` (relative to the project root; `~` and `${var}` allowed; a file outside the
-  project is allowed), `recipe` (set by `plugin-recipes`), and the settings `once`, `rollback`,
+  project is allowed), `recipe` (set by `sous-plugin-recipes`), and the settings `once`, `rollback`,
   `backupBeforeChange`, `backupOnRemoval`.
 - Then one or more operation keys, OR an `operations` list (not both), and optionally `assert` and
   `silence`.

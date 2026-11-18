@@ -26,11 +26,11 @@
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*",
-    "@sous-io/plugin-build": "workspace:*",
-    "@sous-io/plugin-compiler": "workspace:*",
-    "@sous-io/plugin-formats": "workspace:*",
-    "@sous-io/plugin-recipe-answers": "workspace:*",
-    "@sous-io/plugin-recipes": "workspace:*"
+    "@sous-io/sous-plugin-build": "workspace:*",
+    "@sous-io/sous-plugin-compiler": "workspace:*",
+    "@sous-io/sous-plugin-formats": "workspace:*",
+    "@sous-io/sous-plugin-recipe-answers": "workspace:*",
+    "@sous-io/sous-plugin-recipes": "workspace:*"
   },
   "engines": {
     "node": ">=22"

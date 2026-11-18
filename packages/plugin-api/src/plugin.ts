@@ -13,7 +13,7 @@ import type { ServiceFactory, ServiceOptions, ServiceReader, ServiceWrapper } fr
  * A plugin: a module that registers contributors, intents, listeners, services and entities. Its module's default export is the definition.
  */
 export interface PluginDefinition {
-    /** The package name: `sous-plugin-diagrams`, `@sous-io/plugin-skills`. */
+    /** The package name: `sous-plugin-diagrams`, `@sous-io/sous-plugin-skills`. */
     name: string;
     /** Its version, checked against other plugins' `dependsOn`. */
     version?: string;
@@ -42,7 +42,7 @@ export interface PluginDefinition {
  * export default definePlugin({
  *     name: "sous-plugin-diagrams",
  *     version: "1.0.0",
- *     dependsOn: { "@sous-io/plugin-skills": "^1.0.0" },
+ *     dependsOn: { "@sous-io/sous-plugin-skills": "^1.0.0" },
  *
  *     register(sous) {
  *         sous.intents.add({ intent: "diagrams.render", handle: async () => ({ rendered: 0 }) });

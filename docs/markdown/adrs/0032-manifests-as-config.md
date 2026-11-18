@@ -32,7 +32,7 @@ And for manifests in particular:
 
 ## Decision
 
-- A contributor in plugin-recipes, `recipes.manifests`, adds each active recipe's `contents`
+- A contributor in sous-plugin-recipes, `recipes.manifests`, adds each active recipe's `contents`
   groups to the config key `recipes.contents` (one entry per group: `recipe`, `dir`, `kind`,
   `include`, `exclude`), and appends each entry of the manifest's new top-level `edits` list to
   `editor.edits`, with `recipe` naming who declared it.
@@ -41,7 +41,7 @@ And for manifests in particular:
 - Expressions in `contents` and `edits` are evaluated by the machinery that evaluates them in
   config files, in the recipe's own answer scope, and can read `host.platform` and `harness.id`.
   `sous config show recipes.contents` shows the result.
-- plugin-skills, plugin-memories and the recipe config layers read `recipes.contents`. The
+- sous-plugin-skills, sous-plugin-memories and the recipe config layers read `recipes.contents`. The
   `recipes.contents` service stays as a reader of that key.
 - A recipe's name, version, dependencies and variables stay fixed values, because sous reads them
   before any project is involved. `sous repo release` and the index accept an expression where

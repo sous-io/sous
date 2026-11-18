@@ -9,8 +9,8 @@ import type {
     RepositoryReadOutcome,
     RepositoryReadRequest,
     RepositoryToken,
-} from "@sous-io/plugin-recipes/types";
-import type { HttpResponse } from "@sous-io/plugin-host/types";
+} from "@sous-io/sous-plugin-recipes/types";
+import type { HttpResponse } from "@sous-io/sous-plugin-host/types";
 import type { ExplainedReadStrategy } from "./types.js";
 
 /** How many redirects are followed before giving up. */

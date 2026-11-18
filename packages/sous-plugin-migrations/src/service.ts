@@ -5,7 +5,7 @@
  */
 
 import type { ServiceContext } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
 import { isVersion, orderMigrations, pendingMigrations } from "./pending.js";
 import type { MigrationEntity, MigrationsService } from "./types.js";
 

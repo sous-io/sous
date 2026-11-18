@@ -13,10 +13,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { SousError, type Context } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-recipes/types";
-import type {} from "@sous-io/plugin-recipe-answers/types";
-import type {} from "@sous-io/plugin-compiler/types";
-import type {} from "@sous-io/plugin-build/types";
+import type {} from "@sous-io/sous-plugin-recipes/types";
+import type {} from "@sous-io/sous-plugin-recipe-answers/types";
+import type {} from "@sous-io/sous-plugin-compiler/types";
+import type {} from "@sous-io/sous-plugin-build/types";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity, type DoctorCheckResult, type DoctorRun } from "./types.js";
 
 function messageOf(error: unknown): string {

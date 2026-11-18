@@ -7,7 +7,7 @@ change to this specification is recorded under "Changes".
 observable).
 
 **Related:** S2 (config building), S5 (config expressions, which gains `$file` and the `$${` escape
-here), S6 (concerns and owners: plugin-recipes, plugin-skills, plugin-memories).
+here), S6 (concerns and owners: sous-plugin-recipes, sous-plugin-skills, sous-plugin-memories).
 
 ## What This Specifies
 
@@ -29,7 +29,7 @@ escape, and booleans in Liquid.
 
 ## The Contributor: `recipes.manifests`
 
-One contributor in plugin-recipes, `recipes.manifests`, runs after `recipes.fetch` and reads every
+One contributor in sous-plugin-recipes, `recipes.manifests`, runs after `recipes.fetch` and reads every
 `active-recipe` entity. For each recipe, in recipe-key order (bytewise):
 
 1. It evaluates the manifest's `contents` and `edits` with `expressions.evaluator`, exactly as a
@@ -99,9 +99,9 @@ editor plugin owns the operations and their validation.
 
 | Entries | Responder | What it adds |
 | --- | --- | --- |
-| `recipes.contents`, kind `skills` | plugin-skills, `skills.targets` | compilation targets |
-| `recipes.contents`, kind `memories` | plugin-memories, `memories.targets` | a compilation target per memory target |
-| `recipes.contents`, kind `config` | plugin-recipes, `recipes.config-layers` | config values, limited to the keys a recipe may set |
+| `recipes.contents`, kind `skills` | sous-plugin-skills, `skills.targets` | compilation targets |
+| `recipes.contents`, kind `memories` | sous-plugin-memories, `memories.targets` | a compilation target per memory target |
+| `recipes.contents`, kind `config` | sous-plugin-recipes, `recipes.config-layers` | config values, limited to the keys a recipe may set |
 | `editor.edits` | the editor plugin | (acts in its intent) |
 
 The `recipes.contents` service stays, as a reader of the config: `entries(config, kind)` gives the
@@ -158,7 +158,7 @@ expression object wherever `contents` takes a value.
 Luke: "I think kinds _should_ be open. That follows our existing design patterns, I think." And: "I
 also think we should error when a recipe tries to provide a kind that does not exist."
 
-- The entity kind `content-kind` (`{ id, description }`) is defined by plugin-recipes, which
+- The entity kind `content-kind` (`{ id, description }`) is defined by sous-plugin-recipes, which
   registers `skills`, `memories`, `prompts` and `config`. A plugin adds a kind by adding an entity,
   and its contributor responds to the `recipes.contents` entries of that kind.
 - The manifest schema accepts any kind name (lowercase words joined by hyphens).
@@ -236,7 +236,7 @@ and config expressions as the text `"false"`, which Liquid treats as true. The e
 - a `variable-source` entity may name the variables it gives that are booleans (`booleans()`); the
   recipe-answers source names every boolean definition, and the `variables.booleans` service
   collects them;
-- every Liquid engine plugin-liquid builds, and the config expression evaluator, sees a declared
+- every Liquid engine sous-plugin-liquid builds, and the config expression evaluator, sees a declared
   boolean's `"true"` and `"false"` as `true` and `false`. `${name}` still gives the text.
 - Only booleans change. A `number` answer stays text (the agent's choice; it was left open), and the
   reports (`sous vars list`, `sous config show`) still show the stored text.

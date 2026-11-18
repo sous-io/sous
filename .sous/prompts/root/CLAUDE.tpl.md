@@ -30,11 +30,11 @@ The repository is a pnpm workspace. Every package is in `packages/`; run `ls pac
 - `packages/core`: the engine. It knows no plugin by name.
 - `packages/documents`: surgical JSON, JSONC and YAML editing, used by core and by plugins that edit
   config files.
-- `packages/plugin-cli`: the command line, generated from the intents plugins register.
-  `packages/plugin-mcp` does the same for an MCP server.
-- `packages/plugin-<name>`: one plugin per concern (recipes, compiler, build, variables, and so on).
+- `packages/sous-plugin-cli`: the command line, generated from the intents plugins register.
+  `packages/sous-plugin-mcp` does the same for an MCP server.
+- `packages/sous-plugin-<name>`: one plugin per concern (recipes, compiler, build, variables, and so on).
   A plugin's `src/types.ts` is its contract: what other plugins may call. Other plugins import it
-  type-only (`import type {} from "@sous-io/plugin-<name>/types"`).
+  type-only (`import type {} from "@sous-io/sous-plugin-<name>/types"`).
 - `packages/sous`: the published `@sous-io/sous`. It lists the built-in plugins in
   `src/built-ins.ts`, starts the engine with them and hands the command line to the CLI. Its bundle
   (`packages/sous/dist`) is what ships.
@@ -64,8 +64,8 @@ pnpm install
 pnpm build                # build plugin-api, then the sous bundle
 pnpm typecheck            # tsc --noEmit in every package
 pnpm test                 # every package's tests (vitest)
-pnpm --filter @sous-io/plugin-<name> test            # one package
-pnpm --filter @sous-io/plugin-<name> exec vitest run <file>   # one file
+pnpm --filter @sous-io/sous-plugin-<name> test            # one package
+pnpm --filter @sous-io/sous-plugin-<name> exec vitest run <file>   # one file
 pnpm sous:build           # sous builds this repository's own agent files (this file included)
 ```
 

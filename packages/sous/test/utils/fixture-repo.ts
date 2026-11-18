@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 /** Writes a file, creating its parent directories. Returns the full path. */
 export function writeFixtureFile(filePath: string, contents: string): string {

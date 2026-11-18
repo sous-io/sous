@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { GitCloneOptions } from "@sous-io/plugin-git/types";
+import type { GitCloneOptions } from "@sous-io/sous-plugin-git/types";
 import { cloneAttempt, copyRecipeTree, fetchRecipeTree, RecipeDownloadError } from "./recipe-tree.js";
 import { fakeGit, hostContext } from "./testing.js";
 

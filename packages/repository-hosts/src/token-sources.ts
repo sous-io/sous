@@ -11,10 +11,10 @@
  */
 
 import { tmpdir } from "node:os";
-import type { RepositoryHostContext, RepositoryToken } from "@sous-io/plugin-recipes/types";
-import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
-import type {} from "@sous-io/plugin-git/types";
-import type {} from "@sous-io/plugin-host/types";
+import type { RepositoryHostContext, RepositoryToken } from "@sous-io/sous-plugin-recipes/types";
+import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
+import type {} from "@sous-io/sous-plugin-git/types";
+import type {} from "@sous-io/sous-plugin-host/types";
 import { singleWord, tokenFromOutput } from "./token-output.js";
 import type { ExplainedTokenSource, TokenLookup } from "./types.js";
 

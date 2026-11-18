@@ -88,15 +88,15 @@ describe("listOwners()", () => {
     it("should name the contributor that added each item", () => {
         const owners = listOwners(
             [
-                contribution("@sous-io/plugin-recipes", [{ op: "insertAt", path: "editor.edits", index: "end", value: {} }]),
+                contribution("@sous-io/sous-plugin-recipes", [{ op: "insertAt", path: "editor.edits", index: "end", value: {} }]),
                 contribution("acme", [{ op: "insertAt", path: "editor.edits", index: "end", value: {} }]),
-                contribution("@sous-io/plugin-config-files", [{ op: "insertAt", path: "editor.edits", index: "end", value: {} }]),
+                contribution("@sous-io/sous-plugin-config-files", [{ op: "insertAt", path: "editor.edits", index: "end", value: {} }]),
             ],
             "editor.edits",
             3,
         );
 
-        expect(owners?.map((owner) => declarerLabel(owner, undefined))).toEqual(["@sous-io/plugin-recipes", "acme", "project"]);
+        expect(owners?.map((owner) => declarerLabel(owner, undefined))).toEqual(["@sous-io/sous-plugin-recipes", "acme", "project"]);
         expect(declarerLabel(owners?.[0], "voltagrid/session-harness")).toBe("voltagrid/session-harness");
 
         const whole = listOwners([contribution("x", [{ op: "setKey", path: "", key: "editor", value: { edits: [{}, {}] } }])], "editor.edits", 2);

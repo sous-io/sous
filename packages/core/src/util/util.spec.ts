@@ -50,7 +50,7 @@ describe("names", () => {
      * dots and slashes.
      */
     it("should find prefixes and match wildcards", () => {
-        expect(pluginPrefix("@sous-io/plugin-compiler")).toBe("compiler");
+        expect(pluginPrefix("@sous-io/sous-plugin-compiler")).toBe("compiler");
         expect(pluginPrefix("sous-plugin-diagrams")).toBe("diagrams");
         expect(pluginPrefix("plain")).toBe("plain");
         expect(namePrefix("diagrams.render")).toBe("diagrams");

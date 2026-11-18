@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
+import type { HostProcesses, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import { createHandlersSystem, versionIn } from "./system.js";
 
 /** A `host.processes` that knows some commands and records what it is asked. */

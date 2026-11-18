@@ -114,7 +114,7 @@ describe("loading plugins by specifier", () => {
             name: "defined-by-locator",
             register: (sous) => sous.config.contribute({ id: "d", contribute: (config) => config.atPath("loaded.def").set(true) }),
         });
-        const locators = plugin("plugin-recipes", (sous) => {
+        const locators = plugin("sous-plugin-recipes", (sous) => {
             sous.entities.add("plugin-locator", { id: "pass", locate: () => undefined });
             sous.entities.add("plugin-locator", {
                 id: "recipes",
@@ -259,7 +259,7 @@ describe("plugin lifecycle", () => {
      */
     it("should load a plugin's own dependencies with sous.plugins.add", async () => {
         const child = contributorsPlugin("sous-plugin-mcp-extras", [{ id: "extras", contribute: (config) => config.atPath("loaded.extras").set(true) }]);
-        const parent = plugin("plugin-claude-code", async (sous) => {
+        const parent = plugin("sous-plugin-claude-code", async (sous) => {
             await sous.plugins.add(child);
             await sous.plugins.add(child);
         });
@@ -269,7 +269,7 @@ describe("plugin lifecycle", () => {
 
         expect(built.get("loaded.extras")).toBe(true);
         expect(engine.pluginInfo().find((info) => info.name === "sous-plugin-mcp-extras")).toMatchObject({
-            loadedBy: "plugin-claude-code",
+            loadedBy: "sous-plugin-claude-code",
             builtIn: true,
         });
 
@@ -287,17 +287,17 @@ describe("plugin lifecycle", () => {
      * or has no version; "*" accepts any.
      */
     it("should check dependsOn ranges at the end of the build", async () => {
-        const skills = definePlugin({ name: "@sous-io/plugin-skills", version: "1.4.0", register() {} });
+        const skills = definePlugin({ name: "@sous-io/sous-plugin-skills", version: "1.4.0", register() {} });
         const unversioned = definePlugin({ name: "unversioned", register() {} });
         const needs = (range: Record<string, string>) => definePlugin({ name: "sous-plugin-diagrams", dependsOn: range, register() {} });
 
-        await expect(makeEngine([skills, needs({ "@sous-io/plugin-skills": "^1.0.0" })]).engine.buildConfig()).resolves.toBeDefined();
+        await expect(makeEngine([skills, needs({ "@sous-io/sous-plugin-skills": "^1.0.0" })]).engine.buildConfig()).resolves.toBeDefined();
         await expect(makeEngine([unversioned, needs({ unversioned: "*" })]).engine.buildConfig()).resolves.toBeDefined();
-        await expect(makeEngine([needs({ "@sous-io/plugin-skills": "^1.0.0" })]).engine.buildConfig()).rejects.toThrow(
-            "sous-plugin-diagrams needs @sous-io/plugin-skills ^1.0.0, which is not loaded.",
+        await expect(makeEngine([needs({ "@sous-io/sous-plugin-skills": "^1.0.0" })]).engine.buildConfig()).rejects.toThrow(
+            "sous-plugin-diagrams needs @sous-io/sous-plugin-skills ^1.0.0, which is not loaded.",
         );
-        await expect(makeEngine([skills, needs({ "@sous-io/plugin-skills": "^2.0.0" })]).engine.buildConfig()).rejects.toThrow(
-            "sous-plugin-diagrams needs @sous-io/plugin-skills ^2.0.0, but @sous-io/plugin-skills 1.4.0 is loaded.",
+        await expect(makeEngine([skills, needs({ "@sous-io/sous-plugin-skills": "^2.0.0" })]).engine.buildConfig()).rejects.toThrow(
+            "sous-plugin-diagrams needs @sous-io/sous-plugin-skills ^2.0.0, but @sous-io/sous-plugin-skills 1.4.0 is loaded.",
         );
         await expect(makeEngine([unversioned, needs({ unversioned: "^1.0.0" })]).engine.buildConfig()).rejects.toThrow(
             "declares no version",
@@ -346,7 +346,7 @@ describe("plugin lifecycle", () => {
      * A name starting with another plugin's prefix is allowed; sous warns once, naming both.
      */
     it("should warn once when a plugin registers under another plugin's prefix", async () => {
-        const compiler = plugin("@sous-io/plugin-compiler", (sous) => {
+        const compiler = plugin("@sous-io/sous-plugin-compiler", (sous) => {
             sous.services.add("compiler.state", () => ({}));
         });
         const extender = plugin("sous-plugin-diagrams", (sous) => {
@@ -360,7 +360,7 @@ describe("plugin lifecycle", () => {
         await engine.buildConfig();
 
         expect(reporter.at("warning")).toEqual([
-            'sous-plugin-diagrams registers the service "compiler.diagram-renderer", which starts with @sous-io/plugin-compiler\'s prefix "compiler".',
+            'sous-plugin-diagrams registers the service "compiler.diagram-renderer", which starts with @sous-io/sous-plugin-compiler\'s prefix "compiler".',
         ]);
     });
 
