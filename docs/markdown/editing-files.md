@@ -75,7 +75,8 @@ order, or one operation more than once, use an `operations` list:
   recipe's and so wins.
 - **It undoes an edit that is no longer declared:** the recipe was unsubscribed, the plugin removed, a
   condition stopped matching. A value Sous set goes back to what it was before; an item Sous added to
-  a list is removed, and items others added stay. Undoing happens only after a config that loaded
+  a list is removed, and items others added stay. A key Sous deleted comes back with its value at
+  the end of its object, not in its old place. Undoing happens only after a config that loaded
   without errors.
 - **A missing file is created** with just the declared content, and removed again (after a backup)
   when nothing declares it any more.
@@ -188,8 +189,14 @@ anywhere in the file is left alone, and an `after` or `before` line that is not 
 
 `prependIfMissing` puts each missing item at the start, in the order given; an item already in the
 list stays where it is (`ensureFirst` would move it). The key moves (`moveKeyFirst` and the others)
-change nothing when the key or the anchor is missing. Like `sortKeys`, they are not undone when the
-entry goes away, since an order is not a value.
+change nothing when the key or the anchor is missing.
+
+An order is undone like a value: `sort`, `sortKeys` and the key moves record the order the list or
+object had before Sous first changed it, and put it back when the entry goes away; an item or key
+added since keeps its place. `dedupe` records each item it removed and where, and puts them back.
+`replaceText` is undone by turning `value` back into `match`. A `replacePattern` cannot be worked
+backwards, so Sous keeps the text from before its last replacement and puts it back only while the
+text is still exactly what Sous left; if anyone has changed it since, it stays as it is.
 
 `ensureBlock` keeps a block between two marker lines, written in the file's comment style (`#`,
 `//`, `<!-- -->`, `/* */`, `--` or `;`, from the file's name, or `comment` to choose):
@@ -203,6 +210,9 @@ docs/context/.kw-session-*
 A block added at the end of a file gets a blank line before it. If a marker line is missing or
 appears twice, Sous does not guess where the block ends: it skips the edit with a warning, and the
 block's assertion fails.
+
+A key or item that moves (a sort, a key move) takes its own lines and the comment at the end of
+them; a comment on a line of its own stays where it is.
 
 ### Comments
 
@@ -266,8 +276,10 @@ edit with a warning; an operation without `document` on a file holding several s
 any file Sous cannot parse. An operation with `document` gets no automatic assertion, and
 `ensureLine` and the other text operations take `document` only with the `path` of a string in it.
 
-**Formats:** JSON, JSONC (comments, key order and layout are kept; a `tsconfig*.json` or a `.json`
-file in `.vscode/` is read as JSONC), YAML (comments are kept), the YAML frontmatter of a Markdown
+**Formats:** JSON, JSONC (comments, key order and layout are kept, and an object or list written
+beside one-line neighbours goes on one line; a `tsconfig*.json` or a `.json` file in `.vscode/` is
+read as JSONC), YAML (comments are kept; a string keeps the quotes or block style its author chose,
+and a text of several lines is written as a block), the YAML frontmatter of a Markdown
 file (the body is kept byte for byte), a YAML file holding several documents (one at a time, with
 `document`), and any other file as plain text lines, each keeping its own
 line ending. TOML files are skipped with a warning for now.

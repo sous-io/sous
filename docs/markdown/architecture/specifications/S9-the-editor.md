@@ -210,8 +210,12 @@ means the end.
 
 `prependIfMissing` puts each missing item at the start, in the order given, and leaves an item
 already there where it is (unlike `ensureFirst`, which moves it). The four key moves change nothing
-when the key or the anchor is missing; like `sortKeys`, they are not undone and have no automatic
-assertion, since an order is not a value.
+when the key or the anchor is missing, and have no automatic assertion.
+
+An order is recorded like a value. `sort` records the list as it was before Sous first sorted it;
+`sortKeys` and the key moves record the object's key order. `down` puts that order back: the items
+or keys that were there take the places they hold now, in their recorded order, and one added since
+keeps its place. `dedupe` records each item it removed with its index, and `down` puts them back.
 
 `copy` makes the value at `to` a copy of the value at `path`, read from the file on each build: a
 value already at `to` is recorded and replaced (put back by `down`), nothing happens while `path`
@@ -287,7 +291,12 @@ The format comes from the file's name, through `@sous-io/sous-lib-documents` (`f
 whose body is kept byte for byte), and anything else as plain text, a list of lines. The editor
 is a thin layer over that library: it parses, edits and writes every format, and a plain text
 file's lines keep their own line endings. Edits to JSON and JSONC keep comments, key order,
-indentation and line endings. TOML is recognized and skipped with a warning until the document
+indentation and line endings, and an object or list written beside one-line neighbours (in a
+one-line container, in place of a one-line value, or in a list beside a one-line item) goes on one
+line. In YAML a string keeps the quoting or block style its author chose, but not one its old value
+only needed (`">> x"` must be quoted), and a text of several lines is written as a block. A key or
+item that moves takes its own lines and the comment at their end; a comment on a line of its own
+stays where it is. TOML is recognized and skipped with a warning until the document
 library edits it. The text operations (`ensureLine`, `removeLine`, `ensureBlock`, `appendText`,
 `prependText`, `replaceText`, `replacePattern`) act on the file's whole text when they have no
 `path`, and on a string value when they do.
@@ -480,7 +489,14 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 
 - The merge of the per-harness config builds must carry entries limited to one harness; the merge
   rule was written for compile outputs, and an edit is not an output.
-- Undoing a sort, a deduplication or a key order is not done: an order is not a value.
+- A key Sous deleted comes back at the end of its object, not in its old place. Putting it back in
+  place means moving every key after it, and a comment on a line of its own does not move with its
+  key, so it would end up beside the wrong key. The document library would need to know which
+  comment lines belong to a key.
+- A value put back is written in the library's layout for a new value: an inline JSONC list that
+  `unwrapList` made a plain value comes back spread over lines.
+- The `expect` chain has no method for `includesBlock`, `directoryExists` or
+  `directoryDoesNotExist`; a plugin writes those in the data form.
 
 ## Changes
 
@@ -493,7 +509,8 @@ gone. What changed for a person: each line of a plain text file keeps its own li
 added at the end of a file gets a blank line before it, as `sous init`'s blocks do; and a damaged
 block is skipped instead of a second one being added. The operations the library made cheap were
 built: `prependIfMissing`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst` and `moveKeyLast`.
-`sortKeys` now moves each key with its comments. The agent's work while joining the merged pieces;
+`sortKeys` now moves each key with its own lines and the comment at their end (a comment on a line
+of its own stays where it is). The agent's work while joining the merged pieces;
 not yet reviewed by Luke.
 
 ### 2026-11-18: The history and backups are ignored in a project set up before the editor
@@ -533,6 +550,7 @@ the move would repeat on a different item. The inserts follow `insertBefore` whe
 undone, as `ensureIncludes` undoes the moves it makes. So that a moved JSONC item keeps the comment
 on its line (`"b", // bee`), the document library now carries that comment with an item or key it
 removes and writes back. The agent's choices; not yet reviewed by Luke.
+
 ### 2026-11-18: The comment operations and `selectDocument`
 
 Built from the list Luke accepted: `setCommentBefore`, `setCommentAfter` and `removeComment`, on
@@ -542,3 +560,31 @@ choices are the agent's, not yet reviewed by Luke: the parameter names (`text`; 
 `document` parameter on every operation plus a chain method, rather than an operation key of its
 own (reasons under Operations). Not done: assertions cannot target one document of such a file,
 and no operation adds a new document to it.
+
+### 2026-11-18: An order is undone
+
+`sort`, `dedupe`, `sortKeys` and the key moves were not undone ("an order is not a value"), against
+spec 12's rule that every operation defines `down` and undo restores what was there. Recording the
+order is cheap: the list as it was (or the key names), kept in the history like any previous value.
+So `sort` records the list before Sous first sorted it, the key operations record the key order,
+and `dedupe` records each item it removed with its index; `down` puts them back, and an item or key
+added since keeps its place. `sort` now moves items with the library's `sort`, so each keeps its
+own text. Found by running every operation through `editor.apply`; the agent's fix.
+
+### 2026-11-18: `replacePattern` is undone
+
+`replacePattern` had no `down`. A regular expression's replacement cannot be worked backwards, so
+it now records the text before its last replacement and the text it left, and `down` puts the
+first back only while the text is still the second: a change someone made since is never undone
+with it. Found by running every operation through `editor.apply`; the agent's fix.
+
+### 2026-11-18: Every operation and check runs through `editor.apply` in a test
+
+Every operation and every other name is now applied by `editor.apply` to real JSONC, YAML and text
+files, applied again, and undeclared, with the exact text checked each time; every check holds and
+fails at level error and at level warn; silencing and the `expect` forms run the same way. What
+those tests found was fixed where it was cheap: `removeLine` undone into an emptied text, or one
+with CRLF line breaks, now puts back exactly the text there was; a YAML string no longer keeps a
+quoting or block style its old value only needed; a JSONC object among one-line neighbours is
+written on one line; and orders and `replacePattern` are undone (above). What was not fixed is in
+Open Questions. The agent's work.

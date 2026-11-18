@@ -269,6 +269,27 @@ describe("TextDocument (surgical YAML)", () => {
         expect(() => parseDocument(text, "yaml").atPath("base.x").set(2)).toThrow("cannot be edited at base.x");
         expect(() => parseDocument(text, "yaml").atPath("base").delete()).toThrow("anchor (&name)");
     });
+
+    /**
+     * A string takes the old string's quoting or block style only when the author chose it; a
+     * style the old value needed is not kept, so setting a value and setting it back gives the
+     * text there was. A text of several lines is written as a block.
+     *
+     * notes: hello  set ">> hello" -> notes: ">> hello"; set "hello" -> notes: hello
+     */
+    it("should keep a string style the author chose, not one the old value needed", () => {
+        const text = "notes: hello\nname: demo\nquoted: \"x\"\n";
+        const there = edit(text, (doc) => doc.atPath("notes").set(">> hello"));
+
+        expect(there).toBe('notes: ">> hello"\nname: demo\nquoted: "x"\n');
+        expect(edit(there, (doc) => doc.atPath("notes").set("hello"))).toBe(text);
+        expect(edit(text, (doc) => doc.atPath("quoted").set("y"))).toBe('notes: hello\nname: demo\nquoted: "y"\n');
+
+        const block = edit(text, (doc) => doc.atPath("notes").set("hello\nsecond"));
+
+        expect(block).toBe('notes: |-\n  hello\n  second\nname: demo\nquoted: "x"\n');
+        expect(edit(block, (doc) => doc.atPath("notes").set("hello"))).toBe(text);
+    });
 });
 
 describe("detectYamlStyle()", () => {

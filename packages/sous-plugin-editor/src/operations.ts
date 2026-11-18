@@ -332,7 +332,8 @@ function removeFirst(node: DocNode, value: JsonValue): void {
  */
 interface LinesAccess {
     readonly doc: LinesDocument;
-    save(): void;
+    /** Writes the lines back when they changed; `finish` adjusts the text first. */
+    save(finish?: (text: string) => string): void;
 }
 
 function linesAccess(ctx: OperationContext, operation: string, comment?: CommentStyle): LinesAccess {
@@ -343,9 +344,9 @@ function linesAccess(ctx: OperationContext, operation: string, comment?: Comment
 
         return {
             doc,
-            save: () => {
+            save: (finish = (text) => text) => {
                 if (doc.changed()) {
-                    ctx.session.setText(doc.toString());
+                    ctx.session.setText(finish(doc.toString()));
                 }
             },
         };
@@ -362,9 +363,9 @@ function linesAccess(ctx: OperationContext, operation: string, comment?: Comment
 
     return {
         doc,
-        save: () => {
+        save: (finish = (text) => text) => {
             if (doc.changed()) {
-                node.set(doc.toString());
+                node.set(finish(doc.toString()));
             }
         },
     };
@@ -969,11 +970,91 @@ define({
     assertions: () => [],
 });
 
+/**
+ * Runs something that reorders an object's keys, and records the order before it when it
+ * changed, so `down` can put it back: `{ changed: true, keys: ["x", "nested"] }`.
+ */
+function reorderingKeys(node: DocNode, reorder: () => void): JsonValue {
+    const before = node.keys();
+
+    reorder();
+
+    const after = node.keys();
+
+    return before.length === after.length && before.every((key, index) => key === after[index]) ? { changed: false } : { changed: true, keys: before };
+}
+
+/**
+ * Puts an object's keys back in a recorded order. A key added since keeps its place; the keys
+ * that were there before take the places they hold now, in their recorded order.
+ *
+ * recorded ["x", "nested"], now ["nested", "added", "x"] -> ["x", "added", "nested"]
+ */
+function restoreKeyOrder(node: DocNode, record: JsonValue): void {
+    if (!isJsonObject(record) || record.changed !== true || !Array.isArray(record.keys) || !isJsonObject(node.get())) return;
+
+    const recorded = (record.keys as string[]).filter((key) => node.keys().includes(key));
+    const target = node.keys();
+    let next = 0;
+
+    target.forEach((key, index) => {
+        if (recorded.includes(key)) target[index] = recorded[next++]!;
+    });
+
+    node.sortKeys((a, b) => target.indexOf(a) - target.indexOf(b));
+}
+
+/**
+ * Puts a list's items back in a recorded order. An item added since keeps its place; the items
+ * that were there before take the places they hold now, in their recorded order.
+ *
+ * recorded ["b", "a"], now ["a", "c", "b"] -> ["b", "c", "a"]
+ */
+function restoreItemOrder(node: DocNode, record: JsonValue): void {
+    if (!isJsonObject(record) || record.changed !== true || !Array.isArray(record.previous)) return;
+
+    const current = existingList(node, "sort");
+
+    if (current === undefined) return;
+
+    const recorded = record.previous as JsonValue[];
+    const used = recorded.map(() => false);
+    const known: number[] = [];
+
+    current.forEach((item, index) => {
+        const at = recorded.findIndex((candidate, candidateIndex) => !used[candidateIndex] && deepEqual(candidate, item));
+
+        if (at !== -1) {
+            used[at] = true;
+            known.push(index);
+        }
+    });
+
+    const ordered = recorded.filter((_item, index) => used[index]);
+    const target = [...current];
+
+    known.forEach((position, index) => {
+        target[position] = ordered[index]!;
+    });
+
+    // Moved one at a time, so equal items (which a comparison cannot tell apart) go back too.
+    const work = [...current];
+
+    target.forEach((item, to) => {
+        if (deepEqual(work[to], item)) return;
+
+        const from = work.findIndex((candidate, index) => index > to && deepEqual(candidate, item));
+
+        node.move(from, to);
+        work.splice(to, 0, ...work.splice(from, 1));
+    });
+}
+
 define({
     name: "sortKeys",
     order: 95,
     scope: "document",
-    summary: "The object's keys are in order. Not undone: an order is not a value.",
+    summary: "The object's keys are in order. Undone by putting back the order they had.",
     params: [],
     args: [],
     up(ctx) {
@@ -989,11 +1070,10 @@ define({
         }
 
         // The library moves each key with its own text, so comments and layout stay with it.
-        node.sortKeys((a, b) => compareItems(a, b));
-
-        return null;
+        return reorderingKeys(node, () => node.sortKeys((a, b) => compareItems(a, b)));
     },
-    down() {},
+    down: (ctx, _params, record) => restoreKeyOrder(ctx.node(), record),
+    mergeRecords: keepEarlier,
     assertions: (_params, path) => [{ check: "sortedKeys", arg: true, path }],
 });
 
@@ -1021,7 +1101,7 @@ for (const [name, where] of [
         name,
         order: 95,
         scope: "document",
-        summary: `The object's key \`key\` comes just ${where} the key \`anchor\`. Nothing happens when either is missing. Not undone: an order is not a value.`,
+        summary: `The object's key \`key\` comes just ${where} the key \`anchor\`. Nothing happens when either is missing. Undone by putting back the order the keys had.`,
         params: ["key", "anchor"],
         args: ["key", "anchor"],
         normalize(raw) {
@@ -1033,14 +1113,15 @@ for (const [name, where] of [
         up(ctx, params) {
             const node = objectAt(ctx, name);
 
-            if (node !== undefined) {
+            if (node === undefined) return { changed: false };
+
+            return reorderingKeys(node, () => {
                 if (where === "before") node.moveKeyBefore(params.key as string, params.anchor as string);
                 else node.moveKeyAfter(params.key as string, params.anchor as string);
-            }
-
-            return null;
+            });
         },
-        down() {},
+        down: (ctx, _params, record) => restoreKeyOrder(ctx.node(), record),
+        mergeRecords: keepEarlier,
         assertions: () => [],
     });
 }
@@ -1053,7 +1134,7 @@ for (const [name, where] of [
         name,
         order: 95,
         scope: "document",
-        summary: `The object's key \`key\` comes ${where}. Nothing happens when it is missing. Not undone: an order is not a value.`,
+        summary: `The object's key \`key\` comes ${where}. Nothing happens when it is missing. Undone by putting back the order the keys had.`,
         params: ["key"],
         args: ["key"],
         normalize(raw) {
@@ -1064,14 +1145,15 @@ for (const [name, where] of [
         up(ctx, params) {
             const node = objectAt(ctx, name);
 
-            if (node !== undefined && node.keys().includes(params.key as string)) {
+            if (node === undefined || !node.keys().includes(params.key as string)) return { changed: false };
+
+            return reorderingKeys(node, () => {
                 if (where === "first") node.moveKeyFirst(params.key as string);
                 else node.moveKeyLast(params.key as string);
-            }
-
-            return null;
+            });
         },
-        down() {},
+        down: (ctx, _params, record) => restoreKeyOrder(ctx.node(), record),
+        mergeRecords: keepEarlier,
         assertions: () => [],
     });
 }
@@ -1585,7 +1667,7 @@ define({
     name: "dedupe",
     order: 80,
     scope: "document",
-    summary: "The list has no duplicates; the first of each is kept. `by` compares one field. Not undone.",
+    summary: "The list has no duplicates; the first of each is kept. `by` compares one field. Undone by putting back the items it removed.",
     params: ["by"],
     args: [],
     normalize(raw) {
@@ -1595,16 +1677,26 @@ define({
     },
     up(ctx, params) {
         const node = ctx.node();
+        const list = existingList(node, "dedupe") ?? [];
+        const by = params.by as string | undefined;
+        const seen = new Set<string>();
+        const removed: JsonObject[] = [];
 
-        if (existingList(node, "dedupe") !== undefined) {
-            const by = params.by as string | undefined;
+        list.forEach((item, index) => {
+            const key = fingerprint(item, by);
 
-            node.dedupe(by === undefined ? undefined : (item) => (isJsonObject(item) ? item[by] : item));
+            if (seen.has(key)) removed.push({ index, item });
+            else seen.add(key);
+        });
+
+        for (const entry of [...removed].reverse()) {
+            node.removeAt(entry.index as number);
         }
 
-        return null;
+        return { removed };
     },
-    down() {},
+    down: (ctx, _params, record) => reinsert(ctx.node(), record),
+    mergeRecords: joinLists("removed"),
     assertions: (params, path) => [{ check: "unique", arg: params.by === undefined ? true : { by: params.by }, path }],
 });
 
@@ -1612,7 +1704,8 @@ define({
     name: "sort",
     order: 90,
     scope: "document",
-    summary: "The list is in order: numbers by value, text by code point. `by` sorts by one field; `descending: true` reverses. Not undone.",
+    summary:
+        "The list is in order: numbers by value, text by code point. `by` sorts by one field; `descending: true` reverses. Undone by putting back the order the items had.",
     params: ["by", "descending"],
     args: [],
     normalize: (raw) => sortParams(raw, "sort"),
@@ -1622,20 +1715,16 @@ define({
         const options = sortOptions(params);
 
         if (list === undefined || isSorted(list, options)) {
-            return null;
+            return { changed: false } as JsonValue;
         }
 
-        const sorted = [...list].sort((a, b) => compareItems(a, b, options));
+        // The library moves each item with its own text, so comments and layout stay with it.
+        node.sort((a, b) => compareItems(a, b, options));
 
-        sorted.forEach((item, index) => {
-            if (!deepEqual(item, listOf(node)[index])) {
-                node.atIndex(index).set(item);
-            }
-        });
-
-        return null;
+        return { changed: true, previous: list };
     },
-    down() {},
+    down: (ctx, _params, record) => restoreItemOrder(ctx.node(), record),
+    mergeRecords: keepEarlier,
     assertions: (params, path) => {
         const options = sortOptions(params);
 
@@ -1705,12 +1794,19 @@ define({
             .map((line, index) => (line === params.line ? index : -1))
             .filter((index) => index !== -1);
 
-        if (removed.length > 0) {
-            doc.remove(params.line as string);
-            save();
+        if (removed.length === 0) {
+            return { removed };
         }
 
-        return { removed };
+        // What a text left with no line break cannot say any more: whether it ended in one, and which.
+        const text = doc.toString();
+        const finalBreak = text.endsWith("\n");
+        const lineBreak = text.includes("\r\n") ? "\r\n" : "\n";
+
+        doc.remove(params.line as string);
+        save();
+
+        return { removed, finalBreak, lineBreak } as JsonValue;
     },
     down(ctx, params, record) {
         if (!isJsonObject(record)) return;
@@ -1720,12 +1816,21 @@ define({
         if (removed.length === 0) return;
 
         const { doc, save } = linesAccess(ctx, "removeLine");
+        const before = doc.toString();
+        const emptied = doc.length() === 0;
 
         for (const index of removed) {
             doc.replaceLines(Math.min(index, doc.length()), 0, [params.line as string]);
         }
 
-        save();
+        // A text with no line break left takes the recorded one, and an emptied text its final one.
+        save((text) => {
+            let restored = !before.includes("\n") && record.lineBreak === "\r\n" ? text.replace(/\r?\n/g, "\r\n") : text;
+
+            if (emptied && record.finalBreak === false) restored = restored.replace(/\r?\n$/, "");
+
+            return restored;
+        });
     },
     mergeRecords: keepEarlier,
     assertions: (params, path) => [{ check: "includesLine", arg: params.line!, path, not: true }],
@@ -1866,7 +1971,7 @@ define({
     name: "replacePattern",
     order: 60,
     scope: "document",
-    summary: "Every match of the regular expression `match` (`\"^a\"` or `\"/^a/i\"`) becomes `value`, with `$1` and so on. Not undone.",
+    summary: "Every match of the regular expression `match` (`\"^a\"` or `\"/^a/i\"`) becomes `value`, with `$1` and so on. Undone by putting back the text it replaced, while the text is still what Sous left.",
     params: ["match", "value"],
     args: ["match", "value"],
     normalize(raw) {
@@ -1889,11 +1994,23 @@ define({
         const text = access.get();
         const next = text.replace(global, params.value as string);
 
-        if (next !== text) access.set(next);
+        if (next === text) return { changed: false } as JsonValue;
 
-        return null;
+        access.set(next);
+
+        return { changed: true, previous: text, result: next };
     },
-    down() {},
+    // A replacement cannot be worked backwards, so the text is put back only while it is still
+    // what Sous left: an edit made to it since is never undone with it.
+    down(ctx, _params, record) {
+        if (!isJsonObject(record) || record.changed !== true || typeof record.previous !== "string") return;
+
+        const access = textAccess(ctx, "replacePattern");
+
+        if (access.get() === record.result) access.set(record.previous);
+    },
+    // A later replacement acted on text someone changed since; going back to before it keeps their change.
+    mergeRecords: (previous, next) => (isJsonObject(next) && next.changed === true ? next : previous),
     assertions: () => [],
 });
 
