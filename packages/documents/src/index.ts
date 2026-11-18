@@ -12,5 +12,17 @@ export { BaseDocument } from "./document.js";
 export { ValueDocument, createDocument } from "./value-document.js";
 export { TextDocument, parseDocument } from "./text-document.js";
 export { splitFrontmatter, joinFrontmatter, type FrontmatterParts } from "./frontmatter.js";
+export {
+    LinesDocument,
+    parseLines,
+    managedBlockMarkers,
+    HASH_COMMENTS,
+    HTML_COMMENTS,
+    SLASH_COMMENTS,
+    type CommentStyle,
+    type LinePosition,
+    type LinesOptions,
+    type BlockMarkers,
+} from "./lines.js";
 export { serializePatchSet, deserializePatchSet, parsePatch, parsePatchFile, PatchFormatError } from "./serialize.js";
 export { describePatch, describePatchSet } from "./describe.js";
