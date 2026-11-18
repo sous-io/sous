@@ -613,7 +613,12 @@ export async function applyEdits(
 
     next.createdFiles = next.createdFiles.filter((file) => stillNamed.has(file));
 
-    if (!dryRun) writeHistory(env.historyFile, root, next);
+    // A project that never used the editor gets no history file: an empty one would be a new,
+    // unignored file in `.sous/` after every build (the ignore lines are added only for a project
+    // that uses the editor).
+    const nothingToRecord = next.entries.length === 0 && next.createdFiles.length === 0;
+
+    if (!dryRun && !(nothingToRecord && !fs.existsSync(env.historyFile))) writeHistory(env.historyFile, root, next);
 
     return { ok, dryRun, files, directories, assertions, applied, undone };
 }

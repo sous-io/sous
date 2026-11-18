@@ -446,3 +446,10 @@ agent's choice; not yet reviewed by Luke.
 The editor adds the `doctor-check` `assertions` (order 700): `editor.apply`'s dry run, with nothing
 printed, then a failed assertion at level error is a problem and one at level warn a warning. It has
 no fix. The agent's choice of form; the check itself is the one S11 lists.
+
+### 2026-11-18: No history file until there is something to record
+
+`editor.apply` wrote an empty `sous.edits.json` after every build, even in a project that never
+declared an edit, and such a project's `.sous/.gitignore` does not list it, so the file showed up as
+new in git (found on Sous's own repository). The history is now written only when it records an
+entry or a created file, or when the file already exists. The agent's fix, in the finishing pass.

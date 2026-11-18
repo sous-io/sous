@@ -214,6 +214,8 @@ describe("editor.apply", () => {
         await engine.buildConfig();
         await engine.submit({ intent: "test.apply", input: {} });
         check(added).toEqual([]);
+        // Nor does it gain a history file, which would be a new file in .sous/ that git does not ignore.
+        check(fs.existsSync(path.join(tmp.path, ".sous", "sous.edits.json"))).toBe(false);
 
         declare = true;
         await engine.buildConfig();
