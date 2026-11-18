@@ -167,13 +167,13 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
 }
 
 /** The commands whose own output already says a build is happening, or that are a build. */
-const OWN_BUILD_COMMANDS = new Set(["build", "compile", "prune", "build.watch", "update"]);
+const OWN_BUILD_COMMANDS = new Set(["build", "compile", "prune", "build.watch", "upgrade"]);
 
 /**
  * The heading a build started by another command prints first, worded as before the refactor:
  * `sous launch` said "Building", and the commands that change recipes (`subscription add`,
  * `repo remove`, `init`) said "Building the project". A build that is the command itself, or whose
- * command announces it already (`update`), prints none.
+ * command announces it already (`upgrade`), prints none.
  */
 export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefined {
     const command = ctx.chain?.intent;

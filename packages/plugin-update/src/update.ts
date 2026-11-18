@@ -1,5 +1,5 @@
 /**
- * The `update` intent: moves sous itself to a newer (or a chosen) version, for the global install,
+ * The `upgrade` intent (`sous upgrade`): moves sous itself to a newer (or a chosen) version, for the global install,
  * the project's own install, or both, through whichever package manager owns each one.
  *
  * Every plan is worked out before anything runs: the registry is read, the installs are found and
@@ -41,11 +41,11 @@ export function requestOf(input: UpdateInput): VersionRequest {
 /** Checks the flags that cannot be combined. */
 function checkInput(input: UpdateInput): void {
     if (input.major && input.version !== undefined) {
-        throw new InputError("update", [{ path: "major", message: "cannot be combined with version" }]);
+        throw new InputError("upgrade", [{ path: "major", message: "cannot be combined with version" }]);
     }
 
     if (input.global && input.project) {
-        throw new InputError("update", [{ path: "global", message: "cannot be combined with project" }]);
+        throw new InputError("upgrade", [{ path: "global", message: "cannot be combined with project" }]);
     }
 }
 
@@ -133,23 +133,14 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
         return { result: "no-config" };
     }
 
-    let command: PlannedCommand;
+    const command = newCopyCommand(plan, ["build"], directory);
 
-    if (plan.pnpRoot !== undefined) {
-        command = { command: "yarn", args: ["run", "--binaries-only", "sous", "build"], cwd: directory };
-    } else {
-        const root = realpathOr(plan.location);
-        const entry = binEntryOf(readPackageJson(root));
+    if (command === undefined) {
+        ctx.reporter.problem(`The update stands, but the new copy at ${realpathOr(plan.location)} names no bin sous can run, so the project was not built.`, {
+            hint: "Run 'sous build' in the project.",
+        }, LogLevel.Error);
 
-        if (entry === undefined) {
-            ctx.reporter.problem(`The update stands, but the new copy at ${root} names no bin sous can run, so the project was not built.`, {
-                hint: "Run 'sous build' in the project.",
-            }, LogLevel.Error);
-
-            return { result: "no-bin", directory };
-        }
-
-        command = { command: process.execPath, args: [path.resolve(root, entry), "build"], cwd: directory };
+        return { result: "no-bin", directory };
     }
 
     ctx.reporter.operationStart("Building the project");
@@ -167,6 +158,76 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
     }
 
     return { result: "built", directory, command, exitCode };
+}
+
+/** The exit code a command line sous cannot parse ends with, such as a command the copy does not have. */
+const USAGE_EXIT_CODE = 2;
+
+/**
+ * Runs the newly installed project copy's pending migrations, before its build (spec 19: "Sous's
+ * upgrade command runs the pending migrations after it installs the new version"). The new copy
+ * runs them because only it has the migrations of the new version. It gets the terminal, so it
+ * asks its own questions; `--yes` and `--answer` are passed on, and without a terminal or either
+ * of them it lists what is waiting and changes nothing, which is not a failure.
+ *
+ * A downgrade runs none: the project keeps the version it migrated to. A new copy from before
+ * migrations existed has no command for them, which is not a failure either.
+ */
+async function migrateProject(plan: PlannedUpdate, directory: string | undefined, input: UpdateInput, ctx: Context): Promise<NonNullable<UpdateResult["migrations"]>> {
+    if (plan.direction === "downgrade") {
+        return { result: "skipped" };
+    }
+
+    if (directory === undefined) {
+        return { result: "no-config" };
+    }
+
+    const args = ["migrations", "run", ...(input.yes === true ? ["--yes"] : []), ...(input.answer ?? []).flatMap((answer) => ["--answer", answer])];
+    const command = newCopyCommand(plan, args, directory);
+
+    if (command === undefined) {
+        ctx.reporter.problem(`The update stands, but the new copy at ${realpathOr(plan.location)} names no bin sous can run, so no migration ran.`, {
+            hint: "Run 'sous doctor' in the project.",
+        }, LogLevel.Error);
+
+        return { result: "no-bin", directory };
+    }
+
+    ctx.reporter.operationStart("Running the migrations of the new version");
+
+    const exitCode = await execute(ctx, command, { ...ctx.env, [NO_DELEGATE_ENV]: "1" });
+
+    if (exitCode === USAGE_EXIT_CODE) {
+        return { result: "unsupported", directory, command, exitCode };
+    }
+
+    if (exitCode !== 0) {
+        ctx.reporter.problem(
+            `The update stands, but the migrations that followed it exited with code ${exitCode}.`,
+            { hint: "Fix what the migrations reported above and run 'sous doctor', which runs the ones still pending." },
+            LogLevel.Error,
+        );
+
+        return { result: "failed", directory, command, exitCode };
+    }
+
+    return { result: "migrated", directory, command, exitCode };
+}
+
+/**
+ * The command that runs the newly installed copy with `args` in `directory`: its bin under this
+ * Node, read from its package.json again now that the install replaced it, or, under Yarn
+ * Plug'n'Play, Yarn running the dependency's bin. Undefined when the copy names no bin.
+ */
+function newCopyCommand(plan: PlannedUpdate, args: readonly string[], directory: string): PlannedCommand | undefined {
+    if (plan.pnpRoot !== undefined) {
+        return { command: "yarn", args: ["run", "--binaries-only", "sous", ...args], cwd: directory };
+    }
+
+    const root = realpathOr(plan.location);
+    const entry = binEntryOf(readPackageJson(root));
+
+    return entry === undefined ? undefined : { command: process.execPath, args: [path.resolve(root, entry), ...args], cwd: directory };
 }
 
 /** What a failed build under Yarn Plug'n'Play adds: sous cannot run from inside Yarn's zip cache. */
@@ -228,6 +289,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
         ...(configProblem === undefined ? {} : { configProblem }),
     };
     const outcomes: UpdateOutcome[] = [];
+    let migrations: UpdateResult["migrations"];
     let build: UpdateResult["build"];
     let failed = false;
 
@@ -289,6 +351,12 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
         outcomes.push({ plan, result: "updated", exitCode });
 
         if (plan.scope === "project" && plan.projectRoot !== undefined) {
+            migrations = await migrateProject(plan, buildDirectory, input, ctx);
+
+            if (migrations.result === "failed" || migrations.result === "no-bin") {
+                failed = true;
+            }
+
             build = await buildProject(plan, buildDirectory, input, ctx);
 
             if (build.result === "failed" || build.result === "no-bin") {
@@ -297,12 +365,16 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
         }
     }
 
-    const result: UpdateResult = { ...base, outcomes, ...(build === undefined ? {} : { build }), failed };
+    const result: UpdateResult = { ...base, outcomes, ...(migrations === undefined ? {} : { migrations }), ...(build === undefined ? {} : { build }), failed };
 
-    // The CLI turns an error into exit code 1, as `sous update` always did when a step failed.
+    // The CLI turns an error into exit code 1, as the command that upgrades sous always did when a step failed.
     if (failed) {
         throw new ConfigError("Not every step of the update succeeded.", {
-            details: [...outcomes.map(describeOutcome), ...(build === undefined ? [] : [`Project build: ${build.result}`])],
+            details: [
+                ...outcomes.map(describeOutcome),
+                ...(migrations === undefined ? [] : [`Project migrations: ${migrations.result}`]),
+                ...(build === undefined ? [] : [`Project build: ${build.result}`]),
+            ],
         });
     }
 

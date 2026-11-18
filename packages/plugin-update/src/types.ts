@@ -1,6 +1,6 @@
 /**
  * The contract of plugin-update: updating sous itself
- * (`sous update`), installing plugins a recipe requires (`plugins.install`, `--install-plugins`),
+ * (`sous upgrade`), installing plugins a recipe requires (`plugins.install`, `--install-plugins`),
  * the `package-manager` entity, and the `update.scan` contributor, which adds installed plugins to
  * the `plugins` key when `plugins.discover` is `scan`.
  *
@@ -110,8 +110,10 @@ export interface UpdateNotice {
     readonly manualCommand?: PlannedCommand;
 }
 
-/** `update`: updates sous itself. */
+/** `upgrade`: upgrades sous itself. */
 export interface UpdateInput {
+    /** Answers to the questions of the migrations the new version runs, as `<id>=<value>`. */
+    answer?: string[];
     /** Allows a new major version. */
     major?: boolean;
     /** An exact version or range. */
@@ -143,7 +145,19 @@ export interface UpdateBuild {
     readonly exitCode?: number;
 }
 
-/** The result of `update`. */
+/**
+ * The migrations the new copy runs after a project upgrade, before the build. `unsupported`: the
+ * new copy has no migrations to run (a version from before they existed). `skipped`: a downgrade,
+ * whose project keeps the version it migrated to.
+ */
+export interface UpdateMigrations {
+    readonly result: "migrated" | "failed" | "skipped" | "no-config" | "no-bin" | "unsupported";
+    readonly directory?: string;
+    readonly command?: PlannedCommand;
+    readonly exitCode?: number;
+}
+
+/** The result of `upgrade`. */
 export interface UpdateResult {
     /** The registry URL the published versions were read from. */
     readonly registry: string;
@@ -159,6 +173,8 @@ export interface UpdateResult {
      * since the new copy may be the one that understands it.
      */
     readonly configProblem?: { readonly configPath?: string; readonly message: string };
+    /** The migrations the new copy ran in the project, before the build. */
+    readonly migrations?: UpdateMigrations;
     readonly build?: UpdateBuild;
     readonly failed: boolean;
 }
@@ -186,7 +202,7 @@ export interface PluginsInstallResult {
 
 declare module "@sous-io/plugin-api" {
     interface SousIntents {
-        update: { input: UpdateInput; result: UpdateResult };
+        upgrade: { input: UpdateInput; result: UpdateResult };
         "plugins.install": { input: PluginsInstallInput; result: PluginsInstallResult };
     }
 

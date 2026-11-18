@@ -54,9 +54,9 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
         }
 
         if (input.update) {
-            const planned = await ctx.run("subscription.update", { ref: name, dryRun: true, noBuild: true });
+            const planned = await ctx.run("update", { ref: name, dryRun: true, noBuild: true });
 
-            followUps.push({ intent: "subscription.update", result: planned.toPlain(), outputs: planned });
+            followUps.push({ intent: "update", result: planned.toPlain(), outputs: planned });
         }
 
         return { repo: name, path: entry.path, scope, removedCheckout: false, dryRun, followUps, wouldDo };
@@ -80,7 +80,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 
     if (input.update) {
         try {
-            const updated = await ctx.run("subscription.update", {
+            const updated = await ctx.run("update", {
                 ref: name,
                 noBuild: true,
                 ...(input.yes === undefined ? {} : { yes: input.yes }),
@@ -89,7 +89,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
             });
 
             diff = updated.toPlain().plan.diff;
-            followUps.push({ intent: "subscription.update", result: updated.toPlain(), outputs: updated });
+            followUps.push({ intent: "update", result: updated.toPlain(), outputs: updated });
         } catch (error) {
             const message = `'${name}' was unlinked, but its pins were not updated. ${messageOf(error)}`;
 
@@ -357,7 +357,7 @@ export function unlinkOutputs(ctx: Pick<Context, "reporter">, result: RepoUnlink
     }
 
     for (const entry of result.followUps as readonly RanFollowUp[]) {
-        if (entry.intent === "subscription.update" && entry.outputs !== undefined) {
+        if (entry.intent === "update" && entry.outputs !== undefined) {
             outputs.push(...underHeading("Updating the pins", entry.outputs.toArray()));
         }
     }
@@ -367,7 +367,7 @@ export function unlinkOutputs(ctx: Pick<Context, "reporter">, result: RepoUnlink
     }
 
     // The pins' own follow-ups are in their outputs above; only the rest are shown after.
-    const rest = followUpOutputs({ followUps: result.followUps.filter((entry) => entry.intent !== "subscription.update") });
+    const rest = followUpOutputs({ followUps: result.followUps.filter((entry) => entry.intent !== "update") });
 
     if (rest.failed) {
         ctx.reporter.error(`The repository '${result.repo}' was unlinked, but the build that followed it failed; fix what the build reported above and run 'sous build' again.`);

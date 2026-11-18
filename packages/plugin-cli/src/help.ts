@@ -1,4 +1,4 @@
-import type { Command, CommandNode } from "./command-tree.js";
+import type { Command, CommandNode, CommandTree } from "./command-tree.js";
 import type { FlagSpec, PositionalSpec } from "./flags.js";
 import type { GlobalSpec } from "./globals.js";
 import { createStyle, type Style } from "./views/style.js";
@@ -8,6 +8,11 @@ export interface HelpContext {
     readonly appName: string;
     readonly appDescription?: string;
     readonly globals: readonly GlobalSpec[];
+    /**
+     * The tree the node belongs to, so a command's help also lists the words its groups' aliases
+     * give it (`sous ns list`). Without it, only the command's own aliases are listed.
+     */
+    readonly tree?: CommandTree;
     /** The colors section titles, commands and flags are painted with. Default: none. */
     readonly style?: Style;
 }
@@ -85,8 +90,10 @@ export function renderHelp(node: CommandNode, context: HelpContext): string {
         sections.push(table("COMMANDS", commands.map(listed)));
     }
 
-    if (command && command.aliases.length > 0) {
-        sections.push(block("ALIASES", command.aliases.map((alias) => `$ ${[context.appName, ...alias].join(" ")}`)));
+    const aliases = aliasLines(node, context);
+
+    if (aliases.length > 0) {
+        sections.push(block("ALIASES", aliases.map((alias) => `$ ${[context.appName, ...alias].join(" ")}`)));
     }
 
     const examples = command?.info.definition.cli?.examples ?? [];
@@ -106,6 +113,30 @@ export function renderHelp(node: CommandNode, context: HelpContext): string {
     );
 
     return `${sections.join("\n\n")}\n`;
+}
+
+/**
+ * The other words a help page's subject answers to: a group's own aliases (`ns` for `namespace`),
+ * then the command's (`namespace ls`, and `ns list` through the group's alias).
+ */
+function aliasLines(node: CommandNode, context: HelpContext): Array<readonly string[]> {
+    const lines: Array<readonly string[]> = [];
+    const group = node.group;
+
+    if (group !== undefined && (group.aliases ?? []).length > 0) {
+        // Reached through an alias (`sous ns --help`), the page names the group's own words too.
+        const here = node.path.join(" ");
+
+        lines.push(...[group.command, ...(group.aliases ?? [])].filter((words) => words.join(" ") !== here));
+    }
+
+    const command = node.command;
+
+    if (command !== undefined && !(node.viaAlias && group !== undefined && lines.length > 0)) {
+        lines.push(...(context.tree?.aliasesOf(command) ?? command.aliases));
+    }
+
+    return lines;
 }
 
 /** A positional argument's name as help and errors write it: `URL`, `REF`. */

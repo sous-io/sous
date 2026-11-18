@@ -600,7 +600,7 @@ export function registerRepoIntents(sous: Sous): void {
             ["url"],
         ),
         changesConfig: true,
-        cli: { aliases: [["repos", "add"]], positional: ["url"], flags: { yes: yesFlag } },
+        cli: { positional: ["url"], flags: { yes: yesFlag } },
         handle: async (input, ctx) => repoAddOutputs(await addRepo(input, ctx)),
     });
 
@@ -610,7 +610,7 @@ export function registerRepoIntents(sous: Sous): void {
         summary: "Stop trusting a repository, removing the subscriptions that resolve into it",
         input: inputSchema<RepoRemoveInput>({ repo: { type: "string", description: "The repository's short name" }, yes, dryRun, noBuild }, ["repo"]),
         changesConfig: true,
-        cli: { aliases: [["repos", "remove"]], positional: ["repo"], flags: { yes: yesFlagNoTrust } },
+        cli: { aliases: [["repo", "rm"]], positional: ["repo"], flags: { yes: yesFlagNoTrust } },
         handle: async (input, ctx) => repoRemoveOutputs(ctx, await removeRepo(input, ctx)),
     });
 
@@ -623,7 +623,7 @@ export function registerRepoIntents(sous: Sous): void {
             ["repo"],
         ),
         changesConfig: true,
-        cli: { aliases: [["repos", "trust"]], positional: ["repo"], flags: { yes: yesFlag } },
+        cli: { positional: ["repo"], flags: { yes: yesFlag } },
         handle: async (input, ctx) => repoTrustOutputs(await trustRepo(input, ctx)),
     });
 
@@ -633,7 +633,7 @@ export function registerRepoIntents(sous: Sous): void {
         summary: "List the repositories this project trusts",
         input: inputSchema<RepoListInput>({ latest, installed, verbose: { type: "boolean", description: "Show more about each repository" } }),
         parallel: true,
-        cli: { aliases: [["repos", "list"]], flags: { latest: latestFlag } },
+        cli: { aliases: [["repo", "ls"]], flags: { latest: latestFlag } },
         handle: async (input, ctx) => repoListOutputs(ctx, input, await listRepos(input, ctx)),
     });
 
@@ -646,7 +646,7 @@ export function registerRepoIntents(sous: Sous): void {
             ["text"],
         ),
         parallel: true,
-        cli: { aliases: [["search"], ["repos", "search"]], positional: ["text"], flags: { latest: latestFlag } },
+        cli: { aliases: [["search"]], positional: ["text"], flags: { latest: latestFlag } },
         handle: async (input, ctx) => repoSearchOutputs(ctx, input, await searchRepos(input, ctx)),
     });
 }

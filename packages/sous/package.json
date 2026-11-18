@@ -82,6 +82,8 @@
     "@sous-io/plugin-yarn": "workspace:*",
     "@sous-io/sous-plugin-handlers": "workspace:*",
     "@sous-io/sous-plugin-editor": "workspace:*",
+    "@sous-io/sous-plugin-doctor": "workspace:*",
+    "@sous-io/sous-plugin-migrations": "workspace:*",
     "esbuild": "^0.27.4",
     "jsonc-parser": "^3.3.1",
     "yaml": "^2.9.0",

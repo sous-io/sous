@@ -20,6 +20,8 @@ import { harnessesPlugin } from "@sous-io/plugin-harnesses";
 import { authoringPlugin } from "@sous-io/plugin-authoring";
 import { initPlugin } from "@sous-io/plugin-init";
 import { updatePlugin } from "@sous-io/plugin-update";
+import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
+import { migrationsPlugin } from "@sous-io/sous-plugin-migrations";
 import { inspectPlugin } from "@sous-io/plugin-inspect";
 import { mcpPlugin } from "@sous-io/plugin-mcp";
 import { npmPlugin } from "@sous-io/plugin-npm";
@@ -64,6 +66,8 @@ export const envPluginsPlugin: PluginDefinition = definePlugin({
  */
 export const BUILT_IN_PLUGINS: readonly PluginDefinition[] = [
     hostPlugin,
+    doctorPlugin,
+    migrationsPlugin,
     gitPlugin,
     refsPlugin,
     variablesPlugin,

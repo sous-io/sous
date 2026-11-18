@@ -35,6 +35,7 @@
   - [Handlers](architecture/specifications/S13-handlers.md)
   - [The editor](architecture/specifications/S9-the-editor.md)
   - [What sous init writes, and sous init hooks](architecture/specifications/S14-init-and-git-hooks.md)
+  - [Migrations, sous doctor, upgrade and update](architecture/specifications/S11-migrations-and-doctor.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -66,3 +67,5 @@
   - [0027: Assertions on edited files](adrs/0027-assertions-on-edited-files.md)
   - [0029: Every output file is a config entry, and variables by output path](adrs/0029-outputs-are-config-entries-and-var-overrides.md)
   - [0035: `sous init` writes a JSONC config and installs git hooks](adrs/0035-init-and-git-hooks.md)
+  - [0030: Migrations, and `sous doctor`](adrs/0030-migrations.md)
+  - [0031: `sous upgrade`, `sous update`, and short aliases](adrs/0031-upgrade-update-and-short-aliases.md)

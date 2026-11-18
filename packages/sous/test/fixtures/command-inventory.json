@@ -1254,7 +1254,7 @@
     },
     {
       "command": [
-        "update"
+        "upgrade"
       ],
       "aliases": [],
       "hiddenAliases": [],

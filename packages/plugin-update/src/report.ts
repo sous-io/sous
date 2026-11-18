@@ -1,5 +1,5 @@
 /**
- * What `update` and `plugins.install` show: the update plan or the summary of an update, and the
+ * What `upgrade` and `plugins.install` show: the update plan or the summary of an update, and the
  * plugins installed. Each builder returns outputs; the intents add the machine data.
  */
 
@@ -77,7 +77,7 @@ function buildFact(noBuild: boolean, buildDirectory: string | undefined): Variab
     return { label: "Then builds", value: "yes", detail: `with the new copy, in ${buildDirectory}` };
 }
 
-/** The block `sous update` opens with: where it ran, which installs, which version, the registry. */
+/** The block `sous upgrade` opens with: where it ran, which installs, which version, the registry. */
 export function updateCommandEntries(result: UpdateResult, input: UpdateInput, cwd: string | undefined): Record<string, unknown> {
     const installs = input.global === true ? "global only" : input.project === true ? "project only" : "global and project";
     const version =
@@ -110,6 +110,33 @@ function summaryRows(result: UpdateResult, globalCount: number): VariableEntry[]
                 return { label, value: `up to date at ${plan.installed}` };
         }
     });
+    const migrations = result.migrations;
+
+    if (migrations !== undefined) {
+        const label = "Project migrations";
+
+        switch (migrations.result) {
+            case "migrated":
+                rows.push({ label, value: "ran", detail: "the new copy ran every pending migration it could" });
+                break;
+            case "failed":
+                rows.push({ label, value: "failed", detail: `exited with code ${migrations.exitCode}` });
+                break;
+            case "no-bin":
+                rows.push({ label, value: "failed", detail: "the new copy names no bin" });
+                break;
+            case "unsupported":
+                rows.push({ label, value: "none", detail: "the new copy has no migrations to run" });
+                break;
+            case "skipped":
+                rows.push({ label, value: "not run", detail: "a downgrade keeps the version the project migrated to" });
+                break;
+            case "no-config":
+                rows.push({ label, value: "not run", detail: "the project has no sous config" });
+                break;
+        }
+    }
+
     const build = result.build;
 
     if (build !== undefined) {
@@ -138,7 +165,7 @@ function summaryRows(result: UpdateResult, globalCount: number): VariableEntry[]
 }
 
 /**
- * `sous update`: the block it opens with, the installs it cannot update, then each install's
+ * `sous upgrade`: the block it opens with, the installs it cannot update, then each install's
  * facts. A dry run ends there, with the command each install would run; a real run adds the
  * summary. The commands of a real run were reported as they ran, since their own output follows them.
  */

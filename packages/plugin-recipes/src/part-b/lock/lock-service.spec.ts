@@ -104,8 +104,40 @@ describe("LockService.write", () => {
 
         expect(JSON.parse(fs.readFileSync(lock.path(), "utf8")).recipes["workflow/alpha"].version).toBe("1.0.0");
         expect(fs.readFileSync(lock.path(), "utf8").endsWith("\n")).toBe(true);
-        expect(locked).toEqual([{ path: lock.path(), diff }]);
+        expect(locked).toEqual([{ path: lock.path(), diff, created: true }]);
         expect((await lock.write(pinned())).unchanged).toBe(true);
+        expect(locked[1]).toEqual({ path: lock.path(), diff: expect.anything() });
+    });
+});
+
+describe("LockService.migratedVersion", () => {
+    /**
+     * The version of sous whose migrations the project last ran is stored in the lockfile and
+     * survives a write of a lockfile made from resolved recipes, which does not carry it.
+     *
+     * setMigratedVersion("1.1.0"); write(pinned()) -> migratedVersion still "1.1.0"
+     */
+    it("should store the migrated version and keep it through later writes", async () => {
+        writeLock(pinned());
+
+        const { lock } = await lockService();
+
+        expect(lock.exists()).toBe(true);
+        expect(lock.migratedVersion()).toBeUndefined();
+
+        await lock.setMigratedVersion("1.1.0");
+        await lock.write(pinned());
+
+        expect(lock.migratedVersion()).toBe("1.1.0");
+        expect(JSON.parse(fs.readFileSync(lock.path(), "utf8")).migratedVersion).toBe("1.1.0");
+        expect(lock.read().recipes["workflow/alpha"]?.version).toBe("1.0.0");
+    });
+
+    /** Before anything writes it, the project has no lockfile. */
+    it("should say when the project has no lockfile yet", async () => {
+        const { lock } = await lockService();
+
+        expect(lock.exists()).toBe(false);
     });
 
     /**

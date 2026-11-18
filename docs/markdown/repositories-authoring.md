@@ -392,10 +392,10 @@ Once your change is released, one of these moves the project onto it:
 
 ```bash
 sous repo unlink my-recipes --update       # unlink, move this repository's pins, then rebuild
-sous subscription update my-recipes        # the same move, when nothing is linked any more
+sous update my-recipes                     # the same move, when nothing is linked any more
 ```
 
-`--update` runs exactly the code `sous subscription update my-recipes` runs: every pin the repository supplies
+`--update` runs exactly the code `sous update my-recipes` runs: every pin the repository supplies
 moves to the newest version its range allows, after one plan and one question. See
 [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 

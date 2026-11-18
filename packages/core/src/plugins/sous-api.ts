@@ -21,6 +21,8 @@ import type {
     ServiceRegistry as ServiceRegistryApi,
     ServiceWrapper,
     Sous,
+    SousExtensionFactory,
+    SousExtensions,
     SousSchema,
 } from "@sous-io/plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
@@ -48,6 +50,10 @@ export interface SousApiHost {
     listen(pattern: EventPattern, listener: Listener<never>, options: ListenerOptions & { once?: boolean }, record: PluginRecord): void;
     unlisten(pattern: EventPattern, listener: Listener<never>): void;
     emit(name: string, payload: unknown, record: PluginRecord): Promise<unknown>;
+    /** Adds a namespace to every plugin's `sous` object; a second plugin adding the same name is an error. */
+    addExtension(name: string, factory: SousExtensionFactory<unknown>, record: PluginRecord): void;
+    /** The factory of a namespace, if a plugin added it. */
+    extension(name: string): SousExtensionFactory<unknown> | undefined;
 }
 
 /**
@@ -103,8 +109,14 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
         kinds: () => host.entitiesForDirectRead(record).kinds(),
     };
 
-    return {
+    const base: Omit<Sous, keyof SousExtensions> = {
         plugin: { name: record.name, version: record.version },
+        extensions: {
+            add(name: string, factory: SousExtensionFactory<unknown>) {
+                host.addExtension(name, factory, record);
+                note("extension", name);
+            },
+        },
         get project() {
             return host.project;
         },
@@ -154,4 +166,28 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
         },
         emit: ((name: string, payload?: unknown) => host.emit(name, payload, record)) as Sous["emit"],
     };
+
+    // A namespace another plugin added (`sous.migrations`) is made for this plugin on first use,
+    // from this plugin's own `sous`, so what it registers is recorded as this plugin's.
+    const made = new Map<string, unknown>();
+
+    return new Proxy(base, {
+        get(target, property, receiver) {
+            if (typeof property !== "string" || Reflect.has(target, property)) {
+                return Reflect.get(target, property, receiver);
+            }
+
+            if (!made.has(property)) {
+                const factory = host.extension(property);
+
+                if (factory === undefined) {
+                    return undefined;
+                }
+
+                made.set(property, factory(receiver as Sous));
+            }
+
+            return made.get(property);
+        },
+    }) as unknown as Sous;
 }

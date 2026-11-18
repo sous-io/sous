@@ -99,13 +99,13 @@ function writePackage(dir: string, pkg: Record<string, unknown>): void {
 }
 
 /**
- * The real `sous update` command, end to end through the bundled bin: its flags,
+ * The real `sous upgrade` command, end to end through the bundled bin: its flags,
  * its wiring to the registry, the package managers and the build, and the
  * hand-off it skips. The registry is a server this test runs on 127.0.0.1,
  * reached through `npm_config_registry`, and every package manager is a
  * script in the temp tree, so nothing reaches a network or a real install.
  */
-describe("the sous update command", () => {
+describe("the sous upgrade command", () => {
   beforeAll(async () => {
     tmp = makeTmpDir("sous-update-command-");
     fakeBin = path.join(tmp.path, "bin");
@@ -190,14 +190,14 @@ describe("the sous update command", () => {
    * Outside a project, `--yes` updates the global install through npm with
    * the exact version, and prints the command before it runs.
    *
-   * sous update --yes (global 0.2.30) -> npm i -g @sous-io/sous@0.2.34
+   * sous upgrade --yes (global 0.2.30) -> npm i -g @sous-io/sous@0.2.34
    */
   it(
     "should update the global install through npm under --yes",
     async () => {
       installGlobal("0.2.30");
 
-      const result = await runSous(outside(), "update", "--yes");
+      const result = await runSous(outside(), "upgrade", "--yes");
 
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([`npm i -g @sous-io/sous@0.2.34 @ ${outside()}`]);
@@ -212,14 +212,14 @@ describe("the sous update command", () => {
    * With no terminal and no `--yes`, the run fails with the shared error
    * naming the question and `--yes`, and installs nothing.
    *
-   * sous update (no terminal) -> exit 1, the error names --yes, no npm install
+   * sous upgrade (no terminal) -> exit 1, the error names --yes, no npm install
    */
   it(
     "should fail naming --yes when there is no terminal",
     async () => {
       installGlobal("0.2.30");
 
-      const result = await runSous(outside(), "update");
+      const result = await runSous(outside(), "upgrade");
 
       expect(result.status).toBe(1);
       const printed = flat(result.stdout + result.stderr);
@@ -231,22 +231,23 @@ describe("the sous update command", () => {
   );
 
   /**
-   * In a project with its own copy, `update` is not handed to that copy: the
+   * In a project with its own copy, `upgrade` is not handed to that copy: the
    * invoked copy updates the dependency in the project root, then runs the
    * NEW copy's bin with `build`, in the project, with the hand-off off.
    *
-   * sous update --project --yes -> npm i -D -E ..., then project-copy build
+   * sous upgrade --project --yes -> npm i -D -E ..., then project-copy build
    */
   it(
     "should update the project install and build with the new copy",
     async () => {
       const project = makeProject();
 
-      const result = await runSous(project, "update", "--project", "--yes");
+      const result = await runSous(project, "upgrade", "--project", "--yes");
 
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -259,7 +260,7 @@ describe("the sous update command", () => {
    * is one warning, not a stop: the update still runs, and the new copy still
    * builds the project, since it may be the copy that understands the config.
    *
-   * sous update --project --yes (config rejected) -> warning, npm, project-copy build
+   * sous upgrade --project --yes (config rejected) -> warning, npm, project-copy build
    */
   it(
     "should warn about a config it cannot load and still update and build",
@@ -268,7 +269,7 @@ describe("the sous update command", () => {
       const configPath = path.join(project, ".sous", "sous.config.json");
       fs.writeFileSync(configPath, '{ "version": 1, "futureSetting": true }', "utf8");
 
-      const result = await runSous(project, "update", "--project", "--yes");
+      const result = await runSous(project, "upgrade", "--project", "--yes");
 
       expect(result.status).toBe(0);
       // Warnings go to stderr, the plan and progress to stdout.
@@ -281,6 +282,7 @@ describe("the sous update command", () => {
       expect(printed).toContain(`Then builds : yes with the new copy, in ${project}`);
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -292,7 +294,7 @@ describe("the sous update command", () => {
    * build runs, exactly as a config that loaded would be; the project root,
    * which has no config of its own here, is not.
    *
-   * sous update --project --yes (in packages/app, its config rejected) -> build in packages/app
+   * sous upgrade --project --yes (in packages/app, its config rejected) -> build in packages/app
    */
   it(
     "should build where the rejected config is, inside the project",
@@ -307,12 +309,13 @@ describe("the sous update command", () => {
         "utf8"
       );
 
-      const result = await runSous(app, "update", "--project", "--yes");
+      const result = await runSous(app, "upgrade", "--project", "--yes");
 
       expect(result.status).toBe(0);
       expect(flat(result.stderr)).toContain("Sous could not load the project config at");
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${app} SOUS_NO_DELEGATE=1`,
         `project-copy build @ ${app} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -324,7 +327,7 @@ describe("the sous update command", () => {
    * package.json and `.pnp.cjs`, its version is read from yarn.lock, Yarn
    * Berry pins the new version, and Yarn runs the new copy's build.
    *
-   * sous update --project --yes (PnP, yarn.lock at 0.2.18)
+   * sous upgrade --project --yes (PnP, yarn.lock at 0.2.18)
    * // -> yarn add -D -E @sous-io/sous@0.2.34, then yarn run --binaries-only sous build
    */
   it(
@@ -341,7 +344,7 @@ describe("the sous update command", () => {
       fs.mkdirSync(path.join(project, ".sous"), { recursive: true });
       fs.writeFileSync(path.join(project, ".sous", "sous.config.json"), '{ "version": 1 }', "utf8");
 
-      const dry = await runSous(project, "update", "--project", "--dry-run");
+      const dry = await runSous(project, "upgrade", "--project", "--dry-run");
       expect(dry.status).toBe(0);
       const plan = flat(dry.stdout);
       expect(plan).toContain(
@@ -352,10 +355,11 @@ describe("the sous update command", () => {
       expect(plan).toContain("Would run : yarn add -D -E @sous-io/sous@0.2.34");
       expect(takeCalls()).toEqual([]);
 
-      const result = await runSous(project, "update", "--project", "--yes");
+      const result = await runSous(project, "upgrade", "--project", "--yes");
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([
         `yarn add -D -E @sous-io/sous@0.2.34 @ ${project} SOUS_NO_DELEGATE=`,
+        `yarn run --binaries-only sous migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
         `yarn run --binaries-only sous build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
@@ -363,19 +367,22 @@ describe("the sous update command", () => {
   );
 
   /**
-   * `--no-build` updates the project install and runs no build.
+   * `--no-build` updates the project install and runs its migrations, and no build.
    *
-   * sous update --project --yes --no-build -> only npm runs
+   * sous upgrade --project --yes --no-build -> npm, then the new copy's migrations; no build
    */
   it(
     "should skip the build under --no-build",
     async () => {
       const project = makeProject();
 
-      const result = await runSous(project, "update", "--project", "--yes", "--no-build");
+      const result = await runSous(project, "upgrade", "--project", "--yes", "--no-build");
 
       expect(result.status).toBe(0);
-      expect(takeCalls()).toEqual([`npm i -D -E @sous-io/sous@0.2.34 @ ${project}`]);
+      expect(takeCalls()).toEqual([
+        `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy migrations run --yes @ ${project} SOUS_NO_DELEGATE=1`,
+      ]);
     },
     CLI_TIMEOUT
   );
@@ -383,14 +390,14 @@ describe("the sous update command", () => {
   /**
    * A dry run prints the plan and installs nothing.
    *
-   * sous update --dry-run -> "Nothing was installed", no npm install
+   * sous upgrade --dry-run -> "Nothing was installed", no npm install
    */
   it(
     "should install nothing in a dry run",
     async () => {
       installGlobal("0.2.30");
 
-      const result = await runSous(outside(), "update", "--dry-run");
+      const result = await runSous(outside(), "upgrade", "--dry-run");
 
       expect(result.status).toBe(0);
       expect(flat(result.stdout)).toContain("Would run : npm i -g @sous-io/sous@0.2.34");
@@ -404,7 +411,7 @@ describe("the sous update command", () => {
    * `--major` with `--version`, and `--global` with `--project`, are refused
    * before anything is read.
    *
-   * sous update --major --version 1.0.0 -> exit 2, names both flags
+   * sous upgrade --major --version 1.0.0 -> exit 2, names both flags
    */
   it(
     "should refuse the flags that exclude each other",
@@ -413,7 +420,7 @@ describe("the sous update command", () => {
         ["--major", "--version", "1.0.0"],
         ["--global", "--project"],
       ]) {
-        const result = await runSous(outside(), "update", first!, ...rest);
+        const result = await runSous(outside(), "upgrade", first!, ...rest);
         expect(result.status).toBe(2);
         const printed = flat(result.stderr + result.stdout);
         expect(printed).toContain(first!);

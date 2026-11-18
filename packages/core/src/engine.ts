@@ -41,6 +41,7 @@ import {
     type ServiceFactory,
     type ServiceOptions,
     type ServiceWrapper,
+    type SousExtensionFactory,
     IntentOutputs,
     SousError,
     type SousSchema,
@@ -158,6 +159,8 @@ export class Engine {
     private readonly services: ServiceRegistry;
     private readonly singletons = new Map<string, unknown>();
     private readonly frontEnds = new Map<string, { definition: FrontEndDefinition; plugin: string }>();
+    /** The namespaces plugins added to the `sous` object (`sous.migrations`), by name. */
+    private readonly sousExtensions = new Map<string, { factory: SousExtensionFactory<unknown>; plugin: string }>();
     private readonly timer: Timer;
     private readonly scheduler: Scheduler;
     private readonly baseLimits: Limits;
@@ -1168,6 +1171,20 @@ export class Engine {
 
             return this.emitCustom(name, payload, this.detachedCall());
         },
+        addExtension: (name: string, factory: SousExtensionFactory<unknown>, record: PluginRecord) => {
+            if (typeof factory !== "function") {
+                throw new SousError(`${record.name} added the sous.${name} namespace without a factory function.`);
+            }
+
+            const existing = this.sousExtensions.get(name);
+
+            if (existing !== undefined && existing.plugin !== record.name) {
+                throw new SousError(`Two plugins add sous.${name}: ${existing.plugin} and ${record.name}.`);
+            }
+
+            this.sousExtensions.set(name, { factory, plugin: record.name });
+        },
+        extension: (name: string) => this.sousExtensions.get(name)?.factory,
         };
     }
 

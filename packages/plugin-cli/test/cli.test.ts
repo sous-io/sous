@@ -518,6 +518,25 @@ describe("built-in groups, globals and help intent", () => {
         expect((await runCli([commandPlugin], ["configs", "show"])).stdout).toBe("shown\n");
     });
 
+    /**
+     * A short group alias runs the group's commands, and help names every other spelling.
+     *
+     * sous cfg show            -> shown
+     * sous config show --help  -> ALIASES: sous configs show, sous cfg show
+     * sous cfg --help          -> ALIASES: sous config, sous configs
+     */
+    it("should answer to a group's short alias and list the aliases in help", async () => {
+        expect((await runCli([commandPlugin], ["cfg", "show"])).stdout).toBe("shown\n");
+
+        const command = (await runCli([commandPlugin], ["config", "show", "--help"])).stdout;
+
+        expect(command).toContain("ALIASES\n  $ sous configs show\n  $ sous cfg show\n");
+
+        const group = (await runCli([commandPlugin], ["cfg", "--help"])).stdout;
+
+        expect(group).toContain("ALIASES\n  $ sous config\n  $ sous configs\n");
+    });
+
     /** `sous help <words>` prints what `--help` prints. */
     it("should print help for the words after help", async () => {
         const viaHelp = await runCli([commandPlugin], ["help", "config", "show"]);

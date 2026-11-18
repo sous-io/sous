@@ -301,6 +301,11 @@ export function standIns(world: World): PluginDefinition[] {
                 return diff;
             },
             diff: diffLocks,
+            exists: () => true,
+            migratedVersion: () => world.lockfile.migratedVersion,
+            setMigratedVersion: async (version: string) => {
+                world.lockfile = { ...world.lockfile, migratedVersion: version };
+            },
             fromResolved: (resolved: readonly ResolvedRecipe[], previous?: Lockfile) =>
                 ({
                     formatVersion: 1,

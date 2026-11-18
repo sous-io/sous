@@ -124,9 +124,10 @@ describe("update handler", () => {
 
     /**
      * With --yes, each install runs through its manager, in order, and the project install is
-     * followed by a build with the new copy when the project has a config.
+     * followed by the new copy's migrations (passed --yes), then a build with the new copy, when
+     * the project has a config.
      */
-    it("should run each install with yes and build the project afterwards", async () => {
+    it("should run each install with yes, then the new copy's migrations and build", async () => {
         const { managers, location } = layout({ withConfig: true });
         const { ctx, recorded, prompter } = recordingContext({ managers, registry: REGISTRY, ownRoot: "/src/sous" });
         const result = (await handle({ yes: true }, ctx)).toPlain();
@@ -135,9 +136,12 @@ describe("update handler", () => {
         expect(recorded.commands).toEqual([
             "npm i -g @sous-io/sous@0.2.34",
             "pnpm add -D -E @sous-io/sous@0.2.34",
+            `${process.execPath} ${path.join(location, "bin/run.js")} migrations run --yes`,
             `${process.execPath} ${path.join(location, "bin/run.js")} build`,
         ]);
         expect(recorded.runs[2]).toMatchObject({ cwd: dir, env: { SOUS_NO_DELEGATE: "1" } });
+        expect(recorded.runs[3]).toMatchObject({ cwd: dir, env: { SOUS_NO_DELEGATE: "1" } });
+        expect(result.migrations).toMatchObject({ result: "migrated", directory: dir, exitCode: 0 });
         // Every run asks for the shell on Windows, where a package manager is a `.cmd` shim.
         expect(recorded.runs.every((run) => run.windowsShell === true)).toBe(true);
         expect(result.outcomes.map((outcome) => outcome.result)).toEqual(["updated", "updated"]);
@@ -218,9 +222,28 @@ describe("update handler", () => {
     /** A failing build after a project update fails the update too. */
     it("should fail when the build after the project update fails", async () => {
         const { managers } = layout({ withConfig: true });
-        const { ctx } = recordingContext({ managers, registry: REGISTRY, exitCodes: [0, 3] });
+        const { ctx } = recordingContext({ managers, registry: REGISTRY, exitCodes: [0, 0, 3] });
 
-        await expect(handle({ yes: true, project: true }, ctx)).rejects.toMatchObject({ details: expect.arrayContaining(["Project build: failed"]) });
+        await expect(handle({ yes: true, project: true }, ctx)).rejects.toMatchObject({ details: expect.arrayContaining(["Project migrations: migrated", "Project build: failed"]) });
+    });
+
+    /**
+     * The new copy's migrations get each --answer; a new copy that has no migrations command
+     * (exit code 2) is not a failure, and the build still runs; a failed migration fails the
+     * upgrade, and the build still runs.
+     */
+    it("should pass answers to the new copy's migrations, and tell a copy without them from a failure", async () => {
+        const { managers, location } = layout({ withConfig: true });
+        const answered = recordingContext({ managers, registry: REGISTRY, exitCodes: [0, 2, 0] });
+        const result = (await handle({ yes: true, project: true, answer: ["memories.location=keep"] }, answered.ctx)).toPlain();
+
+        expect(answered.recorded.commands[1]).toBe(`${process.execPath} ${path.join(location, "bin/run.js")} migrations run --yes --answer memories.location=keep`);
+        expect(result.migrations).toMatchObject({ result: "unsupported", exitCode: 2 });
+        expect(result.build).toMatchObject({ result: "built" });
+
+        const failing = recordingContext({ managers, registry: REGISTRY, exitCodes: [0, 1, 0] });
+
+        await expect(handle({ yes: true, project: true }, failing.ctx)).rejects.toMatchObject({ details: expect.arrayContaining(["Project migrations: failed", "Project build: built"]) });
     });
 
     /** Flags that cannot be combined are refused before anything is read. */

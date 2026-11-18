@@ -293,3 +293,23 @@ describe("lockfileSchema", () => {
     expect(lockfileSchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe("migratedVersion", () => {
+  /**
+   * The lockfile records the version of sous whose migrations the project last
+   * ran, and keeps it through a write.
+   *
+   * { ..., "migratedVersion": "1.1.0" } -> parsed and written back unchanged
+   */
+  it("should accept and keep a migrated version", () => {
+    const parsed = parseLockfile({ ...validLockfile(), migratedVersion: "1.1.0" }, SOURCE);
+
+    expect(parsed.migratedVersion).toBe("1.1.0");
+    expect(JSON.parse(stringifyLockfile(parsed)).migratedVersion).toBe("1.1.0");
+  });
+
+  /** A migrated version that is not a version is refused, naming the key. */
+  it("should reject a migrated version that is not a semver version", () => {
+    expect(expectRejectMessage({ ...validLockfile(), migratedVersion: "soon" })).toContain("migratedVersion");
+  });
+});

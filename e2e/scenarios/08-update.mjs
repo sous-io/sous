@@ -1,10 +1,10 @@
 import path from "node:path";
 import { assert, expectExit, expectIncludes, expectNotIncludes, parseJson, run } from "../lib/harness.mjs";
 
-// `sous update` and `init` care about the package manager that installed sous, so each manager
+// `sous upgrade` and `init` care about the package manager that installed sous, so each manager
 // gets a project with sous installed by it.
 
-// The newest stable version before the latest one, so `update` has somewhere to go.
+// The newest stable version before the latest one, so `upgrade` has somewhere to go.
 let OLD_VERSION = "1.0.0";
 function pickOldVersion(t) {
   const out = t.sh("npm view @sous-io/sous versions --json").stdout;
@@ -42,7 +42,7 @@ function managers() {
 
 export default {
   name: "update",
-  title: "Update: sous update --dry-run and init through npm, pnpm and Yarn Plug'n'Play",
+  title: "Upgrade: sous upgrade --dry-run and init through npm, pnpm and Yarn Plug'n'Play",
   async run(t) {
     pickOldVersion(t);
     NEW = t.requestedVersion;
@@ -89,40 +89,40 @@ export default {
         expectIncludes(t.sh("git config core.hooksPath", { cwd: dir }).stdout, ".husky", "core.hooksPath");
       });
 
-      await t.step(`${pm.id}: update --project --dry-run names ${pm.id} and installs nothing`, () => {
+      await t.step(`${pm.id}: upgrade --project --dry-run names ${pm.id} and installs nothing`, () => {
         if (!ready) t.skip("install failed");
         if (!initOk) t.skip("init did not produce a loadable config, see the init step");
         const before = t.read(pm.lockfile, dir);
-        const r = sous(["update", "--project", "--dry-run"]);
+        const r = sous(["upgrade", "--project", "--dry-run"]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
         const text = r.stderr + r.stdout;
-        expectIncludes(text.toLowerCase(), pm.id.split("-")[0], "update plan");
+        expectIncludes(text.toLowerCase(), pm.id.split("-")[0], "upgrade plan");
         assert.equal(t.read(pm.lockfile, dir), before, "dry run changed the lockfile");
         expectIncludes(expectExit(sous(["--version"])).stdout, t.sousVersion.replace(/^v/, ""), "version after dry run");
       });
 
-      await t.step(`${pm.id}: update --dry-run --json is one object`, () => {
+      await t.step(`${pm.id}: upgrade --dry-run --json is one object`, () => {
         if (!ready) t.skip("install failed");
         if (!initOk) t.skip("init did not produce a loadable config, see the init step");
-        const r = sous(["--json", "update", "--project", "--dry-run"]);
+        const r = sous(["--json", "upgrade", "--project", "--dry-run"]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
         parseJson(r.stdout);
       });
 
-      await t.step(`${pm.id}: update --project --version <older> --yes changes the installed version`, () => {
+      await t.step(`${pm.id}: upgrade --project --version <older> --yes changes the installed version`, () => {
         if (!ready) t.skip("install failed");
         if (!initOk) t.skip("init did not produce a loadable config, see the init step");
-        const r = sous(["update", "--project", "--yes", "--no-build", "--version", OLD_VERSION]);
+        const r = sous(["upgrade", "--project", "--yes", "--no-build", "--version", OLD_VERSION]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
         // Check what the package manager installed, not by running the older sous: an older release
         // need not load this project (Yarn Plug'n'Play loads only from 1.0.8 on).
-        expectIncludes(t.read(pm.lockfile, dir), OLD_VERSION, "lockfile after update");
+        expectIncludes(t.read(pm.lockfile, dir), OLD_VERSION, "lockfile after upgrade");
       });
     }
 
-    await t.step("update --version with an unknown version fails naming it", () => {
+    await t.step("upgrade --version with an unknown version fails naming it", () => {
       const dir = path.join(t.root, "pm-npm");
-      const r = run(path.join(dir, "node_modules/.bin/sous"), ["update", "--project", "--dry-run", "--version", "99.99.99"], { cwd: dir, env: t.env });
+      const r = run(path.join(dir, "node_modules/.bin/sous"), ["upgrade", "--project", "--dry-run", "--version", "99.99.99"], { cwd: dir, env: t.env });
       assert.notEqual(r.code, 0);
       expectIncludes(r.stderr, "99.99.99", "stderr");
     });

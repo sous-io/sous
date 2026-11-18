@@ -593,6 +593,15 @@ export interface RecipesLock {
      * `keepPins`): every locked version but those of the keys in `except`.
      */
     held(lockfile: Lockfile, except?: Iterable<string>): Pick<ResolveOptions, "keep" | "keepPins">;
+    /** Whether the project has a lockfile on disk yet. */
+    exists(): boolean;
+    /**
+     * The version of sous whose migrations the project last ran (`migratedVersion`), or undefined
+     * when the lockfile does not record one. Only the migrations plugin decides what it means.
+     */
+    migratedVersion(): string | undefined;
+    /** Records the version of sous whose migrations the project last ran, keeping everything else. */
+    setMigratedVersion(version: string, options?: { dryRun?: boolean }): Promise<void>;
 }
 
 // =============================================================================================
@@ -1238,7 +1247,7 @@ export type RecipeUpdateScope =
     | { kind: "namespace"; repo: string; namespace: string }
     | { kind: "recipe"; repo: string; key: string };
 
-/** `recipe.update`: plans an update of pinned versions, writing nothing. */
+/** `recipe.plan-update` (internal): plans an update of pinned versions, writing nothing. */
 export interface RecipeUpdateInput {
     /** A recipe, namespace or repository; default everything. */
     ref?: string;
@@ -1268,14 +1277,14 @@ export interface RecipeUpdatePlan {
     readonly cycles: string[][];
 }
 
-/** `subscription.update`: plans with `recipe.update`, then applies. */
+/** `update` (`sous update`): plans with `recipe.plan-update`, then applies. */
 export interface SubscriptionUpdateInput extends RecipeChangeFlags, AnswerFlags {
     ref?: string;
     yes?: boolean;
     acceptFirst?: boolean;
 }
 
-/** The result of `subscription.update`. */
+/** The result of `update`. */
 export interface SubscriptionUpdateResult {
     readonly plan: RecipeUpdatePlan;
     readonly applied: boolean;
@@ -1412,6 +1421,8 @@ export interface RecipesFetchedPayload {
 export interface RecipesLockedPayload {
     readonly path: string;
     readonly diff: LockDiff;
+    /** Set when this write created the lockfile: the project had none before. */
+    readonly created?: boolean;
 }
 
 // =============================================================================================
@@ -1454,8 +1465,8 @@ declare module "@sous-io/plugin-api" {
         "subscription.enable": { input: SubscriptionToggleInput; result: SubscriptionToggleResult };
         "subscription.disable": { input: SubscriptionToggleInput; result: SubscriptionToggleResult };
         "subscription.list": { input: BrowsingFlags; result: SubscriptionListResult };
-        "subscription.update": { input: SubscriptionUpdateInput; result: SubscriptionUpdateResult };
-        "recipe.update": { input: RecipeUpdateInput; result: RecipeUpdatePlan };
+        update: { input: SubscriptionUpdateInput; result: SubscriptionUpdateResult };
+        "recipe.plan-update": { input: RecipeUpdateInput; result: RecipeUpdatePlan };
         "lock.rebuild": { input: LockRebuildInput; result: LockRebuildResult };
         "lock.show": { input: Record<string, never>; result: LockShowResult };
         "namespace.list": { input: BrowsingFlags; result: NamespaceListResult };

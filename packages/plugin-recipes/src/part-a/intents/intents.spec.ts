@@ -6,7 +6,7 @@ import type { CachedIndex, RecipeRequest, RecipesIndexCache, RecipesResolver, Re
 import { Trust } from "../trust.js";
 import { showNamespace, showRecipe } from "./catalog.js";
 import { addRepo, listRepos, removeRepo, searchRepos } from "./repo.js";
-import { addSubscription, laterSetters, listSubscriptions, removeSubscription, toggleSubscription, updateSubscriptions } from "./subscription.js";
+import { addSubscription, laterSetters, listSubscriptions, registerSubscriptionIntents, removeSubscription, toggleSubscription, updateSubscriptions } from "./subscription.js";
 import { planUpdate } from "../update-plan.js";
 import { subscriptionToggleOutputs, updatePlanOutputs } from "./subscription-outputs.js";
 import { NoVersionSatisfiesError } from "../../part-b/resolver/resolve.js";
@@ -779,7 +779,7 @@ describe("subscription.list", () => {
     });
 });
 
-describe("recipe.update and subscription.update", () => {
+describe("recipe.plan-update and update", () => {
     const data = { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": {}, core: { range: "0.2.34", addedBy: "sous" }, gone: { enabled: false } } };
 
     /** A plan says what the lockfile would become, writing nothing. */
@@ -851,7 +851,7 @@ describe("recipe.update and subscription.update", () => {
         const { config, lock } = setup({ data, lock: pinned });
         const ctx = context(config, { intents: ["build"] });
 
-        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "recipe.update" ? IntentOutputs.of(await planUpdate(input as never, ctx)) : IntentOutputs.of({ ran: intent })));
+        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "recipe.plan-update" ? IntentOutputs.of(await planUpdate(input as never, ctx)) : IntentOutputs.of({ ran: intent })));
 
         const result = await updateSubscriptions({ yes: true }, ctx);
 
@@ -966,5 +966,39 @@ describe("catalog intents", () => {
 
         await expect(showRecipe({ ref: "task-files" }, ctx)).resolves.toMatchObject({ key: "workflow/task-files", latest: "1.1.0", manifestRead: false });
         await expect(showRecipe({ ref: "tools" }, ctx)).rejects.toThrow(/publishes a recipe called 'tools'/);
+    });
+});
+
+describe("the update command's registration", () => {
+    /** Registers the subscription intents against a stand-in that records them. */
+    function registered(): Map<string, { internal?: boolean; cli?: { aliases?: ReadonlyArray<readonly string[]>; positional?: readonly string[] } }> {
+        const intents = new Map();
+        const sous = { intents: { add: (definition: { intent: string }) => intents.set(definition.intent, definition) } };
+
+        registerSubscriptionIntents(sous as never);
+
+        return intents;
+    }
+
+    /**
+     * `sous update` updates the project's recipes; `sous subscription update` and
+     * `sous recipe update` are the same command, and the plan is internal.
+     *
+     * update       -> aliases: subscription update, recipe update
+     * recipe.plan-update  -> internal, no command
+     */
+    it("should register update with both old spellings as aliases, and keep the plan internal", () => {
+        const intents = registered();
+
+        expect(intents.get("update")?.cli).toMatchObject({
+            aliases: [
+                ["subscription", "update"],
+                ["recipe", "update"],
+            ],
+            positional: ["ref"],
+        });
+        expect(intents.get("recipe.plan-update")?.internal).toBe(true);
+        expect(intents.has("subscription.update")).toBe(false);
+        expect(intents.has("recipe.update")).toBe(false);
     });
 });

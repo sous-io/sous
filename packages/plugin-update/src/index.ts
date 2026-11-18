@@ -1,5 +1,5 @@
 /**
- * plugin-update: Updating sous itself, installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.
+ * plugin-update: Upgrading sous itself (`sous upgrade`), installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.
  *
  * The contract other plugins code against is `./types.ts`.
  */
@@ -35,6 +35,7 @@ const updateInput = jsonSchema<UpdateInput>({
         yes: { type: "boolean", default: false, description: "Answer yes to every question." },
         dryRun: { type: "boolean", default: false, description: "Show every install's plan without installing anything." },
         noBuild: { type: "boolean", default: false, description: "Update the project install without building the project afterwards." },
+        answer: { type: "array", items: { type: "string" }, description: "Answer a question of the new version's migrations ahead of time, as <name>=<value>." },
     },
     additionalProperties: false,
 });
@@ -68,13 +69,13 @@ export const updatePlugin: PluginDefinition = definePlugin({
         sous.config.contribute(scanContributor(sous));
 
         sous.intents.add({
-            intent: "update",
-            summary: "Update sous itself, globally and in this project, through the package manager that installed each copy",
+            intent: "upgrade",
+            summary: "Upgrade sous itself, globally and in this project, through the package manager that installed each copy",
             input: updateInput,
             // Updating sous is how a user repairs an install whose config no longer builds.
             toleratesConfigErrors: true,
             cli: {
-                examples: ["sous update", "sous update --global", "sous update --major", "sous update --version 0.2.18", "sous update --version next", "sous update --dry-run"],
+                examples: ["sous upgrade", "sous upgrade --global", "sous upgrade --major", "sous upgrade --version 0.2.18", "sous upgrade --version next", "sous upgrade --dry-run"],
                 flags: { yes: { short: "y", aliases: ["force"] }, prerelease: { aliases: ["pre"] } },
             },
             agent: {

@@ -55,18 +55,18 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         }
 
         // A config that failed to build stops every command except an intent that can run
-        // without it (`sous update`), as it did before the front end started.
+        // without it (`sous upgrade`), as it did before the front end started.
         if (engine.configError !== undefined && !(line.kind === "run" && engine.intents.get(line.command.intent)?.definition.toleratesConfigErrors === true)) {
             throw engine.configError;
         }
 
         // Help shown next to an error goes to standard error, so it is painted for that stream.
-        const help = (node: Parameters<typeof renderHelp>[0]) => renderHelp(node, { appName: engine.app.name, globals: specs, style: reporter.styleFor() });
+        const help = (node: Parameters<typeof renderHelp>[0]) => renderHelp(node, { appName: engine.app.name, globals: specs, tree, style: reporter.styleFor() });
 
         switch (line.kind) {
             case "help":
                 reporter.result(
-                    new IntentOutputs(new IntentOutput({ result: new HelpPage(line.node, { appName: engine.app.name, globals: specs }) })),
+                    new IntentOutputs(new IntentOutput({ result: new HelpPage(line.node, { appName: engine.app.name, globals: specs, tree }) })),
                 );
                 break;
             case "version":

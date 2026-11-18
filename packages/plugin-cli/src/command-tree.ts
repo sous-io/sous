@@ -127,8 +127,52 @@ export class CommandTree {
     }
 
     /**
-     * Makes each alias word of a group (`repos`) show the group's own commands and help, without
-     * listing it in the parent's help.
+     * The other words that run a command, as its help lists them: its own aliases, then its words
+     * with each group above it spelled by one of that group's aliases (`ns list` for
+     * `namespace list`).
+     *
+     * ```ts
+     * tree.aliasesOf(namespaceList);
+     * // -> [["namespace", "ls"], ["namespaces", "list"], ["ns", "list"]]
+     * ```
+     */
+    aliasesOf(command: Command): Array<readonly string[]> {
+        const found: Array<readonly string[]> = [...command.aliases];
+        const seen = new Set([command.path.join(" "), ...found.map((words) => words.join(" "))]);
+
+        for (let length = 1; length < command.path.length; length += 1) {
+            const group = this.groupAt(command.path.slice(0, length));
+
+            for (const alias of group?.aliases ?? []) {
+                const words = [...alias, ...command.path.slice(length)];
+                const key = words.join(" ");
+
+                if (!seen.has(key) && this.find(words).node.command === command) {
+                    seen.add(key);
+                    found.push(words);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /** The `cli-group` entity whose own words are these, if any. */
+    groupAt(words: readonly string[]): CliGroupEntity | undefined {
+        const { node, used } = this.find(words);
+
+        return used === words.length && node.group?.command.join(" ") === words.join(" ") ? node.group : undefined;
+    }
+
+    /**
+     * Makes each alias word of a group (`ns`, `namespaces`) answer exactly as the group does: the
+     * same commands, the same aliases of those commands (`ns ls` as `namespace ls`), and the same
+     * help, without listing the alias in the parent's help. The group's own commands replace what
+     * the alias word already held there; a command's alias (`ls`) never replaces a word an intent
+     * claimed under the alias itself.
+     *
+     * Before 2026-11-18 only the group's canonical children were shared, so a command's own alias
+     * inside the group (`namespace ls`) did not work under the group's alias (`ns ls`).
      */
     private shareAliasedGroups(groups: readonly CliGroupEntity[]): void {
         for (const group of groups) {
@@ -145,7 +189,7 @@ export class CommandTree {
                 node.canonical = false;
 
                 for (const [word, child] of canonical.node.children) {
-                    if (child.canonical) {
+                    if (child.canonical || !node.children.has(word)) {
                         node.children.set(word, child);
                     }
                 }

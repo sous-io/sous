@@ -296,10 +296,11 @@ indexes, fetching nothing.
 ## Moving to newer versions
 
 A build holds the versions the lockfile pins, so a newer release reaches the project only when
-something moves the pin. `sous subscription update` is that step:
+something moves the pin. `sous update` is that step (`sous subscription update` and `sous recipe update` are
+other spellings of it):
 
 ```term
-$ sous subscription update workflow/qa-variables
+$ sous update workflow/qa-variables
   Updating the recipe 'qa-recipes:workflow/qa-variables' changes the lockfile:
 
     • Adding workflow/qa-helper version 1.0.0
@@ -471,7 +472,7 @@ is missing from the cached index, sous asks upstream once more before reporting 
 released moments ago is found straight away. Always-pull changes what
 happens after that check, not how often it happens: a repository or subscription marked
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
-`--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a
+`--always-pull`, or on either entry in the config. Without it, `sous update` is how a
 pin moves; see [Moving to newer versions](#moving-to-newer-versions).
 
 Every other repository the lockfile pins from is checked on the same window, only to tell you what

@@ -74,7 +74,8 @@ export class LockService implements RecipesLock {
 
     async write(lockfile: Lockfile, options: { dryRun?: boolean } = {}): Promise<LockDiff> {
         const before = this.read();
-        // The lockfiles a resolution builds know nothing of `migratedVersion`, so the one on disk is kept.
+        // A lockfile made from resolved recipes says nothing about migrations, so the version the
+        // project last migrated to is carried over from the file.
         const migratedVersion = lockfile.migratedVersion ?? before.migratedVersion;
         const after = this.withIdentities({ ...lockfile, recipes: sortRecipes(lockfile.recipes), ...(migratedVersion === undefined ? {} : { migratedVersion }) });
         const diff = this.diff(before, after);
@@ -84,6 +85,7 @@ export class LockService implements RecipesLock {
         }
 
         const file = this.path();
+        const created = !fs.existsSync(file);
         const temporary = path.join(path.dirname(file), `.${LOCKFILE_NAME}.tmp-${process.pid}`);
 
         try {
@@ -95,9 +97,25 @@ export class LockService implements RecipesLock {
             throw new ConfigError(`Sous could not write the lockfile at ${file}.`, { details: [messageOf(error)] });
         }
 
-        await this.runtime.emit("recipes.locked", { path: file, diff });
+        await this.runtime.emit("recipes.locked", { path: file, diff, ...(created ? { created: true } : {}) });
 
         return diff;
+    }
+
+    exists(): boolean {
+        try {
+            return fs.existsSync(this.path());
+        } catch {
+            return false;
+        }
+    }
+
+    migratedVersion(): string | undefined {
+        return this.read().migratedVersion;
+    }
+
+    async setMigratedVersion(version: string, options: { dryRun?: boolean } = {}): Promise<void> {
+        await this.write({ ...this.read(), migratedVersion: version }, options);
     }
 
     diff(before: Lockfile, after: Lockfile): LockDiff {

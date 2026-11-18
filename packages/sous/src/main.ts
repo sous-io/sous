@@ -100,7 +100,7 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
         recordStartupFact(project, options.env, key, engine.pluginInfo().every((plugin) => plugin.builtIn));
     } catch (error) {
         // A failed build still reaches the CLI when the partial config has it: the CLI reports the
-        // error for every command except one that can run without the config (`sous update`).
+        // error for every command except one that can run without the config (`sous upgrade`).
         if (hasFrontEnd(engine, "cli")) {
             await engine.frontEnd("cli").start(argv);
             await engine.whenBackgroundIntentsReturn();

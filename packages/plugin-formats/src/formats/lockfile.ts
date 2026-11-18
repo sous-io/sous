@@ -24,6 +24,11 @@
  * per-holder pins has no `pins` key at all, so such a lockfile reads the same as
  * before. An older sous reading an entry with `pins` refuses the lockfile,
  * naming the unknown key, since this format is strict.
+ *
+ * `migratedVersion` is the version of sous whose migrations the project last
+ * ran. It lives here because the lockfile is committed, so a migration runs once
+ * for the project, not once per developer. An older sous refuses a lockfile that
+ * has it, the same way it refuses `pins`.
  */
 
 import { z } from "zod";
@@ -100,8 +105,9 @@ export const lockfileSchema = z
     /** Every locked recipe, keyed `namespace/recipe`. */
     recipes: z.record(recipeKeySchema, lockedRecipeSchema),
     /**
-     * The version of sous whose migrations the project has had. `sous init`
-     * writes the running version, so a new project has none pending.
+     * The version of sous whose migrations this project last ran (`sous doctor`, `sous upgrade`).
+     * Every migration of a later version is pending. Missing from a lockfile written before
+     * migrations existed, whose project therefore has every migration pending.
      */
     migratedVersion: semverVersionSchema.optional(),
   })
