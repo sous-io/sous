@@ -65,6 +65,7 @@ export { applyManagedBlock, createGitignore, IGNORE_BLOCK_END, IGNORE_BLOCK_STAR
 export { compareBytewise, hasGlob, hostGlobs, staticBase, toGlobPattern, toPosix } from "./globs.js";
 export { createHttp, DEFAULT_HTTP_TIMEOUT_MS, HttpError } from "./http.js";
 export { createPackage, SOUS_PACKAGE_NAMES } from "./package-identity.js";
+export { compilePatternFinder, compilePatternList, isRegexSpelling, type GlobMatcher } from "./pattern-list.js";
 export { createProcesses, NOT_FOUND_EXIT_CODE, ProcessError } from "./processes.js";
 export { KNOWN_READMES } from "./readmes.js";
 export {

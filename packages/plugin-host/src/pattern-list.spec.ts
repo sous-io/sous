@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { minimatch } from "minimatch";
 import { ConfigError } from "@sous-io/plugin-api";
-import { compileRecipeKeyFinder, compileRecipeKeyMatcher, isRegexSpelling } from "./key-matcher.js";
+import { compilePatternFinder, compilePatternList, isRegexSpelling } from "./pattern-list.js";
 
 const isMatch = (key: string, pattern: string) => minimatch(key, pattern);
 
@@ -21,14 +21,14 @@ describe("isRegexSpelling()", () => {
     });
 });
 
-describe("compileRecipeKeyMatcher()", () => {
+describe("compilePatternList()", () => {
     /**
      * A glob entry matches a recipe key the way a path glob does.
      *
-     * compileRecipeKeyMatcher(["communication/*"], "k", isMatch)("communication/tone"); // -> true
+     * compilePatternList(["communication/*"], "k", isMatch)("communication/tone"); // -> true
      */
     it("should match globs against recipe keys", () => {
-        const matches = compileRecipeKeyMatcher(["communication/*"], "recipes.memories.first", isMatch);
+        const matches = compilePatternList(["communication/*"], "recipes.memories.first", isMatch);
 
         expect(matches("communication/tone")).toBe(true);
         expect(matches("workflow/tone")).toBe(false);
@@ -37,10 +37,10 @@ describe("compileRecipeKeyMatcher()", () => {
     /**
      * An entry written /.../ is read as a regular expression.
      *
-     * compileRecipeKeyMatcher(["/^tool-usage\\//"], "k", isMatch)("tool-usage/browser"); // -> true
+     * compilePatternList(["/^tool-usage\\//"], "k", isMatch)("tool-usage/browser"); // -> true
      */
     it("should read a /.../ entry as a regular expression", () => {
-        const matches = compileRecipeKeyMatcher(["/^tool-usage\\//"], "recipes.memories.exclude", isMatch);
+        const matches = compilePatternList(["/^tool-usage\\//"], "recipes.memories.exclude", isMatch);
 
         expect(matches("tool-usage/browser")).toBe(true);
         expect(matches("communication/tool-usage/x")).toBe(false);
@@ -49,26 +49,26 @@ describe("compileRecipeKeyMatcher()", () => {
     /**
      * The matcher is true when any entry matches; an empty or missing list matches nothing.
      *
-     * compileRecipeKeyMatcher(undefined, "k", isMatch)("a/b"); // -> false
+     * compilePatternList(undefined, "k", isMatch)("a/b"); // -> false
      */
     it("should match when any entry matches, and nothing for no entries", () => {
-        const matches = compileRecipeKeyMatcher(["a/*", "/^b\\//"], "k", isMatch);
+        const matches = compilePatternList(["a/*", "/^b\\//"], "k", isMatch);
 
         expect(matches("a/x")).toBe(true);
         expect(matches("b/x")).toBe(true);
         expect(matches("c/x")).toBe(false);
-        expect(compileRecipeKeyMatcher(undefined, "k", isMatch)("a/b")).toBe(false);
-        expect(compileRecipeKeyMatcher([], "k", isMatch)("a/b")).toBe(false);
+        expect(compilePatternList(undefined, "k", isMatch)("a/b")).toBe(false);
+        expect(compilePatternList([], "k", isMatch)("a/b")).toBe(false);
     });
 
     /**
      * An invalid regular expression is a ConfigError naming the key and the value.
      *
-     * compileRecipeKeyMatcher(["/(/"], "recipes.memories.first", isMatch);
+     * compilePatternList(["/(/"], "recipes.memories.first", isMatch);
      * // -> throws: The value "/(/" in 'recipes.memories.first' ...
      */
     it("should throw a ConfigError naming the key and value for a bad regular expression", () => {
-        const build = () => compileRecipeKeyMatcher(["/(/"], "recipes.memories.first", isMatch);
+        const build = () => compilePatternList(["/(/"], "recipes.memories.first", isMatch);
 
         expect(build).toThrow(ConfigError);
         expect(build).toThrow("'recipes.memories.first'");
@@ -76,15 +76,15 @@ describe("compileRecipeKeyMatcher()", () => {
     });
 });
 
-describe("compileRecipeKeyFinder()", () => {
+describe("compilePatternFinder()", () => {
     /**
      * The finder names the first entry that matched, as a config path.
      *
-     * compileRecipeKeyFinder(["a/*", "b/*"], "recipes.memories.exclude", isMatch)("b/x");
+     * compilePatternFinder(["a/*", "b/*"], "recipes.memories.exclude", isMatch)("b/x");
      * // -> "recipes.memories.exclude[1]"
      */
     it("should name the entry that matched", () => {
-        const find = compileRecipeKeyFinder(["a/*", "b/*"], "recipes.memories.exclude", isMatch);
+        const find = compilePatternFinder(["a/*", "b/*"], "recipes.memories.exclude", isMatch);
 
         expect(find("b/x")).toBe("recipes.memories.exclude[1]");
         expect(find("c/x")).toBeUndefined();
