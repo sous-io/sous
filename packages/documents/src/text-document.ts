@@ -6,7 +6,7 @@ import type { Document } from "yaml";
 import { applyPatch } from "./apply.js";
 import { BaseDocument } from "./document.js";
 import { getAtPath } from "./json.js";
-import { detectLayout, editJsoncText, parseJsoncText, type TextLayout } from "./jsonc-text.js";
+import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
 import { editYaml, parseYamlText, yamlValue } from "./yaml-text.js";
 import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from "./types.js";
 
@@ -28,6 +28,8 @@ export class TextDocument extends BaseDocument {
     private readonly layout: TextLayout;
     /** Whether any YAML edit was made; until one is, the original text is given back byte for byte. */
     private yamlEdited = false;
+    /** The text of properties and items JSON edits removed, reused when the same value is put back. */
+    private readonly removedJsonc: RemovedJsoncText[] = [];
 
     constructor(text: string, readonly format: DocumentFormat) {
         super();
@@ -79,7 +81,7 @@ export class TextDocument extends BaseDocument {
             editYaml(this.yaml, patch);
             this.yamlEdited = true;
         } else {
-            this.text = editJsoncText(this.text, patch, before, after, this.layout);
+            this.text = editJsoncText(this.text, patch, before, after, this.layout, this.removedJsonc);
         }
 
         this.current = after;

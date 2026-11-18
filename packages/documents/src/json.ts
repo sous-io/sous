@@ -183,6 +183,40 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     return true;
 }
 
+/** The order {@link compareValues} puts kinds of values in. */
+const KIND_ORDER = ["null", "boolean", "number", "string", "array", "object"];
+
+/**
+ * A default order for JSON values: `null`, then booleans (`false` first), numbers, strings (by
+ * code point, the same on every machine), arrays and objects (by their {@link stableStringify}
+ * text). Returns a negative number, zero or a positive number, as `Array.prototype.sort` expects.
+ *
+ * ```ts
+ * ["b", 2, null, "a", true].sort(compareValues);   // [null, true, 2, "a", "b"]
+ * ```
+ */
+export function compareValues(a: JsonValue, b: JsonValue): number {
+    const kindA = KIND_ORDER.indexOf(typeOfValue(a));
+    const kindB = KIND_ORDER.indexOf(typeOfValue(b));
+
+    if (kindA !== kindB) {
+        return kindA - kindB;
+    }
+
+    if (typeof a === "number" && typeof b === "number") {
+        return a - b;
+    }
+
+    if (typeof a === "boolean" && typeof b === "boolean") {
+        return Number(a) - Number(b);
+    }
+
+    const textA = typeof a === "string" ? a : stableStringify(a);
+    const textB = typeof b === "string" ? b : stableStringify(b);
+
+    return textA < textB ? -1 : textA > textB ? 1 : 0;
+}
+
 /**
  * JSON text with every object's keys sorted, so equal values give equal text. `undefined` gives
  * `"undefined"`, so a missing value has a fingerprint too.

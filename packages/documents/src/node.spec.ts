@@ -420,4 +420,115 @@ describe("DocNode", () => {
             ]);
         });
     });
+
+    describe("comparing structurally", () => {
+        /**
+         * equals, includes and indexOf should compare plain JSON, objects key by key in any
+         * order; indexWhere and findAll should find by predicate.
+         *
+         * doc.atPath("list").includes({ b: 1, a: 2 });   // true when { a: 2, b: 1 } is there
+         */
+        it("should compare values and find items", () => {
+            const doc = createDocument({ list: [{ a: 2, b: 1 }, "x", { a: 3 }], n: 1 });
+            const list = doc.atPath("list");
+
+            expect(list.includes({ b: 1, a: 2 })).toBe(true);
+            expect(list.includes({ a: 2 })).toBe(false);
+            expect(list.indexOf("x")).toBe(1);
+            expect(doc.atPath("n").indexOf(1)).toBe(-1);
+            expect(doc.atPath("list[0]").equals({ b: 1, a: 2 })).toBe(true);
+            expect(doc.atPath("missing").equals(undefined)).toBe(true);
+            expect(list.indexWhere((item) => item.a === 3)).toBe(2);
+            expect(list.findAll((item) => typeof item === "object").map((node) => node.pathString)).toEqual(["list[0]", "list[2]"]);
+        });
+    });
+
+    describe("adding only what is missing", () => {
+        /**
+         * appendIfMissing, prependIfMissing and insertAtIfMissing should add an item only when no
+         * equal item is anywhere in the array, say whether they added, and create a missing array.
+         *
+         * doc.atPath("allow").insertAtIfMissing(1, "b");   // ["a", "c"] -> ["a", "b", "c"]
+         */
+        it("should insert an item only when it is missing", () => {
+            const doc = createDocument({ allow: ["a", "c"] });
+            const allow = doc.atPath("allow");
+
+            expect(allow.insertAtIfMissing(1, "b")).toBe(true);
+            expect(allow.insertAtIfMissing(0, "c")).toBe(false);
+            expect(allow.appendIfMissing("z")).toBe(true);
+            expect(allow.prependIfMissing("first")).toBe(true);
+            expect(allow.prependIfMissing("first")).toBe(false);
+            expect(allow.insertAtIfMissing(99, "end")).toBe(true);
+            expect(allow.insertAtIfMissing(-3, "start")).toBe(true);
+            expect(allow.appendIfMissing(undefined)).toBe(false);
+            expect(allow.get()).toEqual(["start", "first", "a", "b", "c", "z", "end"]);
+            expect(doc.atPath("created").appendIfMissing({ id: 1 })).toBe(true);
+            expect(doc.atPath("created").get()).toEqual([{ id: 1 }]);
+        });
+
+        /**
+         * removeValue and removeValues should remove every equal item, as one patch set.
+         */
+        it("should remove items by value", () => {
+            const doc = createDocument({ list: ["a", { k: 1 }, "a", "b"] });
+
+            expect(doc.atPath("list").removeValue("a")).toBe(2);
+            expect(doc.atPath("list").removeValues([{ k: 1 }, "nope"])).toBe(1);
+            expect(doc.atPath("list").get()).toEqual(["b"]);
+            expect(doc.patches().patches.map((set) => "name" in set && set.name)).toEqual(["removeValues", "removeValues"]);
+        });
+    });
+
+    describe("ordering", () => {
+        /**
+         * sort should order items by compareValues by default, moving as few as it can, and
+         * take a compare function.
+         *
+         * doc.atPath("list").sort();   // ["b", 2, null, "a"] -> [null, 2, "a", "b"]
+         */
+        it("should sort items with few moves", () => {
+            const doc = createDocument({ list: ["b", 2, null, "a"], done: ["a", "b"] });
+
+            doc.atPath("list").sort();
+            expect(doc.atPath("list").get()).toEqual([null, 2, "a", "b"]);
+            doc.atPath("done").sort();
+            expect(flattenPatchSet(doc.patches()).filter((patch) => patch.path === "done")).toEqual([]);
+            doc.atPath("done").sort((a, b) => String(b).localeCompare(String(a)));
+            expect(doc.atPath("done").get()).toEqual(["b", "a"]);
+        });
+
+        /**
+         * moveKeyBefore, moveKeyAfter, moveKeyFirst and moveKeyLast should reorder keys, moving
+         * only the keys that must move to the end; a missing key or anchor changes nothing.
+         *
+         * doc.root().moveKeyLast("a");   // { a, b, c } -> { b, c, a }, one key moved
+         */
+        it("should move keys", () => {
+            const doc = createDocument({ a: 1, b: 2, c: 3, d: 4 });
+            const root = doc.root();
+
+            root.moveKeyLast("a");
+            expect(root.keys()).toEqual(["b", "c", "d", "a"]);
+            expect(flattenPatchSet(doc.patches())).toEqual([
+                { op: "deleteKey", path: "", key: "a" },
+                { op: "setKey", path: "", key: "a", value: 1 },
+            ]);
+            root.moveKeyFirst("a");
+            expect(root.keys()).toEqual(["a", "b", "c", "d"]);
+            root.moveKeyBefore("d", "b");
+            expect(root.keys()).toEqual(["a", "d", "b", "c"]);
+            root.moveKeyAfter("a", "c");
+            expect(root.keys()).toEqual(["d", "b", "c", "a"]);
+            root.moveKeyAfter("a", "missing");
+            root.moveKeyBefore("missing", "a");
+            root.moveKeyBefore("a", "a");
+            expect(root.keys()).toEqual(["d", "b", "c", "a"]);
+            root.sortKeys();
+            expect(root.keys()).toEqual(["a", "b", "c", "d"]);
+            expect(root.get()).toEqual({ a: 1, b: 2, c: 3, d: 4 });
+            doc.atPath("a").sortKeys();
+            expect(root.keys()).toEqual(["a", "b", "c", "d"]);
+        });
+    });
 });
