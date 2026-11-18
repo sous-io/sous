@@ -10,20 +10,25 @@ This page is about the config side only.
 Later scopes override earlier ones:
 
 ```
-auto-vars  ->  recipe answers  ->  _env scope  ->  _vars  ->  compilation._vars  ->  target._vars  ->  output._vars
+auto-vars  ->  recipe answers  ->  _env scope  ->  _vars  ->  compilation._vars  ->  target._vars  ->  output._vars  ->  compilation.varOverrides
 ```
 
-`_vars` may be set at four levels, each inheriting the levels above it, inner values winning:
+`_vars` may be set at four levels, each inheriting the levels above it, inner values winning, and
+`compilation.varOverrides` lays the variables of every rule whose pattern matches an output's path
+over all of them:
 
 ```text
 root _vars
 └── compilation._vars
     └── compilation.targets[]._vars
         └── targets[].outputs[]._vars
+            └── compilation.varOverrides[]._vars   (each rule whose pattern matches the output's path)
 ```
 
 So a target var may reference a top-level var, and an output var may override both for that output
-only. A [config expression](configuration.md#config-expressions) sees the `_vars` of every level
+only. A `varOverrides` rule wins even over the output's own `_vars`, so a project can change a
+variable on outputs it did not write, such as the ones a plugin or a recipe adds; see
+[Variables by output path](configuration.md#variables-by-output-path). A [config expression](configuration.md#config-expressions) sees the `_vars` of every level
 that contains it, and no others; an expression under `subscriptions`, `repos` or any other top-level
 key sees only the root `_vars`. Recipe outputs also get a scope per recipe, holding that recipe's
 answers (see [Recipe variables](repositories-variables.md)).
@@ -42,6 +47,34 @@ Always injected first, before `_env` and `_vars`:
 | `sousVersion` | the sous CLI version string |
 | `sousTemplatePath` | absolute path of the `.tpl.` file being rendered (render time only) |
 | `sousTemplateDir` | directory of the `.tpl.` file being rendered (render time only) |
+| `sousOutputPath` | absolute path of the file the rendered result is written to (render time only) |
+| `sousOutputDir` | directory of that file (render time only) |
+
+`sousOutputPath` and `sousOutputDir` hold the path Sous planned to write. A transform (a function a
+plugin attaches to an output) runs after rendering and may rename the file; the variables still
+hold the path from before it. A file included into another file (a partial, or any `@` include)
+renders as part of the file that includes it, so it sees the path of the output it is included
+into. One source rendered to two outputs sees a different value in each:
+
+```liquid
+{% if sousOutputPath contains "/.claude/" %}
+Use the Skill tool.
+{% endif %}
+```
+
+Templates can also read two objects, which are not `${var}` variables:
+
+| Value | What it holds |
+|-------|---------------|
+| `host.platform` | the operating system, as Node's `process.platform` names it (`linux`, `darwin`, `win32`): the same value [config expressions](configuration.md#config-expressions) read |
+| `harness.id` | the harness the output belongs to (`claude-code`, `codex`), from the output's `harness`; an empty string for an output that belongs to none |
+
+```liquid
+{% if host.platform == "win32" %}"C:\\Program Files\\Git\\bin\\bash.exe"{% else %}bash{% endif %}
+```
+
+A variable of the same name that the project sets (an `_vars` entry named `host` or `harness`) wins
+over these, so a template written before them keeps working.
 
 !> Sous sets `projectRoot`. Setting it in any `_vars` block is an error saying so. A config that
 wrote `projectRoot: "${sousDir}/.."` before 1.0 drops that line; every `${projectRoot}` keeps
