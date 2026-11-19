@@ -21,10 +21,17 @@ sous.pid
 /.sous/tasks/
 
 # Compiled agent instructions. These are OUTPUTS written by `sous build`; the
-# tracked sources live in .sous/prompts/. Root-anchored on purpose: the sources
-# under .sous/prompts/ and recipes/ are NOT affected by these rules.
+# tracked sources live in .sous/memories/ and .sous/prompts/. Root-anchored on
+# purpose: the sources under .sous/ and recipes/ are NOT affected by these rules.
+# /.claude/ holds the memories file (.claude/rules/SOUS-MEMORIES.md) and the
+# skills; /AGENTS.override.md and /.agents/ are the memories file and the skills
+# sous writes for Codex, should the project turn Codex on. The root CLAUDE.md
+# is no longer compiled; it stays ignored so a copy an older build left behind
+# is never committed.
 /CLAUDE.md
 /AGENTS.md
+/AGENTS.override.md
+/.agents/
 /.claude/
 /.codex/
 /docs/CLAUDE.md

@@ -227,7 +227,8 @@ a source of the project's own that writes `CLAUDE.md` holds the line `@#memories
 | `claude-code.memories.remove-line` | `yes`, `no` | `no` |
 
 - `move`: writes `.sous/MEMORIES.tpl.md` with the two default lines, unless it exists. With the second answer
-  `yes`, removes each line `@#memories/**/*.md` from the project's own sources for `CLAUDE.md`; with `no`, leaves
+  `yes`, removes each line `@#memories/**/*.md` from the project's own sources for `CLAUDE.md` (a line that stood
+  between two blank lines takes one of them along, so no doubled blank line is left); with `no`, leaves
   them and says the memories will be read twice. Sources under `.sous/memories/` that the project also compiles
   elsewhere are named in the outcome.
 - `keep`: sets `plugins.options."@sous-io/sous-plugin-claude-code".memoriesOutputPath` to `${projectRoot}/CLAUDE.md`

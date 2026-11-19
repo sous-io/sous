@@ -11,9 +11,10 @@
 
 sous compiles AI coding agent configuration from templates. You write skills, memories, and
 instructions once as LiquidJS templates in layered sources, then sous renders them into the
-formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, which sous supports
-out of the box, and other tools' formats (such as `.codex/` plus `AGENTS.md` for Codex) through
-plugins. The CLI binary is named `sous`.
+formats agents actually read: `.claude/` for Claude Code (the skills, and the memories in
+`.claude/rules/SOUS-MEMORIES.md`, beside any `CLAUDE.md` of your own), `AGENTS.override.md` and
+`.agents/skills/` for Codex once a project turns it on, and other tools' formats through plugins.
+The CLI binary is named `sous`.
 
 **New to sous? Watch the animated introduction at [sous.io](https://sous.io).**
 

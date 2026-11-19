@@ -1,0 +1,115 @@
+// Sous configuring itself.
+//
+// This is the config sous uses on its own repository. It exists both because the sous repo
+// genuinely wants compiled agent files and because dogfooding keeps the discovery path, the
+// `${sousDir}` auto-var and the repositories system honest: if any of them break, `sous build` on
+// this repo breaks.
+//
+// Discovery: `sous build` walks up from cwd, finds this `.sous/` directory and loads this file.
+// Auto-vars `${sousDir}` (this directory) and `${sousConfigPath}` (this file) are injected before
+// anything else resolves. Drop-in layers under `.sous/conf.d/` merge over this file; the ones sous
+// writes for itself are numbered 500 to 599.
+//
+// WHERE THE SKILLS COME FROM. Sous no longer keeps a library of skill bundles inside its own
+// repository. Everything except the `core` seed is published by the official recipe repository,
+// and this project subscribes to what it wants like any other project would. Three sources feed
+// `.claude/skills/`:
+//
+//   1. `core/sous-skills`, which every project gets without asking. It is not listed below
+//      because sous provides that subscription itself; the copy in `recipes/core/sous-skills/` at
+//      the root of this repository is its source.
+//   2. The subscriptions declared below, fetched from the official repository and pinned in
+//      `.sous/sous.lock.json`, which is committed. The Claude Code plugin writes their skills to
+//      `.claude/skills/` without a target here.
+//   3. This project's own skills, in `.sous/skills/`, compiled by the first target below.
+//
+// WHERE THE INSTRUCTIONS COME FROM. Two files carry instructions for agents, and both are
+// compiled:
+//
+//   1. `.claude/rules/SOUS-MEMORIES.md`, read by Claude Code in every session anywhere in this
+//      repository. The Claude Code plugin compiles it from `.sous/MEMORIES.tpl.md`, which includes
+//      this project's own memories (`.sous/memories/`) and then the subscribed recipes' memories.
+//      It needs no target here. There is no root `CLAUDE.md`: Claude Code reads the rules file
+//      without one.
+//   2. `docs/CLAUDE.md`, for work on the website, compiled by the second target below.
+//
+// OUTPUT IS LOCAL-ONLY. `.claude/`, and every file this config writes, is gitignored build output.
+// Edit the tracked sources under `.sous/`, never the compiled copies. A fresh clone has no agent
+// files until the first `sous build`.
+//
+// It is JSON with comments (.jsonc), so `sous config set` can change it and keep the comments.
+{
+  // Lets an editor complete and check this file. Sous ignores it.
+  "$schema": "https://raw.githubusercontent.com/sous-io/sous/v1.1.0/sous.config.schema.json",
+
+  "name": "Sous",
+
+  // The recipes this project subscribes to, fetched from the official repository and pinned in
+  // the committed lockfile. `sous-recipes` itself needs no `repos:` entry: sous provides that one,
+  // and the `core` namespace subscription, to every project.
+  //
+  // `omakase/house` is the standard set: it has no files of its own, and subscribing to it
+  // subscribes this project to every recipe its manifest lists under `subscribes`. The other two
+  // are recipes the set leaves out because most projects cannot use them, and sous can: it has a
+  // GitHub Projects board, and it is a command-line tool.
+  //
+  // Deliberately NOT subscribed: `tool-usage/automated-browser-tasks`. It needs
+  // browserAutomationScriptsDir pointing at a real script directory, and sous has none.
+  //
+  // `sous subscription add` writes any further subscriptions into the managed layer
+  // .sous/conf.d/510-subscriptions.jsonc.
+  "subscriptions": {
+    "omakase/house": { "range": "^1" },
+    "workflow/github-projects": { "range": "^1" },
+    "cli/command-design": { "range": "^1" }
+  },
+
+  // WHERE THE RECIPE ANSWERS LIVE. Every variable the subscribed recipes ask about (the task file
+  // root, the ticket prefix, the GitHub board and its field IDs, your login and name, and so on)
+  // is answered in the env files, not here: `.sous/.env` holds the shared answers and is
+  // committed, and `.sous/.env.local` holds the personal ones and is gitignored. `sous vars list`
+  // shows every answer and where it came from, and `sous vars ask` answers what is missing. A
+  // build lays those answers into the template scope on its own, so nothing below has to name
+  // them; `_vars` is only for what this config needs that no recipe asks about.
+  "_vars": {
+    // Where this repository's own skill sources live, for the project skills target below. The
+    // recipes learn the same path from the `skillsRoot` answer in `.sous/.env`; this entry is the
+    // target's, so the target reads as a target rather than as a reference to a recipe variable.
+    "projectSkillsDir": "${sousDir}/skills",
+
+    // Compiled skill destination. Gitignored build output.
+    "claudeSkillsDir": "${projectRoot}/.claude/skills"
+  },
+
+  "compilation": {
+    "includeSourceComments": false,
+    "targets": [
+      // Project-local skills: hand-maintained, sous-specific skills that have no published
+      // equivalent (currently the unit-testing pair and the documentation skill). These describe
+      // how to work ON this repository, so they are not published as recipes. Every source is
+      // named SKILL.tpl.md, as every markdown source sous compiles is, whether or not it uses
+      // template tags; the compiled copies in .claude/skills/ are SKILL.md. A project skill with
+      // the same name as a recipe skill wins.
+      {
+        "entryGlob": "${projectSkillsDir}/**/*",
+        "globBase": "${projectSkillsDir}",
+        "outputs": [{ "destinationDir": "${claudeSkillsDir}" }]
+      },
+
+      // Agent instructions for the GitHub Pages site under docs/. The source is tracked; the
+      // compiled docs/CLAUDE.md is gitignored output. Named .tpl.md like every markdown source
+      // sous compiles, so any literal Liquid written in it must be wrapped in raw tags.
+      {
+        "entryPoint": "${sousDir}/prompts/docs-site/CLAUDE.tpl.md",
+        "outputs": [{ "destinationFile": "${projectRoot}/docs/CLAUDE.md" }]
+      }
+    ]
+  },
+
+  "tools": {
+    "claude-code": {
+      "command": "claude",
+      "args": ["--dangerously-skip-permissions"]
+    }
+  }
+}

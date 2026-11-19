@@ -1,7 +1,9 @@
 # >>> sous managed (do not edit between these markers)
 sous.links.json
 sous.state.json
+sous.edits.json
 sous.pid
 .env.local
 repos/
+backups/
 # <<< sous managed

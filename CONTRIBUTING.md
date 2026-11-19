@@ -28,9 +28,13 @@ Run the CLI from a clone with `./bin/sous <command>`: it rebuilds the bundle whe
 source changed, then runs it. To get `sous` on your PATH, link that script (for example
 `ln -s "$PWD/bin/sous" ~/.local/bin/sous`).
 
-This repo configures its own agent skills with sous, from `.sous/sous.config.js`. Running
-`./bin/sous build` compiles them into `.claude/skills/` (the skill target the built-in Claude
-Code plugin adds), which is gitignored build output.
+This repo configures its own agent files with sous, from `.sous/sous.config.jsonc`. Running
+`./bin/sous build` compiles the skills into `.claude/skills/`, the project's memories
+(`.sous/memories/`, gathered by `.sous/MEMORIES.tpl.md`) and the recipes' memories into
+`.claude/rules/SOUS-MEMORIES.md`, and the website's agent instructions into `docs/CLAUDE.md`. All
+of them are gitignored build output; there is no root `CLAUDE.md`, because Claude Code reads the
+rules file without one. To change what an agent is told, edit the sources under `.sous/` and
+rebuild.
 That is optional for contributing, but it is the fastest way to confirm a change to the
 compiler or the shared prompts does what you expect.
 
