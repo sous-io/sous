@@ -258,33 +258,12 @@ const TEXT_CASES: Case[] = [
     { op: "replacePattern", params: { match: "/^(\\w+)a$/gm", value: "[$1]" }, text: "# notes\n[alph]\n[bet]\n" },
 ];
 
-/**
- * Cases that show a defect not fixed yet, by `<op> <params> <kind>`, each with what is wrong.
- * They run with `it.fails`, so a fix that makes one pass fails the run until it is taken off.
- */
-const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
-    [
-        ...[
-            'delete {"path":"mode"}',
-            'ensureAbsent {"path":"mode"}',
-            'deleteIfEquals {"path":"mode","value":"loose"}',
-            'deleteIfEmpty {"path":"empty"}',
-            'deleteKeys {"keys":["mode","count"]}',
-            'keepOnlyKeys {"path":"options","keys":["nested"]}',
-        ].flatMap((name) => ["jsonc", "yaml"].map((kind) => [`${name} ${kind}`, "a deleted key comes back at the end of its object"])),
-        ['unwrapList {"path":"single"} jsonc', "JSONC: a list put back where a plain value is now is spread over several lines"],
-    ],
-);
-
 describe("every operation through editor.apply", () => {
     for (const testCase of [...VALUE_CASES, ...TEXT_CASES]) {
         for (const kind of ["jsonc", "yaml", "text"] as const) {
             const expected = testCase[kind];
 
             if (expected === undefined) continue;
-
-            const defect = KNOWN_DEFECTS[`${testCase.op} ${JSON.stringify(testCase.params)} ${kind}`];
-            const test = defect === undefined ? it : it.fails;
 
             /**
              * The operation, declared in `editor.edits` and applied by `editor.apply` to a real
@@ -295,7 +274,7 @@ describe("every operation through editor.apply", () => {
              * set { path: "mode", value: "strict" } on settings.jsonc
              * // -> '"mode": "loose"' becomes '"mode": "strict"'; undeclared -> the original file
              */
-            test(`should apply, repeat and undo ${testCase.op} ${JSON.stringify(testCase.params)} in ${kind}${defect ? ` (known defect: ${defect})` : ""}`, async () => {
+            it(`should apply, repeat and undo ${testCase.op} ${JSON.stringify(testCase.params)} in ${kind}`, async () => {
                 const [file, original] = FILES[kind];
 
                 await roundTrip(file, original, { file, [testCase.op]: testCase.params }, expected);
@@ -438,6 +417,253 @@ describe("undoing an order through editor.apply", () => {
 
         await project.apply([]);
         expect(project.read("settings.yaml")).toBe(YAML);
+    });
+});
+
+/** A YAML file whose keys and items each have comment lines above them, and a blank line between groups. */
+const COMMENTED_YAML = `# The first key.
+first: 1 # one
+# About the middle.
+# A second line about it.
+middle:
+  # about x
+  x: 1
+  # about y
+  y: 2
+# The last before the gap.
+before: true
+
+# The list.
+list:
+  # bee
+  - b
+  # sea
+  - c
+  # ay
+  - a # first
+# The last key.
+last: end
+`;
+
+/** The same as JSONC. */
+const COMMENTED_JSONC = `{
+    // The first key.
+    "first": 1, // one
+    // About the middle.
+    // A second line about it.
+    "middle": {
+        // about x
+        "x": 1,
+        // about y
+        "y": 2
+    },
+    /* The last before the gap. */
+    "before": true,
+
+    // The list.
+    "list": [
+        // bee
+        "b",
+        // sea
+        "c",
+        // ay
+        "a" // first
+    ],
+    // The last key.
+    "last": "end"
+}
+`;
+
+const COMMENTED = { yaml: ["c.yaml", COMMENTED_YAML], jsonc: ["c.jsonc", COMMENTED_JSONC] } as const;
+
+/** Each root key's block in the fixtures: its comment lines above and its own lines (JSONC: without its comma, then what follows the comma). */
+const BLOCKS = {
+    yaml: {
+        first: "# The first key.\nfirst: 1 # one",
+        middle: "# About the middle.\n# A second line about it.\nmiddle:\n  # about x\n  x: 1\n  # about y\n  y: 2",
+        before: "# The last before the gap.\nbefore: true",
+        list: "# The list.\nlist:\n  # bee\n  - b\n  # sea\n  - c\n  # ay\n  - a # first",
+        last: "# The last key.\nlast: end",
+    },
+    jsonc: {
+        first: ['    // The first key.\n    "first": 1', " // one"],
+        middle: ['    // About the middle.\n    // A second line about it.\n    "middle": {\n        // about x\n        "x": 1,\n        // about y\n        "y": 2\n    }', ""],
+        before: ['    /* The last before the gap. */\n    "before": true', ""],
+        list: ['    // The list.\n    "list": [\n        // bee\n        "b",\n        // sea\n        "c",\n        // ay\n        "a" // first\n    ]', ""],
+        last: ['    // The last key.\n    "last": "end"', ""],
+    },
+} as const;
+
+/**
+ * A fixture with its root keys in another order: each key's block in its new place, the blank
+ * line still between the third and fourth places, and (JSONC) a comma after all but the last.
+ */
+function rootInOrder(kind: "yaml" | "jsonc", keys: Array<keyof (typeof BLOCKS)["yaml"]>): string {
+    const blocks = keys.map((key, index) => {
+        if (kind === "yaml") return BLOCKS.yaml[key];
+
+        const [body, comment] = BLOCKS.jsonc[key];
+
+        return `${body}${index < keys.length - 1 ? "," : ""}${comment}`;
+    });
+    const joined = [...blocks.slice(0, 3), "", ...blocks.slice(3)].join("\n");
+
+    return kind === "yaml" ? `${joined}\n` : `{\n${joined}\n}\n`;
+}
+const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+
+describe("keys and items keep their comments through editor.apply", () => {
+    /** The expected text for each case: the fixture with a few exact replacements. */
+    const cases: Array<{ name: string; op: string; params: JsonObject; yaml: string; jsonc: string }> = [
+        {
+            name: "a key with a two-line comment, between two commented keys",
+            op: "delete",
+            params: { path: "middle" },
+            yaml: change(COMMENTED_YAML, ["# About the middle.\n# A second line about it.\nmiddle:\n  # about x\n  x: 1\n  # about y\n  y: 2\n", ""]),
+            jsonc: change(COMMENTED_JSONC, ['    // About the middle.\n    // A second line about it.\n    "middle": {\n        // about x\n        "x": 1,\n        // about y\n        "y": 2\n    },\n', ""]),
+        },
+        {
+            name: "the first key",
+            op: "ensureAbsent",
+            params: { path: "first" },
+            yaml: change(COMMENTED_YAML, ["# The first key.\nfirst: 1 # one\n", ""]),
+            jsonc: change(COMMENTED_JSONC, ['    // The first key.\n    "first": 1, // one\n', ""]),
+        },
+        {
+            name: "the last key",
+            op: "deleteIfEquals",
+            params: { path: "last", value: "end" },
+            yaml: change(COMMENTED_YAML, ["# The last key.\nlast: end\n", ""]),
+            jsonc: change(COMMENTED_JSONC, ['    ],\n    // The last key.\n    "last": "end"\n', "    ]\n"]),
+        },
+        {
+            name: "a key of a nested object",
+            op: "deleteKeys",
+            params: { path: "middle", keys: ["x"] },
+            yaml: change(COMMENTED_YAML, ["  # about x\n  x: 1\n", ""]),
+            jsonc: change(COMMENTED_JSONC, ['        // about x\n        "x": 1,\n', ""]),
+        },
+        {
+            name: "the keys a keepOnlyKeys drops, either side of a blank line",
+            op: "keepOnlyKeys",
+            params: { keys: ["first", "middle", "last"] },
+            yaml: change(COMMENTED_YAML, ["# The last before the gap.\nbefore: true\n", ""], ["# The list.\nlist:\n  # bee\n  - b\n  # sea\n  - c\n  # ay\n  - a # first\n", ""]),
+            jsonc: change(
+                COMMENTED_JSONC,
+                ['    /* The last before the gap. */\n    "before": true,\n', ""],
+                ['    // The list.\n    "list": [\n        // bee\n        "b",\n        // sea\n        "c",\n        // ay\n        "a" // first\n    ],\n', ""],
+            ),
+        },
+        {
+            name: "a sorted list whose items each have a comment line above",
+            op: "sort",
+            params: { path: "list" },
+            yaml: change(COMMENTED_YAML, ["  # bee\n  - b\n  # sea\n  - c\n  # ay\n  - a # first\n", "  # ay\n  - a # first\n  # bee\n  - b\n  # sea\n  - c\n"]),
+            jsonc: change(COMMENTED_JSONC, [
+                '        // bee\n        "b",\n        // sea\n        "c",\n        // ay\n        "a" // first\n',
+                '        // ay\n        "a", // first\n        // bee\n        "b",\n        // sea\n        "c"\n',
+            ]),
+        },
+        {
+            name: "an item moved first with its comment lines",
+            op: "moveItem",
+            params: { path: "list", item: "a", position: "first" },
+            yaml: change(COMMENTED_YAML, ["  # bee\n  - b\n  # sea\n  - c\n  # ay\n  - a # first\n", "  # ay\n  - a # first\n  # bee\n  - b\n  # sea\n  - c\n"]),
+            jsonc: change(COMMENTED_JSONC, [
+                '        // bee\n        "b",\n        // sea\n        "c",\n        // ay\n        "a" // first\n',
+                '        // ay\n        "a", // first\n        // bee\n        "b",\n        // sea\n        "c"\n',
+            ]),
+        },
+        {
+            name: "keys sorted with their comment lines",
+            op: "sortKeys",
+            params: { path: "middle" },
+            yaml: COMMENTED_YAML,
+            jsonc: COMMENTED_JSONC,
+        },
+        {
+            name: "a key moved before another with its comment lines",
+            op: "moveKeyBefore",
+            params: { path: "middle", key: "y", anchor: "x" },
+            yaml: change(COMMENTED_YAML, ["  # about x\n  x: 1\n  # about y\n  y: 2\n", "  # about y\n  y: 2\n  # about x\n  x: 1\n"]),
+            jsonc: change(COMMENTED_JSONC, ['        // about x\n        "x": 1,\n        // about y\n        "y": 2\n', '        // about y\n        "y": 2,\n        // about x\n        "x": 1\n']),
+        },
+        {
+            name: "a key moved after another with its comment lines",
+            op: "moveKeyAfter",
+            params: { path: "middle", key: "x", anchor: "y" },
+            yaml: change(COMMENTED_YAML, ["  # about x\n  x: 1\n  # about y\n  y: 2\n", "  # about y\n  y: 2\n  # about x\n  x: 1\n"]),
+            jsonc: change(COMMENTED_JSONC, ['        // about x\n        "x": 1,\n        // about y\n        "y": 2\n', '        // about y\n        "y": 2,\n        // about x\n        "x": 1\n']),
+        },
+        {
+            name: "a key moved last; the blank line stays between the third and fourth places",
+            op: "moveKeyLast",
+            params: { key: "before" },
+            yaml: rootInOrder("yaml", ["first", "middle", "list", "last", "before"]),
+            jsonc: rootInOrder("jsonc", ["first", "middle", "list", "last", "before"]),
+        },
+        {
+            name: "a key moved first; the blank line stays between the third and fourth places",
+            op: "moveKeyFirst",
+            params: { key: "last" },
+            yaml: rootInOrder("yaml", ["last", "first", "middle", "before", "list"]),
+            jsonc: rootInOrder("jsonc", ["last", "first", "middle", "before", "list"]),
+        },
+    ];
+
+    for (const testCase of cases) {
+        for (const kind of ["yaml", "jsonc"] as const) {
+            /**
+             * The key or item takes its comment lines above and the comment on its line with it,
+             * blank lines stay where they are, and undoing gives the original file byte for byte,
+             * with LF and with CRLF line endings.
+             *
+             * delete middle -> its two comment lines, its own lines and its keys' comments go;
+             * undeclared -> back between "first" and "before", exactly as it was
+             */
+            it(`should keep the comments of ${testCase.name} (${testCase.op}) in ${kind}`, async () => {
+                const [file, original] = COMMENTED[kind];
+                const entry = { file, [testCase.op]: testCase.params };
+
+                if (testCase[kind] === original) {
+                    // Already in order: nothing to do, and nothing to undo.
+                    project.write(file, original);
+                    await project.apply([entry]);
+                    expect(project.read(file)).toBe(original);
+
+                    return;
+                }
+
+                await roundTrip(file, original, entry, testCase[kind]);
+                await roundTrip(file, crlf(original), entry, crlf(testCase[kind]));
+            });
+        }
+    }
+
+    /**
+     * Sorting keys that each have comment lines, out of order, then undoing.
+     *
+     * { y (# about y), x (# about x) }  sortKeys -> { x, y } with their comments; undone -> as before
+     */
+    it("should sort keys with their comment lines and put them back", async () => {
+        const yaml = "opts:\n  # about y\n  y: 2 # two\n\n  # about x\n  x: 1\n";
+
+        await roundTrip("s.yaml", yaml, { file: "s.yaml", sortKeys: { path: "opts" } }, "opts:\n  # about x\n  x: 1\n\n  # about y\n  y: 2 # two\n");
+
+        const jsonc = '{\n  // about y\n  "y": 2, // two\n\n  // about x\n  "x": 1\n}\n';
+
+        await roundTrip("s.jsonc", jsonc, { file: "s.jsonc", sortKeys: {} }, '{\n  // about x\n  "x": 1,\n\n  // about y\n  "y": 2 // two\n}\n');
+    });
+
+    /**
+     * A key alone between two blank lines leaves both when deleted, and undoing puts it back
+     * between them: blank lines belong to the places between keys, never to a key.
+     *
+     * "a: 1\n\n# about b\nb: 2\n\nc: 3\n"  delete b -> "a: 1\n\n\nc: 3\n"; undeclared -> the original
+     */
+    it("should leave the blank lines around a deleted key and put it back between them", async () => {
+        await roundTrip("s.yaml", "a: 1\n\n# about b\nb: 2\n\nc: 3\n", { file: "s.yaml", delete: { path: "b" } }, "a: 1\n\n\nc: 3\n");
+        await roundTrip("s.jsonc", '{\n  "a": 1,\n\n  // about b\n  "b": 2,\n\n  "c": 3\n}\n', { file: "s.jsonc", delete: { path: "b" } }, '{\n  "a": 1,\n\n\n  "c": 3\n}\n');
     });
 });
 
