@@ -14,6 +14,7 @@ import { hostPlugin } from "@sous-io/sous-plugin-host";
 import type { LockDiff } from "@sous-io/sous-plugin-recipes/types";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import handlersPlugin from "../src/index.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** A temporary directory, removed by `cleanup()`. Links are followed, so paths compare equal. */
 export function makeTmpDir(prefix = "sous-handlers-"): { path: string; cleanup(): void } {
@@ -127,7 +128,8 @@ export function recipesStandIn(state: RecipesState, next: { diff?: LockDiff; rec
 
     return definePlugin({
         name: "@sous-io/sous-plugin-recipes",
-        version: "1.0.19",
+        // Every workspace package shares one version, and the handlers plugin needs this one or later.
+        version: packageJson.version,
         register(sous) {
             sous.entities.add("config-key", { id: "recipes", schema: jsonSchema({}) });
             sous.entities.add("config-key", { id: "repos", schema: jsonSchema({}) });
