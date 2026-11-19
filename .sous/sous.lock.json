@@ -1,5 +1,6 @@
 {
   "formatVersion": 1,
+  "migratedVersion": "1.1.0",
   "recipes": {
     "cli/command-design": {
       "hash": "sha256-2393f09e33fd7cde218887876d1ee0a3a24c72a63aa3f6fa254d2e0e8660ce26",

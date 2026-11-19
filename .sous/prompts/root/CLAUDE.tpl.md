@@ -8,13 +8,12 @@
 Sous is a TypeScript CLI that compiles markdown templates and manages output files for LLM/AI coding agents
 (Claude, Codex, etc.). The binary is named `sous`. Published on npm as `@sous-io/sous`.
 
-@${sousDir}/prompts/memories/agent-conduct.md
+@${sousDir}/memories/20-agent-conduct.md
 
-@#memories/**/*.md
 
-@${sousDir}/prompts/memories/writing-standards.md
+@${sousDir}/memories/30-writing-standards.md
 
-@${sousDir}/prompts/memories/cli-conventions.md
+@${sousDir}/memories/40-cli-conventions.md
 
 ## How Sous Is Built
 
@@ -86,7 +85,7 @@ in a package's `test/` directory. Requires Node 22 or later; TypeScript is stric
 Published as `@sous-io/sous` (npm org `sous-io`), public, Apache-2.0. `packages/sous/package.json`
 has the `files` list of what ships.
 
-@${sousDir}/prompts/memories/release-posture.md
+@${sousDir}/memories/60-release-posture.md
 
 Every merge to `main` publishes, through `.github/workflows/publish.yml` (it reads the version,
 publishes to npm through trusted publishing, then pushes the matching core recipe to
