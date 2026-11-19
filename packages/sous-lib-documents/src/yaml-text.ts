@@ -7,6 +7,18 @@
  * When an edit cannot be made that way (see {@link editYamlText}), the caller falls back to
  * {@link reprintYaml}, which reprints the whole document through the `yaml` package's model: the
  * comments survive there, but spacing and layout may change.
+ *
+ * A key or list item that starts its line is an "entry block": the comment lines directly above
+ * it (its "before" comment, as `comments.ts` defines it), and its own lines, the comment ending
+ * them included. Removing, moving and reordering an entry carries its whole block; blank lines
+ * (and comments that belong to no entry) are in no block, so they stay where they are.
+ *
+ * ```yaml
+ * a: 1
+ *                 # <- a blank line: stays between the places, never moves
+ * # about b       # <- b's block starts here
+ * b: 2 # two      # <- and ends at the end of this line
+ * ```
  */
 import {
     Document,
@@ -24,9 +36,11 @@ import {
     YAMLMap,
     YAMLSeq,
 } from "yaml";
-import { getAtPath } from "./json.js";
+import { commentLinesAbove } from "./comments.js";
+import { deepEqual, getAtPath, isJsonObject } from "./json.js";
+import { countLines, moveDown, moveUp } from "./jsonc-text.js";
 import { formatPath, parsePath } from "./path.js";
-import type { JsonValue, Patch, PathSegment } from "./types.js";
+import type { EntrySource, JsonValue, Patch, PathSegment, Placement } from "./types.js";
 
 /**
  * Parses YAML text into its document model. Empty text is an empty map.
@@ -160,10 +174,22 @@ export interface RemovedText {
     where: string;
     /** Its value. */
     value: JsonValue;
-    /** The lines it had, from the start of its first line to the end of its last. */
+    /** Its block: its comment lines above, and its own lines from the start of the first to the end of the last. */
     text: string;
     /** The column its key or dash was at. */
     column: number;
+}
+
+/** What else an edit is told: where a new entry goes, and the text to write for it. */
+export interface YamlEditOptions {
+    /** For a `setKey` adding a key or an `insertAt`: where the new entry goes. */
+    placement?: Placement;
+    /**
+     * The text to write: for a new entry, an {@link EntrySource}'s text; for a `setKey` or
+     * `setIndex` replacing a value, the value's text (see {@link yamlValueSource}). The caller
+     * checks the result reads as the value.
+     */
+    source?: string;
 }
 
 /**
@@ -174,7 +200,7 @@ export interface RemovedText {
  * disagree, a key written with `?`, a list item whose value starts on the line after its dash,
  * or anything else this editor does not recognize. The caller then reprints the document.
  */
-export function editYamlText(text: string, patch: Patch, after: JsonValue, style: YamlStyle, removed: RemovedText[] = []): string | undefined {
+export function editYamlText(text: string, patch: Patch, after: JsonValue, style: YamlStyle, removed: RemovedText[] = [], options: YamlEditOptions = {}): string | undefined {
     const doc = parseDocument(text);
 
     /* c8 ignore next 3: the caller only edits text that parsed */
@@ -182,7 +208,7 @@ export function editYamlText(text: string, patch: Patch, after: JsonValue, style
         return undefined;
     }
 
-    const editor = new YamlTextEditor(text, doc, after, style, removed);
+    const editor = new YamlTextEditor(text, doc, after, style, removed, options);
     const edits = editor.edits(patch);
 
     return edits === undefined ? undefined : applyTextEdits(text, edits);
@@ -190,14 +216,74 @@ export function editYamlText(text: string, patch: Patch, after: JsonValue, style
 
 /**
  * Applies one primitive (known to apply) to a YAML document model and reprints the whole
- * document: the fallback when {@link editYamlText} cannot edit the text surgically.
+ * document: the fallback when {@link editYamlText} cannot edit the text surgically. A key added
+ * with an `index` goes to that place among its object's keys.
  */
-export function reprintYaml(text: string, patch: Patch): string {
+export function reprintYaml(text: string, patch: Patch, index?: number): string {
     const doc = parseYamlText(text);
 
     editYaml(doc, patch);
 
+    if (index !== undefined && patch.op === "setKey") {
+        const map = parsePath(patch.path).length === 0 ? doc.contents : doc.getIn(parsePath(patch.path), true);
+
+        if (isMap(map)) {
+            const at = map.items.findIndex((pair) => keyText(pair) === patch.key);
+
+            map.items.splice(index, 0, ...map.items.splice(at, 1));
+        }
+    }
+
     return doc.toString({ flowCollectionPadding: false });
+}
+
+/**
+ * A key or item exactly as written, and where it is (see {@link EntrySource}), or `undefined`
+ * when there is nothing at the path, it is the root, or it is reached through an alias.
+ *
+ * ```ts
+ * yamlEntrySource("a: 1\n# about b\nb: 2\n", ["b"]);   // { source: "# about b\nb: 2\n", index: 1, after: "a" }
+ * ```
+ */
+export function yamlEntrySource(text: string, path: PathSegment[], style: YamlStyle): EntrySource | undefined {
+    const doc = parseDocument(text);
+
+    if (doc.errors.length > 0 || path.length === 0) {
+        return undefined;
+    }
+
+    return new YamlTextEditor(text, doc, {}, style, []).entrySource(path);
+}
+
+/**
+ * A value exactly as written, after its `key:` or its dash (` 1`, or a line break and a block),
+ * or `undefined` when there is none at the path.
+ */
+export function yamlValueSource(text: string, path: PathSegment[], style: YamlStyle): string | undefined {
+    const doc = parseDocument(text);
+
+    if (doc.errors.length > 0 || path.length === 0) {
+        return undefined;
+    }
+
+    return new YamlTextEditor(text, doc, {}, style, []).valueSource(path);
+}
+
+/**
+ * Puts the keys of the map, or the items of the list, at a path in a new order: `order[i]` is the
+ * old index of the entry that goes to place `i`. Entries that start their lines swap whole blocks
+ * (comment lines above included), and the blank lines between the places stay where they are; in
+ * `[...]` or `{...}` only the entries' text moves. `undefined` when the container cannot be
+ * reordered this way (a map whose first key follows a list's dash, say).
+ */
+export function reorderYamlText(text: string, path: PathSegment[], order: readonly number[], style: YamlStyle): string | undefined {
+    const doc = parseDocument(text);
+
+    if (doc.errors.length > 0) {
+        return undefined;
+    }
+
+    return new YamlTextEditor(text, doc, {}, style, []).reorder(path, order);
 }
 
 /** Applies one primitive (known to apply) to a YAML document model in place. */
@@ -287,13 +373,280 @@ type Collection = YAMLMap<unknown, unknown> & ParsedNode | YAMLSeq<unknown> & Pa
 
 /** Computes the text edits for one primitive. Every method returns `undefined` when it cannot. */
 class YamlTextEditor {
+    private above: ((lineStart: number) => number) | undefined;
+
     constructor(
         private readonly text: string,
         private readonly doc: Document,
         private readonly after: JsonValue,
         private readonly style: YamlStyle,
         private readonly removed: RemovedText[],
+        private readonly editOptions: YamlEditOptions = {},
     ) {}
+
+    /** See {@link yamlEntrySource}. */
+    entrySource(path: PathSegment[]): EntrySource | undefined {
+        const parentPath = path.slice(0, -1);
+        const parent = this.node(parentPath);
+        const last = path[path.length - 1]!;
+
+        for (let depth = 1; depth <= path.length; depth++) {
+            if (isAlias(this.node(path.slice(0, depth)))) {
+                return undefined;
+            }
+        }
+
+        const entries = this.entries(parent);
+
+        if (entries === undefined) {
+            return undefined;
+        }
+
+        const index = isMap(parent) ? (parent.items as Pair[]).findIndex((pair) => keyText(pair) === String(last)) : typeof last === "number" && last < entries.length ? last : -1;
+
+        if (index === -1) {
+            return undefined;
+        }
+
+        const block = entries[index]!.block;
+        const source: EntrySource = {
+            source: block === undefined ? this.text.slice(entries[index]!.start, entries[index]!.end) : this.withLineBreak(this.text.slice(block.start, block.end)),
+            index,
+        };
+
+        if (isMap(parent) && index > 0) {
+            source.after = keyText((parent.items as Pair[])[index - 1]!)!;
+        }
+
+        const neighbour = entries[index > 0 ? index - 1 : index + 1]?.block;
+
+        if (block !== undefined && neighbour !== undefined) {
+            const gap = countLines(index > 0 ? this.text.slice(neighbour.end, block.start) : this.text.slice(block.end, neighbour.start));
+
+            if (gap > 0) {
+                source.gap = gap;
+            }
+        }
+
+        return source;
+    }
+
+    /** See {@link yamlValueSource}. */
+    valueSource(path: PathSegment[]): string | undefined {
+        const parent = this.node(path.slice(0, -1)) as Collection | null | undefined;
+        const last = path[path.length - 1]!;
+
+        if (!isMap(parent) && !isSeq(parent)) {
+            return undefined;
+        }
+
+        const old = (isMap(parent) ? this.pair(parent, last)?.value : parent.items[last as number]) as ParsedNode | null | undefined;
+
+        if (old === null || old === undefined || old.range === undefined || isAlias(old)) {
+            return undefined;
+        }
+
+        if (parent.flow) {
+            return this.text.slice(old.range[0], old.range[1]);
+        }
+
+        const indicator = isMap(parent) ? this.colonAfter(this.pair(parent, last)!.key) : this.dashOf(old);
+
+        if (indicator === undefined) {
+            return undefined;
+        }
+
+        return this.text.slice(indicator + 1, old.range[1]).replace(/\r?\n$/, "");
+    }
+
+    /** See {@link reorderYamlText}. */
+    reorder(path: PathSegment[], order: readonly number[]): string | undefined {
+        const container = this.node(path);
+        const entries = this.entries(container);
+
+        if (entries === undefined || entries.length !== order.length || entries.length === 0) {
+            return undefined;
+        }
+
+        if ((container as Collection).flow) {
+            const texts = entries.map((entry) => this.text.slice(entry.start, entry.end));
+
+            return applyTextEdits(this.text, entries.map((entry, to) => ({ offset: entry.start, length: entry.end - entry.start, content: texts[order[to]!]! })));
+        }
+
+        if (entries.some((entry) => entry.block === undefined)) {
+            return undefined;
+        }
+
+        const blocks = entries.map((entry) => entry.block!);
+        const bodies = blocks.map((block) => this.text.slice(block.start, block.end).replace(/\r?\n$/, ""));
+        let result = this.text.slice(0, blocks[0]!.start);
+
+        order.forEach((from, to) => {
+            const block = blocks[to]!;
+            const lineBreak = /\r?\n$/.exec(this.text.slice(block.start, block.end))?.[0] ?? "";
+
+            result += bodies[from]! + (lineBreak === "" && to < order.length - 1 ? this.style.eol : lineBreak);
+            result += to < order.length - 1 ? this.text.slice(block.end, blocks[to + 1]!.start) : "";
+        });
+
+        return result + this.text.slice(blocks[blocks.length - 1]!.end);
+    }
+
+    // Entry blocks.
+
+    /**
+     * The entries of a map or a list: where each one's text starts and ends, and its block when it
+     * starts its line in a block collection. `undefined` for anything else, or an entry Sous
+     * cannot find (an empty list item, a key written with `?`).
+     */
+    private entries(container: ParsedNode | null | undefined): Array<{ start: number; end: number; block?: { start: number; end: number } }> | undefined {
+        if (!isMap(container) && !isSeq(container)) {
+            return undefined;
+        }
+
+        const found: Array<{ start: number; end: number; block?: { start: number; end: number } }> = [];
+
+        for (const item of container.items as unknown[]) {
+            let start: number | undefined;
+            let end: number | undefined;
+
+            if (isMap(container)) {
+                const pair = item as Pair<ParsedNode | null, ParsedNode | null>;
+
+                start = pair.key?.range?.[0];
+                end = (pair.value ?? pair.key)?.range?.[1];
+            } else if (item !== null && (item as ParsedNode).range !== undefined) {
+                start = container.flow ? (item as ParsedNode).range[0] : this.dashOf(item as ParsedNode);
+                end = (item as ParsedNode).range[1];
+            }
+
+            if (start === undefined || end === undefined) {
+                return undefined;
+            }
+
+            const entry: { start: number; end: number; block?: { start: number; end: number } } = { start, end };
+
+            if (!container.flow && isLineStart(this.text, start)) {
+                this.above ??= commentLinesAbove(this.text, "yaml");
+                entry.block = { start: this.above(lineStartOf(this.text, start)), end: lineEndAfter(this.text, end) };
+            }
+
+            found.push(entry);
+        }
+
+        return found;
+    }
+
+    /** Text that ends in a line break: the file's, added when it has none (the last line of a file). */
+    private withLineBreak(text: string): string {
+        return text.endsWith("\n") ? text : text + this.style.eol;
+    }
+
+    /**
+     * The text of a new entry from an {@link EntrySource}'s text, moved to `column` and, for a
+     * key, written as `key`; `undefined` when the source is not one entry (on lines of its own)
+     * holding `value`.
+     */
+    private fromSource(source: string | undefined, column: number, value: JsonValue, key?: string): string | undefined {
+        if (source === undefined || !source.endsWith("\n")) {
+            return undefined;
+        }
+
+        const first = source.split("\n").find((line) => !/^[ \t]*(#.*)?\r?$/.test(line));
+
+        if (first === undefined) {
+            return undefined;
+        }
+
+        const from = /^ */.exec(first)![0].length;
+        let text = shiftLines(source, column - from);
+        const parsed = parseDocument(shiftLines(text, -column));
+        const contents = parsed.contents;
+
+        if (parsed.errors.length > 0) {
+            return undefined;
+        }
+
+        if (key === undefined) {
+            if (!isSeq(contents) || contents.items.length !== 1 || !deepEqual(parsed.toJS()[0], value)) {
+                return undefined;
+            }
+
+            return text;
+        }
+
+        if (!isMap(contents) || contents.items.length !== 1 || !isJsonObject(parsed.toJS())) {
+            return undefined;
+        }
+
+        const pair = contents.items[0] as Pair<ParsedNode, ParsedNode | null>;
+
+        if (!deepEqual(Object.values(parsed.toJS() as JsonValue as object)[0], value)) {
+            return undefined;
+        }
+
+        if (keyText(pair as Pair) !== key) {
+            // Written under another key: the same lines, with the key's text replaced.
+            const offset = this.offsetIn(text, column, pair.key.range[0]);
+            const renamed = this.keyText(this.makeKey(key, pair.key));
+
+            text = text.slice(0, offset) + renamed + text.slice(offset + pair.key.range[1] - pair.key.range[0]);
+        }
+
+        return text;
+    }
+
+    /** Where an offset in the text moved left by `column` columns is, in the text itself. */
+    private offsetIn(text: string, column: number, offset: number): number {
+        const lines = text.split("\n");
+        let shifted = 0;
+        let original = 0;
+
+        for (const line of lines) {
+            const removed = Math.min(column, /^ */.exec(line)![0].length);
+            const length = line.length - removed + 1;
+
+            if (offset < shifted + length) {
+                return original + removed + (offset - shifted);
+            }
+
+            shifted += length;
+            original += line.length + 1;
+        }
+
+        /* c8 ignore next: the offset is always inside the text */
+        return original;
+    }
+
+    /**
+     * Where a new entry's lines go: after the block of the entry before it, or before the block
+     * of the entry at `index`, as the placement says, moved over its `lines`. `undefined` when a
+     * neighbour does not start its line.
+     */
+    private placeLines(container: ParsedNode, index: number): number | undefined {
+        const entries = this.entries(container);
+
+        if (entries === undefined) {
+            return undefined;
+        }
+
+        const previous = index > 0 ? entries[index - 1]?.block : undefined;
+        const next = entries[index]?.block;
+
+        if ((index > 0 && previous === undefined) || (index < entries.length && next === undefined)) {
+            return undefined;
+        }
+
+        const placement = this.editOptions.placement;
+        const lines = placement?.lines ?? 0;
+
+        if (previous !== undefined && (next === undefined || placement?.from === "previous")) {
+            return moveDown(this.text, previous.end, lines, next?.start ?? this.text.length, isYamlTrivia);
+        }
+
+        return moveUp(this.text, next!.start, lines, previous?.end ?? 0, isYamlTrivia);
+    }
 
     edits(patch: Patch): TextEdit[] | undefined {
         const path = parsePath(patch.path);
@@ -320,7 +673,9 @@ class YamlTextEditor {
                 const node = this.node(path);
 
                 if (isSeq(node)) {
-                    return this.insertItem(path, node as Collection & YAMLSeq, patch.index === "end" ? node.items.length : patch.index);
+                    const index = this.editOptions.placement?.index ?? (patch.index === "end" ? node.items.length : patch.index);
+
+                    return this.insertItem(path, node as Collection & YAMLSeq, index);
                 }
 
                 return this.setValue(path);
@@ -399,6 +754,16 @@ class YamlTextEditor {
         const parent = this.node(parentPath) as Collection;
         const last = path[path.length - 1]!;
         const old = (isMap(parent) ? this.pair(parent, last)!.value : parent.items[last as number]) as ParsedNode | null;
+        const source = this.editOptions.source?.replace(/\r\n/g, "\n");
+
+        if (source !== undefined && source !== "" && old?.range !== undefined) {
+            // The text the value had, written back as it was. The caller checks it reads as the value.
+            const indicator = parent.flow ? old.range[0] - 1 : isMap(parent) ? this.colonAfter(this.pair(parent, last)!.key) : this.dashOf(old);
+
+            if (indicator !== undefined) {
+                return this.replaceAfterIndicator(indicator + 1, old, source);
+            }
+        }
 
         if (parent.flow) {
             /* c8 ignore next 3: a flow pair always has a value node */
@@ -489,14 +854,22 @@ class YamlTextEditor {
             return this.replaceValue(mapPath);
         }
 
+        const index = Math.min(this.editOptions.placement?.index ?? pairs.length, pairs.length);
+
         if (map.flow) {
-            return this.insertFlow(map, pairs.length, this.flowPairText(key, this.makeNode(value)));
+            return this.insertFlow(map, index, this.flowPairText(key, this.makeNode(value)));
         }
 
         const last = pairs[pairs.length - 1]!;
         const column = columnOf(this.text, pairs[0]!.key.range[0]);
-        const reused = this.takeRemoved(`${formatPath(mapPath)}\u0000${key}`, value, column);
+        const reused = this.fromSource(this.editOptions.source, column, value, key) ?? this.takeRemoved(`${formatPath(mapPath)}\u0000${key}`, value, column);
         const content = reused ?? `${" ".repeat(column)}${this.eol(this.pairText(key, this.makeNode(value), column))}${this.style.eol}`;
+
+        if (this.editOptions.placement !== undefined) {
+            const at = this.placeLines(map, index);
+
+            return at === undefined ? undefined : [this.insertAtLineEnd(at, content)];
+        }
 
         return [this.insertAtLineEnd(lineEndAfter(this.text, (last.value ?? last.key).range[1]), content)];
     }
@@ -520,7 +893,7 @@ class YamlTextEditor {
         }
 
         if (isLineStart(this.text, start)) {
-            const from = lineStartOf(this.text, start);
+            const from = this.blockStart(start);
             const to = lineEndAfter(this.text, end);
 
             this.remember(`${formatPath(mapPath)}\u0000${key}`, [...mapPath, key], from, to, columnOf(this.text, start));
@@ -582,13 +955,23 @@ class YamlTextEditor {
         }
 
         const column = columnOf(this.text, dashes[0]!);
-        const reused = this.takeRemoved(`${formatPath(path)}\u0000[]`, value, column);
+        const reused = this.fromSource(this.editOptions.source, column, value) ?? this.takeRemoved(`${formatPath(path)}\u0000[]`, value, column);
+
+        if (this.editOptions.placement !== undefined && (index === items.length || isLineStart(this.text, dashes[index]!))) {
+            const at = this.placeLines(seq, index);
+            const content = reused ?? `${" ".repeat(column)}-${this.eol(this.afterDash(this.makeNode(value), column))}${this.style.eol}`;
+
+            if (at !== undefined) {
+                return [this.insertAtLineEnd(at, content)];
+            }
+        }
 
         if (index < items.length) {
             const dash = dashes[index]!;
 
             if (reused !== undefined && isLineStart(this.text, dash)) {
-                return [{ offset: lineStartOf(this.text, dash), length: 0, content: reused }];
+                // Before the item now at `index`, and before its comment lines.
+                return [{ offset: this.placeLines(seq, index) ?? lineStartOf(this.text, dash), length: 0, content: reused }];
             }
 
             const item = `-${this.eol(this.afterDash(this.makeNode(value), column))}`;
@@ -624,7 +1007,7 @@ class YamlTextEditor {
         }
 
         if (isLineStart(this.text, dash)) {
-            const from = lineStartOf(this.text, dash);
+            const from = this.blockStart(dash);
             const to = lineEndAfter(this.text, item.range[1]);
 
             this.remember(`${formatPath(path)}\u0000[]`, [...path, index], from, to, columnOf(this.text, dash));
@@ -698,6 +1081,13 @@ class YamlTextEditor {
         }
 
         return this.text[at] === "-" ? at : undefined;
+    }
+
+    /** Where the block of the entry starting at an offset starts: its comment lines above, or its line. */
+    private blockStart(start: number): number {
+        this.above ??= commentLinesAbove(this.text, "yaml");
+
+        return this.above(lineStartOf(this.text, start));
     }
 
     /** An insertion at a line end; at the end of a text with no final line break, adds one first. */
@@ -864,6 +1254,23 @@ class YamlTextEditor {
     }
 }
 
+/** Whether a line holds nothing but spaces and a comment. */
+function isYamlTrivia(line: string): boolean {
+    return /^[ \t]*(?:#.*)?\r?\n?$/.test(line);
+}
+
+/**
+ * Moves every line of a text right by `by` spaces, or left (a negative `by`) by up to that many:
+ * a line with fewer leading spaces loses only those it has. Empty lines stay empty.
+ */
+function shiftLines(text: string, by: number): string {
+    if (by === 0) {
+        return text;
+    }
+
+    return text.replace(/^( *)(?=[^\r\n])/gm, (spaces: string) => (by > 0 ? spaces + " ".repeat(by) : spaces.slice(Math.min(-by, spaces.length))));
+}
+
 /** Indents every line but the first by `column` spaces. */
 function indentLines(text: string, column: number): string {
     if (column === 0) {
@@ -890,7 +1297,8 @@ function naturalStringType(value: string): Scalar.Type {
 }
 
 function lineStartOf(text: string, offset: number): number {
-    return text.lastIndexOf("\n", offset - 1) + 1;
+    // lastIndexOf with a negative start still finds a line break at 0.
+    return offset <= 0 ? 0 : text.lastIndexOf("\n", offset - 1) + 1;
 }
 
 /** The column of an offset on its line. */

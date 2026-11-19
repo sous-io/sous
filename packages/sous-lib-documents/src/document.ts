@@ -5,7 +5,7 @@
 import { DocNode } from "./node.js";
 import { parsePath } from "./path.js";
 import { isPatchSet, PatchRecorder } from "./patch-set.js";
-import type { DocumentBackend, JsonValue, Patch, PatchProblem, PatchSet, PathInput, PathSegment } from "./types.js";
+import type { DocumentBackend, EntrySource, JsonValue, Patch, PatchProblem, PatchSet, PathInput, PathSegment, Placement } from "./types.js";
 
 /**
  * The base of the in-memory and text documents. A subclass reads values and applies one
@@ -22,6 +22,11 @@ export abstract class BaseDocument {
             emit: (patch) => this.record(patch),
             openSet: (name, path) => this.recorder.open(name, path),
             closeSet: () => this.recorder.close(),
+            reorder: (path, order, patches) => this.reorderEntries(path, order, patches),
+            place: (path, key, value, placement, source, patches) => this.placeEntry(path, key, value, placement, source, patches),
+            entrySource: (path) => this.entrySourceAt(path),
+            valueSource: (path) => this.valueSourceAt(path),
+            setFromSource: (patch, source) => this.setFromSource(patch, source),
         };
     }
 
@@ -65,6 +70,48 @@ export abstract class BaseDocument {
 
     /** Applies one primitive; returns why it could not, or `undefined`. */
     protected abstract applyPrimitive(patch: Patch): PatchProblem | undefined;
+
+    /**
+     * Reorders the entries at a path in place (see `DocumentBackend.reorder`). A document with no
+     * text has nothing to keep, so it returns `false` and the node applies the primitives.
+     */
+    protected reorderEntries(_path: readonly PathSegment[], _order: readonly number[], _patches: readonly Patch[]): boolean {
+        return false;
+    }
+
+    /** Adds an entry at a placement (see `DocumentBackend.place`); `false` here, as for {@link reorderEntries}. */
+    protected placeEntry(
+        _path: readonly PathSegment[],
+        _key: string | undefined,
+        _value: JsonValue,
+        _placement: Placement,
+        _source: string | undefined,
+        _patches: readonly Patch[],
+    ): boolean {
+        return false;
+    }
+
+    /** A key or item as written; a document with no text has none. */
+    protected entrySourceAt(_path: readonly PathSegment[]): EntrySource | undefined {
+        return undefined;
+    }
+
+    /** A value as written; a document with no text has none. */
+    protected valueSourceAt(_path: readonly PathSegment[]): string | undefined {
+        return undefined;
+    }
+
+    /** Replaces a value writing its source; `false` here, as for {@link reorderEntries}. */
+    protected setFromSource(_patch: Patch, _source: string): boolean {
+        return false;
+    }
+
+    /** Records primitives whose change a subclass made by other means, in the current patch set. */
+    protected recordApplied(patches: readonly Patch[]): void {
+        for (const patch of patches) {
+            this.recorder.add(patch);
+        }
+    }
 
     private applyItem(item: Patch | PatchSet): void {
         if (!isPatchSet(item)) {
