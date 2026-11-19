@@ -354,7 +354,7 @@ Sous never deletes backups; remove old ones from `.sous/backups/` yourself.
 Builds the project, then starts a coding agent: one an agent plugin provides (the built-in Claude Code plugin
 provides `claude-code`, and the built-in [Codex plugin](codex.md) provides `codex` once a project turns it on), or
 one configured under `tools` in the config. A failed build starts nothing. The settings for the built-in Claude
-Code one are under `tools.claude-code` (`command`, `args`, `promptFile`, `headless`). Before version 1.0.20 the
+Code one are under `tools.claude-code` (`command`, `args`, `promptFile`, `headless`). Before version 1.1.0 the
 tool was named `claude`; `sous launch claude` is not kept as an alias, and when no tool has that name the error
 suggests `sous launch claude-code`.
 `--continuous` restarts the agent whenever it exits, and `--no-build` skips the build.

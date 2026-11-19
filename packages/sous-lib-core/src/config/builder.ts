@@ -164,7 +164,7 @@ export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilde
 
     options<T = JsonObject>(): T | undefined {
         const own = this.backend.read(["plugins", "options", this.contributor.plugin]) as T | undefined;
-        // A built-in plugin's options may still be written under its name from before 1.0.20.
+        // A built-in plugin's options may still be written under its name from before 1.1.0.
         const former = own === undefined ? formerPluginName(this.contributor.plugin) : undefined;
 
         return former === undefined ? own : (this.backend.read(["plugins", "options", former]) as T | undefined);

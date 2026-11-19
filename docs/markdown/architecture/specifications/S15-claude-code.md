@@ -200,7 +200,7 @@ A Claude Code plugin changed (session-harness). Run /reload-plugins in any open 
 
 ## 6. Migrations
 
-Both belong to sous 1.0.20 (the release the `_if` migration of S11 names too), and are added with
+Both belong to sous 1.1.0 (the release the `_if` migration of S11 names too), and are added with
 `sous.migrations.add`.
 
 ### `claude-code/tools-key` (order 400)
@@ -259,5 +259,5 @@ First version, written when the design was built. Choices the agent made where t
 approved by nobody yet: no `sous launch claude` alias, with a hint instead; the default source written out line by
 line; absolute include paths; the `skip-empty` transform and the compiler's prune of an output a transform left
 out; `backupExisting` as an output field the compiler honors; the pointer file added by `sous-plugin-claude-code`;
-the migrations' version 1.0.20 and the `conf.d` file for `keep`; the migrations plugin passing earlier answers to
+the migrations' version 1.1.0 and the `conf.d` file for `keep`; the migrations plugin passing earlier answers to
 `answered`.

@@ -26,12 +26,12 @@ import {
 /** The name of this plugin, whose options say which command to run. */
 const PLUGIN = "@sous-io/sous-plugin-npm";
 
-/** Its name before sous 1.0.20, under which a project's config may still hold its options. */
+/** Its name before sous 1.1.0, under which a project's config may still hold its options. */
 const FORMER_PLUGIN = "@sous-io/plugin-npm";
 
 /** The command to run: the `command` option, or `npm`. */
 function commandOf(ctx: ServiceContext): string {
-    // The options may still be written under this plugin's name from before 1.0.20.
+    // The options may still be written under this plugin's name from before 1.1.0.
     const options = ctx.config.get<NpmPluginOptions>(["plugins", "options", PLUGIN]) ?? ctx.config.get<NpmPluginOptions>(["plugins", "options", FORMER_PLUGIN]);
 
     return options?.command ?? "npm";

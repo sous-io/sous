@@ -33,7 +33,7 @@ function refine<T>(base: SousSchema<T, T>, extra: (value: T) => Issue[]): SousSc
 }
 
 /**
- * The `memory-target` entity kind. The fields it had before 1.0.20 (`fileName`, `directory`,
+ * The `memory-target` entity kind. The fields it had before 1.1.0 (`fileName`, `directory`,
  * `readIn`, `filter`, `format`) are refused by name, so a plugin written for them fails clearly.
  */
 export const memoryTargetSchema: SousSchema<MemoryTargetEntity, MemoryTargetEntity> = refine(
@@ -60,7 +60,7 @@ export const memoryTargetSchema: SousSchema<MemoryTargetEntity, MemoryTargetEnti
             .filter((name) => (target as unknown as Record<string, unknown>)[name] !== undefined)
             .map((name) => ({
                 path: [name],
-                message: `"${name}" was removed from memory targets in sous 1.0.20: a memory target names the file it writes with "outputPath", and its content comes from .sous/MEMORIES.tpl.md.`,
+                message: `"${name}" was removed from memory targets in sous 1.1.0: a memory target names the file it writes with "outputPath", and its content comes from .sous/MEMORIES.tpl.md.`,
             })),
 );
 

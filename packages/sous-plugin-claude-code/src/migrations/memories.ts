@@ -1,5 +1,5 @@
 /**
- * The memories migration (1.0.20; spec 19, "the first migration"). Before 1.0.20, sous compiled the
+ * The memories migration (1.1.0; spec 19, "the first migration"). Before 1.1.0, sous compiled the
  * recipes' memories into the root `CLAUDE.md`; now they go to `.claude/rules/SOUS-MEMORIES.md`,
  * which Claude Code loads beside any `CLAUDE.md`. A project upgraded from the old default would get
  * its memories twice, so the migration asks:
@@ -38,7 +38,7 @@ export const REMOVE_LINE_QUESTION = "claude-code.memories.remove-line";
 /** The plugin's name, whose options hold `memoriesOutputPath`. */
 const PLUGIN = "@sous-io/sous-plugin-claude-code";
 
-/** Its name before sous 1.0.20, under which a project's config may still hold its options. */
+/** Its name before sous 1.1.0, under which a project's config may still hold its options. */
 const FORMER_PLUGIN = "@sous-io/plugin-claude-code";
 
 /** The config path of the option the `keep` answer writes. */
@@ -110,7 +110,7 @@ export interface MemoriesSituation {
 
 /** This plugin's options, from the config. */
 function options(ctx: Pick<Context, "config">): ClaudeCodePluginOptions {
-    // The options may still be written under this plugin's name from before 1.0.20.
+    // The options may still be written under this plugin's name from before 1.1.0.
     return ctx.config.get<ClaudeCodePluginOptions>(["plugins", "options", PLUGIN]) ?? ctx.config.get<ClaudeCodePluginOptions>(["plugins", "options", FORMER_PLUGIN]) ?? {};
 }
 

@@ -63,12 +63,12 @@ describe("names", () => {
     });
 
     /**
-     * A built-in plugin's name from before 1.0.20 maps to its name now, and back; every other
+     * A built-in plugin's name from before 1.1.0 maps to its name now, and back; every other
      * plugin is left alone.
      *
      * currentPluginName("@sous-io/plugin-codex") -> "@sous-io/sous-plugin-codex"
      */
-    it("should map built-in plugin names from before 1.0.20 to the current ones", () => {
+    it("should map built-in plugin names from before 1.1.0 to the current ones", () => {
         expect(currentPluginName("@sous-io/plugin-claude-code")).toBe("@sous-io/sous-plugin-claude-code");
         expect(currentPluginName("@sous-io/sous-plugin-codex")).toBe("@sous-io/sous-plugin-codex");
         expect(currentPluginName("@sous-io/plugin-api")).toBe("@sous-io/sous-plugin-api");

@@ -651,7 +651,7 @@ export function readPluginSettings(config: JsonValue): { load: string[]; disable
     const strings = (value: JsonValue | undefined): string[] =>
         Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-    // A built-in plugin may still be disabled by its name from before 1.0.20 (`@sous-io/plugin-<name>`).
+    // A built-in plugin may still be disabled by its name from before 1.1.0 (`@sous-io/plugin-<name>`).
     const disabled = strings(plugins?.disabled);
 
     return { load: strings(plugins?.load), disabled: [...new Set([...disabled, ...disabled.map(currentPluginName)])] };

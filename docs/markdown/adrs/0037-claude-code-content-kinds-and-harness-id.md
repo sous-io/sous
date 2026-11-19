@@ -20,7 +20,7 @@ Claude Code alone.
 
 - The harness id is `claude-code`. Its settings key is `tools.claude-code`; `sous launch claude-code` starts it.
   `sous launch claude` is not kept as an alias (agent's choice, following the ruling above); an unknown tool name
-  that starts a known id and a hyphen gets a "Did you mean" hint. A 1.0.20 migration renames `tools.claude` in a
+  that starts a known id and a hyphen gets a "Did you mean" hint. A 1.1.0 migration renames `tools.claude` in a
   project's JSON, JSONC and YAML config files surgically, and names any code file that sets it.
 - Every output written for Claude Code is marked `harness: "claude-code"`, so the merge of the per-harness config
   builds takes it from Claude Code's build.

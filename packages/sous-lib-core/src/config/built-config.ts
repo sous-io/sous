@@ -210,7 +210,7 @@ function pickTable(section: JsonValue | undefined): Readonly<Record<string, stri
         return {};
     }
 
-    // A pick may still name a built-in plugin by its name from before 1.0.20.
+    // A pick may still name a built-in plugin by its name from before 1.1.0.
     return Object.fromEntries(
         Object.entries(replace)
             .filter((entry): entry is [string, string] => typeof entry[1] === "string")

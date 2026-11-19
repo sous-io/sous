@@ -136,7 +136,7 @@ describe("the _if migration", () => {
 
     /** The migration belongs to the release after 1.0.19 and gives the same text as the config error. */
     it("should belong to the next release and agree with the config error's replacement", () => {
-        expect(ifMigration.version).toBe("1.0.20");
+        expect(ifMigration.version).toBe("1.1.0");
         expect(ifReplacement({ _if: { stage: { eq: "prod" } }, destinationFile: "p.md" })).toBe('{ "$if": { "expr": "stage == \'prod\'", "then": {"destinationFile":"p.md"} } }');
     });
 });

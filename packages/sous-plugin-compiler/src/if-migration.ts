@@ -26,7 +26,7 @@ import type { Context } from "@sous-io/sous-plugin-api";
 import type { MigrationDefinition, MigrationOutcome } from "@sous-io/sous-plugin-migrations/types";
 
 /** The version of sous that removed `_if`, whose migrations a project upgraded past it runs. */
-export const IF_MIGRATION_VERSION = "1.0.20";
+export const IF_MIGRATION_VERSION = "1.1.0";
 
 /** Names an expression reads as Sous's own values, so an `_if` on a variable of that name cannot move. */
 const SHADOWED = new Set(["env", "host"]);

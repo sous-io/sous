@@ -220,7 +220,7 @@ never be migrated. The agent's change; not yet reviewed by Luke.
 
 ### 2026-11-18: The `_if` migration
 
-`sous-plugin-compiler` adds `compiler/if-to-expression` at version `1.0.20` (the release after 1.0.19,
+`sous-plugin-compiler` adds `compiler/if-to-expression` at version `1.1.0` (the minor release after 1.0.19,
 so it is pending for every project migrated by 1.0.19 or earlier, whether the next release is a
 patch or a minor). In each `.json`, `.jsonc`, `.yaml` or `.yml` file among `sous.config.*` and
 `conf.d/` (patch files left out), every item of an `outputs` list holding `_if` becomes

@@ -90,7 +90,7 @@ The Claude Code plugin's options move the file or switch it off:
 A file Sous did not write that is already at `memoriesOutputPath` is backed up to `.sous/backups/`,
 with a warning, and replaced.
 
-?> Before version 1.0.20 the recipes' memories went into the root `CLAUDE.md`. A project upgraded
+?> Before version 1.1.0 the recipes' memories went into the root `CLAUDE.md`. A project upgraded
 from then is asked once, by `sous doctor` or `sous upgrade`, whether to move them to the new file
 (the default) or keep them in `CLAUDE.md` (`--answer claude-code.memories=keep`).
 
@@ -402,7 +402,7 @@ There is no separate bootstrap config and no `"sous"` key in `package.json`.
 }
 ```
 
-?> Before version 1.0.20 the built-in plugins were named `@sous-io/plugin-<name>`, such as
+?> Before version 1.1.0 the built-in plugins were named `@sous-io/plugin-<name>`, such as
 `@sous-io/plugin-claude-code`; they are now `@sous-io/sous-plugin-<name>`. A config that still uses the old
 name under `plugins.options`, `plugins.disabled`, `services.replace` or `intents.replace` keeps working, and
 the new name wins when both are written. The package plugins are written against moved too, from

@@ -19,14 +19,14 @@ export function pluginPrefix(pluginName: string): string {
     return bare.replace(/^sous-plugin-/, "").replace(/^plugin-/, "");
 }
 
-/** How a built-in plugin's package name starts, since sous 1.0.20. */
+/** How a built-in plugin's package name starts, since sous 1.1.0. */
 const BUILT_IN_PREFIX = "@sous-io/sous-plugin-";
 
 /** How it started before: `@sous-io/plugin-<name>`. */
 const FORMER_BUILT_IN_PREFIX = "@sous-io/plugin-";
 
 /**
- * The name a built-in plugin had before sous 1.0.20, when the built-in plugins were
+ * The name a built-in plugin had before sous 1.1.0, when the built-in plugins were
  * `@sous-io/plugin-<name>`; `undefined` for any other plugin. A project's config may still name a
  * plugin that way under `plugins.options`, `plugins.disabled` and the `replace` tables.
  *
@@ -40,7 +40,7 @@ export function formerPluginName(pluginName: string): string | undefined {
 }
 
 /**
- * A plugin name as it is now: a built-in plugin's name from before sous 1.0.20 becomes its new one;
+ * A plugin name as it is now: a built-in plugin's name from before sous 1.1.0 becomes its new one;
  * every other name is returned as it is.
  *
  * ```ts

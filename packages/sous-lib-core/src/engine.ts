@@ -460,7 +460,7 @@ export class Engine {
         }));
     }
 
-    /** A built-in plugin's options written under its name from before 1.0.20, if any. */
+    /** A built-in plugin's options written under its name from before 1.1.0, if any. */
     private formerOptions(pluginName: string): JsonObject | undefined {
         const former = formerPluginName(pluginName);
 

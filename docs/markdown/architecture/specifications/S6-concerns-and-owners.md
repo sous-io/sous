@@ -1068,7 +1068,7 @@ Built from Luke's rulings of 2026-11-15 to 2026-11-18; the design is S15.
 - `sous-plugin-claude-code` now owns, besides its `harness` (id `claude-code`, was `claude`) and `skill-target`: the
   `memory-target` for `.claude/rules/SOUS-MEMORIES.md` (its `memoriesOutputPath` option), the `CLAUDE.md`
   `pointer-file` entity, the content kinds `claude-code-plugin` and `claude-code-agent` with the contributor that
-  turns them into compilation targets, the `/reload-plugins` line, and the two 1.0.20 migrations (`tools.claude`
+  turns them into compilation targets, the `/reload-plugins` line, and the two 1.1.0 migrations (`tools.claude`
   renamed, the memories file moved or kept). Luke: "its better to be overly verbose than regret inspecificity
   later."
 - It therefore depends on `sous-plugin-recipes` (`recipes.contents`, the `content-kind` kind), `sous-plugin-compiler`

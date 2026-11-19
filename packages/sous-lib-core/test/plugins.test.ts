@@ -254,7 +254,7 @@ describe("plugin lifecycle", () => {
     });
 
     /**
-     * A project's config written before 1.0.20 names the built-in plugins `@sous-io/plugin-<name>`.
+     * A project's config written before 1.1.0 names the built-in plugins `@sous-io/plugin-<name>`.
      * Those names still work: in plugins.options (read by config.options(), ctx.options() and
      * pluginInfo), in plugins.disabled and in the replace tables. The current name wins when both
      * are written.
@@ -262,7 +262,7 @@ describe("plugin lifecycle", () => {
      * plugins.options."@sous-io/plugin-thing": { model: "opus" }   -> config.options() of @sous-io/sous-plugin-thing
      * plugins.disabled: ["@sous-io/plugin-old"]                     -> @sous-io/sous-plugin-old does not load
      */
-    it("should accept a built-in plugin's name from before 1.0.20 in plugins.options, plugins.disabled and replace", async () => {
+    it("should accept a built-in plugin's name from before 1.1.0 in plugins.options, plugins.disabled and replace", async () => {
         const seen: unknown[] = [];
         const thing = plugin("@sous-io/sous-plugin-thing", (sous) => {
             sous.config.contribute({ id: "reads-own", contribute: (config) => void seen.push(config.options()) });

@@ -59,7 +59,7 @@ export default {
 
     const dir = path.join(t.root, "e2e-plugin");
     t.write("package.json", JSON.stringify({ name: "e2e-hello-plugin", version: "1.2.3", type: "module", main: "index.mjs" }), dir);
-    // The plugin interface is @sous-io/sous-plugin-api from 1.0.20; a release before that published it
+    // The plugin interface is @sous-io/sous-plugin-api from 1.1.0; a release before that published it
     // as @sous-io/plugin-api.
     const sousVersion = t.sousVersion.replace(/^v/, "");
     const renamed = t.local !== undefined || t.sh(`npm view @sous-io/sous-plugin-api@${sousVersion} version`).code === 0;
