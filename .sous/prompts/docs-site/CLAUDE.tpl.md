@@ -189,8 +189,9 @@ would otherwise own. All CDN pins and `$docsify` config live in
   aggressively, which reads as your changes not applying).
 - The site's HTML/CSS/JS under `docs/` is hand-written and tracked normally.
   The ONLY sous-generated file in `docs/` is this CLAUDE.md.
-- The repo-root `CLAUDE.md` covers the Sous CLI; this file covers only the
-  website. Both are sous-generated from tracked sources under
-  `.sous/prompts/`.
+- `.claude/rules/SOUS-MEMORIES.md` covers the Sous CLI; this file covers only
+  the website. Both are sous-generated from tracked sources: that one from
+  `.sous/memories/` and the subscribed recipes' memories, this one from
+  `.sous/prompts/docs-site/`.
 
 @${sousDir}/prompts/memories/sources-of-truth.md
