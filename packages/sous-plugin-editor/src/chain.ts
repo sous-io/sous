@@ -202,10 +202,18 @@ export interface FileHandle extends ValueOperations<ValueHandle> {
     selectDocument(index: number): FileHandle;
 }
 
+/** One folder, for `expect`: `expect( editor(config).directory("docs") ).to.exist()`. */
+export interface DirectoryHandle {
+    /** The folder's path. */
+    readonly directory: string;
+}
+
 /** The entry point: `editor(config).file(path)`. */
 export interface EditorChain {
     /** A handle on one file. Nothing is read or written here. */
     file(path: string, settings?: FileSettings): FileHandle;
+    /** A handle on one folder, for `expect(...).to.exist()` and `.to.not.exist()`. Nothing is read or written here. */
+    directory(path: string): DirectoryHandle;
     /** The folders exist (`ensureDirectoryExists`). */
     ensureDirectoryExists(paths: string | string[], settings?: FileSettings): void;
 }
@@ -337,6 +345,13 @@ class FileHandleImpl extends ValueHandleImpl {
     // byteCount, characterCount and tokenCount are defined below, beside `expect`.
 }
 
+class DirectoryHandleImpl implements DirectoryHandle {
+    constructor(
+        readonly recorder: Recorder,
+        readonly directory: string,
+    ) {}
+}
+
 /** The recorder of each config builder, so every handle of one contributor run shares one. */
 const recorders = new WeakMap<ConfigBuilder, Recorder>();
 
@@ -368,6 +383,9 @@ export function editor(config: ConfigBuilder): EditorChain {
         file(path, settings = {}) {
             return new FileHandleImpl(recorder, path, settings) as unknown as FileHandle;
         },
+        directory(path) {
+            return new DirectoryHandleImpl(recorder, path);
+        },
         ensureDirectoryExists(paths, settings = {}) {
             recorder.append({ ...(settings as JsonObject), ensureDirectoryExists: { paths: [paths].flat() } });
         },
@@ -378,11 +396,15 @@ export function editor(config: ConfigBuilder): EditorChain {
 // expect
 // ---------------------------------------------------------------------------------------------
 
-/** What `expect` takes: a value in a file, a file, or a size of a file. */
-export type ExpectSubject = ValueHandle | FileHandle | SizeReference;
+/** What `expect` takes: a value in a file, a file, a size of a file, or a folder. */
+export type ExpectSubject = ValueHandle | FileHandle | SizeReference | DirectoryHandle;
 
 function isSize(subject: ExpectSubject): subject is SizeReference {
     return (subject as SizeReference).kind === "size";
+}
+
+function isDirectory(subject: ExpectSubject): subject is DirectoryHandle {
+    return subject instanceof DirectoryHandleImpl;
 }
 
 function isFileHandle(subject: ExpectSubject): boolean {
@@ -461,8 +483,8 @@ export class Expectation {
 
     private record(check: string, arg: JsonValue): this {
         const subject = this.subject;
-        const file = subject.file;
-        const path = isSize(subject) ? "" : (subject as ValueHandle).path;
+        const file = isDirectory(subject) ? subject.directory : subject.file;
+        const path = isSize(subject) || isDirectory(subject) ? "" : (subject as ValueHandle).path;
         const assert: JsonObject = { ...(path === "" ? {} : { path }), [check]: arg, ...(this.negate ? { not: true } : {}) };
 
         this.recorded.push(this.recorder.append({ file, assert }));
@@ -474,6 +496,10 @@ export class Expectation {
     private needsValue(name: string): void {
         if (isSize(this.subject)) {
             throw new Error(`${name}() checks a value in a file; a size is checked with lessThan, lessThanOrEqualTo, greaterThan or greaterThanOrEqualTo.`);
+        }
+
+        if (isDirectory(this.subject) && name !== "exist") {
+            throw new Error(`${name}() checks a file or a value in one; a folder is checked with exist() or not.exist().`);
         }
     }
 
@@ -501,16 +527,20 @@ export class Expectation {
         return this.equal(value);
     }
 
-    /** The value exists; for a file, the file exists. `.to.not.exist()` for the opposite. */
+    /**
+     * The value exists; for a file, the file exists; for a folder (`editor(config).directory(path)`),
+     * the folder exists. `.to.not.exist()` for the opposite.
+     */
     exist(): this {
         this.needsValue("exist");
 
-        if (isFileHandle(this.subject)) {
+        if (isFileHandle(this.subject) || isDirectory(this.subject)) {
             const negate = this.negate;
+            const [exists, missing] = isDirectory(this.subject) ? ["directoryExists", "directoryDoesNotExist"] : ["fileExists", "fileDoesNotExist"];
 
             this.negate = false;
 
-            return this.record(negate ? "fileDoesNotExist" : "fileExists", true);
+            return this.record(negate ? missing : exists, true);
         }
 
         return this.record("exists", true);
@@ -583,6 +613,13 @@ export class Expectation {
         return this.record("includesLine", line);
     }
 
+    /** The text holds the managed block named `name` (with exactly `content`, when given). */
+    includeBlock(name: string, content?: string): this {
+        this.needsValue("includeBlock");
+
+        return this.record("includesBlock", content === undefined ? name : { name, content });
+    }
+
     /** The object's keys are in order. */
     sortedKeys(): this {
         this.needsValue("sortedKeys");
@@ -592,6 +629,10 @@ export class Expectation {
 
     private compare(kind: "lt" | "lte" | "gt" | "gte", value: number): this {
         const subject = this.subject;
+
+        if (isDirectory(subject)) {
+            this.needsValue("lessThan");
+        }
 
         if (isSize(subject)) {
             if (this.negate) {
@@ -695,8 +736,12 @@ export function expect(subject: ExpectSubject): Expectation {
         return new Expectation(subject, owner);
     }
 
+    if (isDirectory(subject)) {
+        return new Expectation(subject, (subject as DirectoryHandleImpl).recorder);
+    }
+
     if (!(subject instanceof ValueHandleImpl)) {
-        throw new Error("expect() takes a value, a file or a size from editor(config).file(...).");
+        throw new Error("expect() takes a value, a file or a size from editor(config).file(...), or a folder from editor(config).directory(...).");
     }
 
     return new Expectation(subject, recorderOf(subject));

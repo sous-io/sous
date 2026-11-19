@@ -92,7 +92,7 @@ export const editorPlugin: PluginDefinition = definePlugin({
 export default editorPlugin;
 
 export { editor, expect, Expectation, CHAIN_OPERATION_NAMES } from "./chain.js";
-export type { EditorChain, ExpectSubject, FileHandle, FileSettings, SilenceHandle, SizeReference, ValueHandle, ValueOperations } from "./chain.js";
+export type { DirectoryHandle, EditorChain, ExpectSubject, FileHandle, FileSettings, SilenceHandle, SizeReference, ValueHandle, ValueOperations } from "./chain.js";
 export { CHECKS } from "./checks.js";
 export { formatForFile, openDocument, UnsupportedFormatError } from "./documents-adapter.js";
 export { DEFAULT_SETTINGS, EDITS_KEY, normalizeEntry } from "./entries.js";
