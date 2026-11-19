@@ -5,7 +5,7 @@
  */
 import { formatPath, parsePath } from "./path.js";
 import { compareValues, deepEqual, isJsonObject, stableStringify, toPlainJson, typeOfValue } from "./json.js";
-import type { DocumentBackend, DocumentNode, JsonObject, JsonValue, Patch, PathInput, PathSegment, ValueType } from "./types.js";
+import type { DocumentBackend, DocumentNode, EntrySource, JsonObject, JsonValue, KeyPosition, Patch, PathInput, PathSegment, Placement, ValueType } from "./types.js";
 
 /** A predicate over array items. Items are plain JSON; `any` lets `(target) => target.id === "x"` compile. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -254,7 +254,11 @@ export class DocNode implements DocumentNode {
         return index === -1 ? undefined : this.atIndex(index);
     }
 
-    /** Moves an item from one index to another (the index it ends up at). */
+    /**
+     * Moves an item from one index to another (the index it ends up at). In a text document the
+     * item takes its own lines with it, its comment lines above and the comment ending its line
+     * included; blank lines stay where they are.
+     */
     move(from: number, to: number): void {
         this.group("move", () => {
             const items = this.items();
@@ -263,8 +267,13 @@ export class DocNode implements DocumentNode {
                 return;
             }
 
-            this.removeAt(from);
-            this.backend.emit({ op: "insertAt", path: this.pathString, index: to, value: items[from]! });
+            const order = items.map((_item, index) => index);
+
+            order.splice(to, 0, ...order.splice(from, 1));
+            this.reorder(order, [
+                { op: "removeIndex", path: this.pathString, index: from },
+                { op: "insertAt", path: this.pathString, index: to, value: items[from]! },
+            ]);
         });
     }
 
@@ -391,26 +400,32 @@ export class DocNode implements DocumentNode {
      */
     sort(compare: (a: JsonValue, b: JsonValue) => number = compareValues): void {
         this.group("sort", () => {
-            const work = [...this.items()];
-            const target = [...work].sort(compare);
+            const items = this.items();
+            const work = items.map((value, index) => ({ value, index }));
+            const target = [...work].sort((a, b) => compare(a.value, b.value));
+            const patches: Patch[] = [];
 
             for (let to = 0; to < target.length; to++) {
-                if (deepEqual(work[to], target[to])) {
+                if (deepEqual(work[to]!.value, target[to]!.value)) {
                     continue;
                 }
 
-                const from = work.findIndex((value, i) => i > to && deepEqual(value, target[to]));
+                const from = work.findIndex((entry, i) => i > to && deepEqual(entry.value, target[to]!.value));
                 const [moved] = work.splice(from, 1);
 
                 work.splice(to, 0, moved!);
-                this.removeAt(from);
-                this.backend.emit({ op: "insertAt", path: this.pathString, index: to, value: moved! });
+                patches.push({ op: "removeIndex", path: this.pathString, index: from }, { op: "insertAt", path: this.pathString, index: to, value: moved!.value });
+            }
+
+            if (patches.length > 0) {
+                this.reorder(work.map((entry) => entry.index), patches);
             }
         });
     }
 
-    // Moving keys. A key moves by being removed and set again; the text formats write it back with
-    // its old text, so a moved key keeps its comments and layout.
+    // Moving keys. In a text document a key takes its own lines with it, its comment lines above
+    // and the comment ending its line included; blank lines stay where they are. Elsewhere a key
+    // moves by being removed and set again.
 
     /** Moves a key of this object to just before another. Does nothing when either is missing. */
     moveKeyBefore(key: string, anchor: string): void {
@@ -524,11 +539,199 @@ export class DocNode implements DocumentNode {
                 at++;
             }
 
-            for (const key of order.slice(kept)) {
-                this.backend.emit({ op: "deleteKey", path: this.pathString, key });
-                this.backend.emit({ op: "setKey", path: this.pathString, key, value: value[key]! });
+            const patches: Patch[] = order.slice(kept).flatMap((key): Patch[] => [
+                { op: "deleteKey", path: this.pathString, key },
+                { op: "setKey", path: this.pathString, key, value: value[key]! },
+            ]);
+
+            if (patches.length > 0) {
+                this.reorder(order.map((key) => current.indexOf(key)), patches);
             }
         });
+    }
+
+    /**
+     * Puts the entries in a new order (`order[i]`: the old index of the entry going to `i`): in
+     * place when the document can (a text document moves each entry's lines), or else by the
+     * primitives, which make the same change.
+     */
+    private reorder(order: number[], patches: Patch[]): void {
+        if (this.backend.reorder?.(this.path, order, patches) === true) {
+            return;
+        }
+
+        for (const patch of patches) {
+            this.backend.emit(patch);
+        }
+    }
+
+    // Putting an entry in a given place, and back where it was.
+
+    /**
+     * Adds a key to this object at a position: just before or after another key, or at an index
+     * (before the key now there; at the end when it is the number of keys). In a text document no
+     * other key is rewritten: the new key's lines go in between, before the comment lines of the
+     * key after it. `source` is a key's text as {@link entrySource} gave it, written instead of new
+     * text when it holds the value (its key is written as `key`).
+     *
+     * ```ts
+     * doc.root().insertKey("mode", "loose", { after: "name" });
+     * ```
+     *
+     * @throws Error when this is not an object, the key is already there, or the key named by the
+     *   position is missing.
+     */
+    insertKey(key: string, value: unknown, position: KeyPosition, source?: string): void {
+        const plain = toPlainJson(value);
+        const keys = this.keys();
+
+        if (!this.isObject()) {
+            throw new Error(`${this.pathString || "The root"} is not an object, so a key cannot be inserted into it.`);
+        }
+
+        if (keys.includes(key)) {
+            throw new Error(`${this.pathString || "The root"} already has the key ${JSON.stringify(key)}.`);
+        }
+
+        if (plain === undefined) {
+            return;
+        }
+
+        let placement: Placement;
+
+        if ("before" in position || "after" in position) {
+            const anchor = "before" in position ? position.before : position.after;
+            const at = keys.indexOf(anchor);
+
+            if (at === -1) {
+                throw new Error(`${this.pathString || "The root"} has no key ${JSON.stringify(anchor)} to insert ${JSON.stringify(key)} ${"before" in position ? "before" : "after"}.`);
+            }
+
+            placement = "before" in position ? { index: at, from: "next", lines: 0 } : { index: at + 1, from: "previous", lines: 0 };
+        } else {
+            const index = Math.max(0, Math.min(position.index, keys.length));
+
+            placement = { index, from: index < keys.length ? "next" : "previous", lines: 0 };
+        }
+
+        this.group("insertKey", () => this.placeKey(key, plain, placement, source));
+    }
+
+    /**
+     * This key or list item exactly as written, and where it is, to put it back with
+     * {@link restoreEntrySource} once it is removed. `undefined` for the root, a missing value, or
+     * a document with no text.
+     *
+     * ```ts
+     * // a: 1
+     * // # about b
+     * // b: 2
+     * doc.atPath("b").entrySource();   // { source: "# about b\nb: 2\n", index: 1, after: "a" }
+     * ```
+     */
+    entrySource(): EntrySource | undefined {
+        return this.backend.entrySource?.(this.path);
+    }
+
+    /**
+     * Puts back a key or list item that was removed, in the place {@link entrySource} recorded and
+     * with its text when it still holds the value: after the key that was before it (or at its
+     * index when that key is gone), between the same blank lines. A key that is there again is
+     * only set to the value.
+     */
+    restoreEntrySource(value: unknown, entry: EntrySource): void {
+        const plain = toPlainJson(value);
+        const last = this.path[this.path.length - 1];
+
+        if (plain === undefined || last === undefined) {
+            return;
+        }
+
+        const parent = this.parent();
+        const lines = entry.gap ?? 0;
+
+        if (typeof last === "string") {
+            const keys = parent.keys();
+
+            if (this.exists() || !parent.isObject()) {
+                this.set(plain);
+
+                return;
+            }
+
+            const after = entry.after === undefined ? -1 : keys.indexOf(entry.after);
+            const placement: Placement = after !== -1
+                ? { index: after + 1, from: "previous", lines }
+                : entry.after === undefined
+                    ? { index: 0, from: "next", lines }
+                    : { index: Math.min(entry.index, keys.length), from: entry.index < keys.length ? "next" : "previous", lines: 0 };
+
+            parent.group("restoreEntry", () => parent.placeKey(last, plain, placement, entry.source));
+
+            return;
+        }
+
+        if (!parent.isArray()) {
+            this.set(plain);
+
+            return;
+        }
+
+        const index = Math.min(entry.index, parent.length());
+        const placement: Placement = { index, from: index > 0 ? "previous" : "next", lines };
+        const patch: Patch = { op: "insertAt", path: parent.pathString, index, value: plain };
+
+        parent.group("restoreEntry", () => {
+            if (this.backend.place?.(parent.path, undefined, plain, placement, entry.source, [patch]) !== true) {
+                this.backend.emit(patch);
+            }
+        });
+    }
+
+    /** This value exactly as written, to put back with {@link restoreValueSource}; `undefined` with no text. */
+    valueSource(): string | undefined {
+        return this.backend.valueSource?.(this.path);
+    }
+
+    /**
+     * Sets this existing value, writing `source` (what {@link valueSource} gave) when it holds the
+     * value, so a value put back has its old layout: `["only"]` comes back on one line.
+     */
+    restoreValueSource(value: unknown, source: string): void {
+        const plain = toPlainJson(value);
+
+        if (plain === undefined || this.path.length === 0 || !this.exists()) {
+            this.set(value);
+
+            return;
+        }
+
+        const patch = this.setPatch(plain);
+
+        if (this.backend.setFromSource?.(patch, source) !== true) {
+            this.backend.emit(patch);
+        }
+    }
+
+    /** Adds a key at a placement: in place when the document can, or else set and the keys after it moved behind it. */
+    private placeKey(key: string, value: JsonValue, placement: Placement, source: string | undefined): void {
+        const current = this.read() as JsonObject;
+        const later = Object.keys(current).slice(placement.index);
+        const patches: Patch[] = [
+            { op: "setKey", path: this.pathString, key, value },
+            ...later.flatMap((other): Patch[] => [
+                { op: "deleteKey", path: this.pathString, key: other },
+                { op: "setKey", path: this.pathString, key: other, value: current[other]! },
+            ]),
+        ];
+
+        if (this.backend.place?.(this.path, key, value, placement, source, patches) === true) {
+            return;
+        }
+
+        for (const patch of patches) {
+            this.backend.emit(patch);
+        }
     }
 
     private split(): { parent: string; last: PathSegment } {

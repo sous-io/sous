@@ -226,8 +226,10 @@ an error.
 
 `move` takes the value at `path` (which must end in a key) to `to`. Within one object it is the
 library's rename, keeping the key's place, text and comments, and `down` renames it back. To
-another place it is a delete and a set; `down` sets the value back at `path` and moves the key back
-after the key that came before it, and restores what `to` held. A value already at `to` is
+another object it is a delete and an insert of the key's own text (its comment lines above and the
+comment on its line included) under its new name, last in that object, at its indentation; `down`
+puts the key back at `path` from its recorded entry, in its old place and with its old text, and
+restores what `to` held. A value already at `to` is
 replaced unless `ifMissing: true`. Nothing happens while `path` is missing. Its automatic assertion
 is that `path` does not exist (none with `ifMissing`, where the source may stay).
 
@@ -240,7 +242,7 @@ and a list `up` created. The automatic assertion is that the list includes each 
 `moveItem` puts the item equal to `item`, or the first matching `where`, at `position`: `first`,
 `last`, an index (counted in the list without the item), `{ before: item }`, `{ after: item }`,
 `{ beforeWhere: {...} }` or `{ afterWhere: {...} }`. It moves through the library's `move`, so the
-item keeps its text and the comment on its line. Nothing happens when the item, or the item to put
+item keeps its text, its comment lines above and the comment on its line. Nothing happens when the item, or the item to put
 it beside, is not found (as with the key moves), or when it is already in place. Unlike the key
 moves it is undone: `up` records where the item was, and `down` moves it back. It has no automatic
 assertion, since an item that is not in the list is not an error.
@@ -295,8 +297,9 @@ indentation and line endings, and an object or list written beside one-line neig
 one-line container, in place of a one-line value, or in a list beside a one-line item) goes on one
 line. In YAML a string keeps the quoting or block style its author chose, but not one its old value
 only needed (`">> x"` must be quoted), and a text of several lines is written as a block. A key or
-item that moves takes its own lines and the comment at their end; a comment on a line of its own
-stays where it is. TOML is recognized and skipped with a warning until the document
+item that is deleted or moves takes its own lines, the comment lines directly above it and the
+comment at the end of its line; blank lines stay between the same places and never move with it.
+A key put back by an undo goes back after the key that was before it, with its old text. TOML is recognized and skipped with a warning until the document
 library edits it. The text operations (`ensureLine`, `removeLine`, `ensureBlock`, `appendText`,
 `prependText`, `replaceText`, `replacePattern`) act on the file's whole text when they have no
 `path`, and on a string value when they do.
@@ -472,11 +475,14 @@ contribute(config) {
   operation, alias and shorthand is a method; positional arguments are the operation's main
   parameters, then an options object. `.withoutAssertion()` drops the automatic assertion of the
   operation just recorded.
-- `expect(subject)`: the subject is a value (`settings.at(...)`), a file (`settings`) or a size
-  (`settings.byteCount`, `.characterCount`, `.tokenCount`, which are references, not numbers).
-  Linking words as in Chai; every assertion ends in a method call; comparisons are spelled
+- `editor(config).directory(path)` gives a folder handle, which only `expect` takes.
+- `expect(subject)`: the subject is a value (`settings.at(...)`), a file (`settings`), a size
+  (`settings.byteCount`, `.characterCount`, `.tokenCount`, which are references, not numbers) or a
+  folder. Linking words as in Chai; every assertion ends in a method call; comparisons are spelled
   `lessThan`, `lessThanOrEqualTo`, `greaterThan`, `greaterThanOrEqualTo`; `.orWarn()` and
-  `.withMessage(...)` end the chain.
+  `.withMessage(...)` end the chain. `.to.includeBlock(name, content?)` records `includesBlock`
+  (`.to.not.includeBlock(name)` its negation); on a folder, `.to.exist()` records
+  `directoryExists` and `.to.not.exist()` `directoryDoesNotExist`, and no other check is taken.
 - `settings.silence(path, kinds?)` with `.thisKeyOnly()`, `.belowOnly()`, `.except(kinds)`;
   `editor(config).file(path).withoutAutomaticAssertions()`.
 
@@ -489,16 +495,43 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 
 - The merge of the per-harness config builds must carry entries limited to one harness; the merge
   rule was written for compile outputs, and an edit is not an output.
-- A key Sous deleted comes back at the end of its object, not in its old place. Putting it back in
-  place means moving every key after it, and a comment on a line of its own does not move with its
-  key, so it would end up beside the wrong key. The document library would need to know which
-  comment lines belong to a key.
-- A value put back is written in the library's layout for a new value: an inline JSONC list that
-  `unwrapList` made a plain value comes back spread over lines.
-- The `expect` chain has no method for `includesBlock`, `directoryExists` or
-  `directoryDoesNotExist`; a plugin writes those in the data form.
 
 ## Changes
+
+### 2026-11-18: A deleted key goes back in its place; comments move with their keys
+
+Three defects this specification listed as open are fixed, under Luke's rulings that every edit is
+surgical, every operation defines `down`, and undoing an edit restores what was there before:
+
+- `delete`, `ensureAbsent`, `deleteIfEquals`, `deleteIfEmpty`, `deleteKeys` and `keepOnlyKeys`
+  record each removed key's entry: its exact text (the comment lines directly above it and the
+  comment on its line included), the key before it, its index, and how many blank or comment lines
+  lay between it and its neighbour. Undoing puts the key back after that key (at its index when that
+  key is gone), between the same lines, without rewriting the keys after it, so it comes back byte
+  for byte. It no longer comes back at the end of its object.
+- A key or list item that is deleted or moves takes its comment lines above with it, as well as the
+  comment on its line: `sort`, `sortBy`, `sortKeys`, `moveKeyBefore`, `moveKeyAfter`,
+  `moveKeyFirst`, `moveKeyLast` and `moveItem` swap whole entries in place, and `move` to another
+  object writes the key from its own text under its new name, at that object's indentation.
+- `set` and its relatives record an object's or list's text when they replace it, and undoing
+  writes it back as it was: `unwrapList` undone puts a one-line JSONC list back on one line.
+
+Blank lines belong to the places between entries, never to an entry: they do not move when a key
+or item moves, so sorting keys separated by a blank line keeps the blank line where it was (a key
+can end up on its other side), and sorting back restores the text exactly; a deleted key leaves the
+blank lines around it and goes back between them. Records written before this change still undo,
+the old way. The document library gained the means (S2, "The Document-Editing Package"). The 13
+coverage cases that were marked as known defects now pass as ordinary tests. The agent's work; the
+blank-line rule is the agent's choice, not yet reviewed by Luke.
+
+### 2026-11-18: `includeBlock` and folders in `expect`
+
+The `expect` chain had no method for three data checks. Luke chose the names:
+`expect( textFile ).to.includeBlock("name")` (and `.to.not.includeBlock`) records `includesBlock`,
+with the block's content as an optional second argument; `editor(config).directory(path)` is a new
+entry point beside `file(path)`, and `expect( editor(config).directory(path) ).to.exist()` and
+`.to.not.exist()` record `directoryExists` and `directoryDoesNotExist`. They take `.orWarn()` and
+`.withMessage()` like the others; any other check on a folder is refused when it is written.
 
 ### 2026-11-18: The editor is a thin layer over the document library
 
@@ -510,7 +543,8 @@ added at the end of a file gets a blank line before it, as `sous init`'s blocks 
 block is skipped instead of a second one being added. The operations the library made cheap were
 built: `prependIfMissing`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst` and `moveKeyLast`.
 `sortKeys` now moves each key with its own lines and the comment at their end (a comment on a line
-of its own stays where it is). The agent's work while joining the merged pieces;
+of its own stayed where it was; since fixed, see "A deleted key goes back in its place"). The
+agent's work while joining the merged pieces;
 not yet reviewed by Luke.
 
 ### 2026-11-18: The history and backups are ignored in a project set up before the editor

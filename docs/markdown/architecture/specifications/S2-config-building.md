@@ -780,6 +780,12 @@ node.removeValues([item]);
 node.sort();
 doc.root().moveKeyBefore("env", "permissions");   // also moveKeyAfter, moveKeyFirst, moveKeyLast, sortKeys
 
+// Putting a key in a given place, and a removed key or item back where it was
+doc.root().insertKey("mode", "loose", { after: "name" });   // or { before: "x" }, { index: 2 }
+const entry = doc.atPath("mode").entrySource();   // its exact text, comments included, and its place
+doc.atPath("mode").restoreEntrySource("loose", entry);   // after the key that was before it, byte for byte
+doc.atPath("single").valueSource();   // a value's exact text, to put back with restoreValueSource
+
 // The whole document
 doc.root().merge(data);
 doc.toString();                // the edited text: every untouched byte as it was
@@ -796,6 +802,12 @@ doc.comment("model", "before");                                      // "Chosen 
 doc.removeComment("model", "after");
 doc.commentSource("model", "before");    // the exact bytes, to put back with restoreCommentSource
 ```
+
+Those comments belong to their key or item. A key or item that starts its line is an entry block:
+its comment lines above, its own lines and the comment ending them. Removing, moving or reordering
+it carries the whole block; blank lines (and comments that belong to no entry) are in no block, so
+they stay between the same places. Inserting a key puts its lines between its neighbours' blocks,
+rewriting no other key.
 
 A YAML file holding several documents separated by `---` lines, which `parseDocument` refuses:
 
@@ -828,6 +840,24 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-18: Keys and items carry their comment lines; a key can go back where it was
+
+"The Document-Editing Package" now knows which comment lines belong to which key, using the
+definition of the comment "before" a node: the comment lines directly above it at its indentation,
+with no blank line between. A key or list item that starts its line is removed, moved and reordered
+with those lines and the comment ending its line, in JSONC and YAML (and so in Markdown
+frontmatter); `sort`, `sortKeys` and the key moves swap whole entries in place. Blank lines are not
+part of any entry and stay between the same places, so sorting and sorting back restores the text
+byte for byte. New node methods: `insertKey(key, value, { before | after | index }, source?)` adds
+a key without rewriting the keys after it; `entrySource()` and `restoreEntrySource(value, entry)`
+record a key's or item's exact text and place (the key before it, its index, the blank lines
+between) and put it back there; `valueSource()` and `restoreValueSource(value, source)` do the same
+for a value's layout. A document with no text gets the same key order through primitives, and every
+change is still recorded as the primitives that make it. What changes for `sous config set` and
+the managed `conf.d` edits: removing a key now also removes the comment lines directly above it.
+Built for the editor's exact undo (S9), under Luke's ruling that every edit is surgical; the
+blank-line rule is the agent's choice, not yet reviewed by Luke.
 
 ### 2026-11-18: Comments, and a YAML file holding several documents
 

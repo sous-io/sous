@@ -20,6 +20,7 @@ import {
     parsePath,
     type CommentStyle,
     type DocNode,
+    type EntrySource,
     type JsonObject,
     type JsonValue,
     type LinePosition,
@@ -456,11 +457,15 @@ export function contentText(content: JsonValue | undefined, format: EditorFormat
     return content.length === 0 ? "" : `${content.map((line) => (typeof line === "string" ? line : JSON.stringify(line))).join("\n")}\n`;
 }
 
-/** One recorded value change: a path, whether it existed, and what it was. */
+/**
+ * One recorded value change: a path, whether it existed, and what it was. A key deleted also has
+ * its `entry`: its text and place (the library's `EntrySource`), so undoing puts it back there.
+ */
 interface ValueChange {
     path: PathSegment[];
     existed: boolean;
     previous?: JsonValue;
+    entry?: EntrySource;
 }
 
 /** Restores recorded value changes, last first. */
@@ -468,12 +473,22 @@ function restoreChanges(root: DocNode, changes: readonly ValueChange[]): void {
     for (const change of [...changes].reverse()) {
         const node = root.atPath(change.path);
 
-        if (change.existed) {
-            node.set(change.previous ?? null);
-        } else {
+        if (!change.existed) {
             node.delete();
+        } else if (change.entry !== undefined && !node.exists()) {
+            node.restoreEntrySource(change.previous ?? null, change.entry);
+        } else {
+            node.set(change.previous ?? null);
         }
     }
+}
+
+/** Deletes a key or item that exists, recording what it was and, in a text file, its text and place. */
+function deleteRecorded(node: DocNode, changes: ValueChange[]): void {
+    const entry = node.entrySource();
+
+    changes.push({ path: [...node.path], existed: true, previous: node.get()!, ...(entry === undefined ? {} : { entry }) });
+    node.delete();
 }
 
 /** Merges `value` into the node: objects key by key, lists by adding missing items, anything else set. */
@@ -545,7 +560,11 @@ function mergeChangeRecords(previous: JsonValue, next: JsonValue): JsonValue {
     return joined;
 }
 
-/** A record of one value replaced: whether Sous changed it, whether it existed, what it was. */
+/**
+ * A record of one value replaced: whether Sous changed it, whether it existed, what it was. An
+ * object or list replaced in a text file also keeps its `source`, the text it had, so undoing
+ * writes it back in its old layout (`["only"]` on one line, say).
+ */
 function setValue(node: DocNode, value: JsonValue): JsonValue {
     const existed = node.exists();
     const current = node.get();
@@ -554,33 +573,52 @@ function setValue(node: DocNode, value: JsonValue): JsonValue {
         return { changed: false };
     }
 
+    const source = typeof current === "object" && current !== null ? node.valueSource() : undefined;
+
     node.set(value);
 
-    return existed ? { changed: true, existed: true, previous: current! } : { changed: true, existed: false };
+    if (!existed) {
+        return { changed: true, existed: false };
+    }
+
+    return { changed: true, existed: true, previous: current!, ...(source === undefined ? {} : { source }) };
 }
 
+/**
+ * Undoes {@link setValue} or {@link deleteValue}: a value that was there is put back (in its
+ * recorded place and text, when the record has them), and one that was not is deleted.
+ */
 function restoreValue(node: DocNode, record: JsonValue): void {
     if (!isJsonObject(record) || record.changed !== true) {
         return;
     }
 
-    if (record.existed === true) {
-        node.set(record.previous ?? null);
-    } else {
+    if (record.existed !== true) {
         node.delete();
+    } else if (isJsonObject(record.entry) && !node.exists()) {
+        node.restoreEntrySource(record.previous ?? null, record.entry as unknown as EntrySource);
+    } else if (typeof record.source === "string" && node.exists()) {
+        node.restoreValueSource(record.previous ?? null, record.source);
+    } else {
+        node.set(record.previous ?? null);
     }
 }
 
+/**
+ * Deletes a value, recording what it was and, in a text file, its `entry`: its text (its comment
+ * lines included) and its place, the key before it or its index, so undoing puts it back there.
+ */
 function deleteValue(node: DocNode): JsonValue {
     if (!node.exists()) {
         return { changed: false };
     }
 
     const previous = node.get()!;
+    const entry = node.entrySource();
 
     node.delete();
 
-    return { changed: true, existed: true, previous };
+    return { changed: true, existed: true, previous, ...(entry === undefined ? {} : { entry: entry as unknown as JsonValue }) };
 }
 
 function isEmpty(value: JsonValue | undefined): boolean {
@@ -929,8 +967,7 @@ define({
             const child = node.atPath([key]);
 
             if (child.exists()) {
-                changes.push({ path: [...child.path], existed: true, previous: child.get()! });
-                child.delete();
+                deleteRecorded(child, changes);
             }
         }
 
@@ -956,10 +993,7 @@ define({
 
         for (const key of node.keys()) {
             if (!keep.has(key)) {
-                const child = node.atPath([key]);
-
-                changes.push({ path: [...child.path], existed: true, previous: child.get()! });
-                child.delete();
+                deleteRecorded(node.atPath([key]), changes);
             }
         }
 

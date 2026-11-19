@@ -158,6 +158,29 @@ export function restoreCommentSource(text: string, format: CommentFormat, path: 
     return result;
 }
 
+/**
+ * A function giving where the comment "before" a line starts: the first of the comment lines
+ * directly above it at its indentation, with no blank line between (the definition every other
+ * function here uses), or the line's own start when it has none. The text's comments are found
+ * once, so a caller can ask about every key of an object cheaply.
+ *
+ * ```ts
+ * const above = commentLinesAbove("a: 1\n# about b\nb: 2\n", "yaml");
+ *
+ * above(14);   // 5: "# about b" belongs to `b`, whose line starts at 14
+ * above(0);    // 0: `a` has no comment above it
+ * ```
+ */
+export function commentLinesAbove(text: string, format: "jsonc" | "yaml"): (lineStart: number) => number {
+    const comments = format === "yaml" ? yamlComments(text) : jsoncComments(text);
+
+    return (lineStart) => {
+        const indent = /^[ \t]*/.exec(text.slice(lineStart))![0];
+
+        return commentsAbove(text, comments, lineStart, indent).from;
+    };
+}
+
 // Finding a node and its comments.
 
 function where(path: PathInput): string {
@@ -477,7 +500,8 @@ function replace(text: string, from: number, to: number, content: string): strin
 }
 
 function lineStartOf(text: string, offset: number): number {
-    return text.lastIndexOf("\n", offset - 1) + 1;
+    // lastIndexOf with a negative start still finds a line break at 0.
+    return offset <= 0 ? 0 : text.lastIndexOf("\n", offset - 1) + 1;
 }
 
 /** The end of the line holding an offset, before its line ending. */

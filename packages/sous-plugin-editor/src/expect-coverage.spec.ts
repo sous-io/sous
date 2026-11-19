@@ -200,4 +200,90 @@ describe("expect(...) through editor.apply", () => {
         check(result.assertions.every((item) => item.passed)).toBe(true);
         check(result.assertions).toHaveLength(13);
     });
+
+    /**
+     * `includeBlock` records the data check `includesBlock`, and a folder from
+     * `editor(config).directory(path)` records `directoryExists`, or `directoryDoesNotExist` after
+     * `not`; each runs, and holds here.
+     *
+     * expect( editor(config).directory("docs") ).to.exist();          // -> { file: "docs", assert: { directoryExists: true } }
+     * expect( ignore ).to.includeBlock("kw");                          // -> { file: ".gitignore", assert: { includesBlock: "kw" } }
+     */
+    it("should record and run includeBlock and a folder's exist", async () => {
+        project.write(".gitignore", "node_modules/\n# >>> sous managed: kw (do not edit between these markers)\nx\n# <<< sous managed: kw\n");
+        project.write("docs/readme.md", "# Docs\n");
+
+        const { result, edits, warnings, errors } = await project.apply((config) => {
+            const ignore = editor(config).file(".gitignore");
+
+            expect( ignore ).to.includeBlock("kw");
+            expect( ignore ).to.includeBlock("kw", "x").withMessage("The kw block holds x.");
+            expect( ignore ).to.not.includeBlock("other");
+            expect( editor(config).directory("docs") ).to.exist();
+            expect( editor(config).directory("old") ).to.not.exist().orWarn();
+        });
+
+        check(edits).toEqual([
+            { file: ".gitignore", assert: { includesBlock: "kw" } },
+            { file: ".gitignore", assert: { includesBlock: { name: "kw", content: "x" }, message: "The kw block holds x." } },
+            { file: ".gitignore", assert: { includesBlock: "other", not: true } },
+            { file: "docs", assert: { directoryExists: true } },
+            { file: "old", assert: { directoryDoesNotExist: true, level: "warn" } },
+        ]);
+        check(result.ok).toBe(true);
+        check(warnings).toEqual([]);
+        check(errors).toEqual([]);
+        check(outcomes(result)).toEqual([
+            ["includesBlock", "", true, "error"],
+            ["includesBlock", "", true, "error"],
+            ["includesBlock", "", true, "error"],
+            ["directoryExists", "", true, "error"],
+            ["directoryDoesNotExist", "", true, "warn"],
+        ]);
+    });
+
+    /**
+     * The same checks where they do not hold: at level error the build fails with the message;
+     * lowered with `.orWarn()` they are warnings.
+     *
+     * expect( editor(config).directory("missing") ).to.exist().withMessage("Run the setup first.");
+     * // -> an error carrying "Run the setup first."
+     */
+    it("should fail includeBlock and a folder's exist where they do not hold", async () => {
+        const { result, warnings, errors } = await project.apply((config) => {
+            const ignore = editor(config).file(".gitignore");
+
+            expect( ignore ).to.includeBlock("kw").orWarn();
+            expect( ignore ).to.not.includeBlock("kw").orWarn();
+            expect( editor(config).directory("missing") ).to.exist().withMessage("Run the setup first.");
+            expect( editor(config).directory(".claude") ).to.not.exist().orWarn();
+        });
+
+        check(result.ok).toBe(false);
+        check(outcomes(result)).toEqual([
+            ["includesBlock", "", false, "warn"],
+            ["includesBlock", "", true, "warn"],
+            ["directoryExists", "", false, "error"],
+            ["directoryDoesNotExist", "", false, "warn"],
+        ]);
+        check(warnings).toHaveLength(2);
+        check(errors).toHaveLength(1);
+        check(errors[0]).toContain("Run the setup first.");
+    });
+
+    /**
+     * A folder is checked only with `exist()`; any other check on it is refused when it is
+     * written, naming what a folder takes.
+     *
+     * expect( editor(config).directory("docs") ).to.include("x");   // -> throws
+     */
+    it("should refuse any other check on a folder", async () => {
+        await project.apply((config) => {
+            const docs = editor(config).directory("docs");
+
+            check(() => expect( docs ).to.include("x")).toThrow(/a folder is checked with exist\(\)/);
+            check(() => expect( docs ).to.includeBlock("x")).toThrow(/a folder is checked with exist\(\)/);
+            check(() => expect( docs ).to.be.lessThan(3)).toThrow(/a folder is checked with exist\(\)/);
+        });
+    });
 });

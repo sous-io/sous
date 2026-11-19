@@ -8,7 +8,7 @@
  * helper is a function declaration, and the definitions are made when `operations.ts` asks.
  */
 
-import { deepEqual, formatPath, isJsonObject, isPathPrefix, parsePath, type DocNode, type JsonObject, type JsonValue, type PathSegment } from "@sous-io/sous-lib-documents";
+import { deepEqual, formatPath, isJsonObject, isPathPrefix, parsePath, type DocNode, type EntrySource, type JsonObject, type JsonValue, type PathSegment } from "@sous-io/sous-lib-documents";
 import { matchesFields } from "./checks.js";
 import { EditNotPossible, OperationParamsError, parsePosition, type AliasDefinition, type ImpliedCheck, type OperationContext, type OperationDefinition } from "./operations.js";
 
@@ -328,12 +328,22 @@ function placeOf(node: DocNode): JsonObject {
     return at <= 0 ? { first: true } : { after: keys[at - 1]! };
 }
 
-/** Puts a moved value back at its key, in the place {@link placeOf} recorded. */
+/**
+ * Puts a moved value back at its key: from its recorded `entry` (its text, comments included, and
+ * its place), or, in a record written before entries were kept, in the place {@link placeOf}
+ * recorded.
+ */
 function putBack(node: DocNode, record: JsonObject): void {
     const value = record.value ?? null;
     const last = node.path[node.path.length - 1] as string;
     const parent = node.parent();
     const existed = node.exists();
+
+    if (isJsonObject(record.entry) && !existed) {
+        node.restoreEntrySource(value, record.entry as unknown as EntrySource);
+
+        return;
+    }
 
     node.set(value);
 
@@ -346,6 +356,23 @@ function putBack(node: DocNode, record: JsonObject): void {
     } else if (typeof record.after === "string") {
         parent.moveKeyAfter(last, record.after);
     }
+}
+
+/**
+ * Sets the value at a move's `to`. A new key in an object that is there is written from the moved
+ * key's text, under its new name, so its comment lines and the comment on its line go with it.
+ */
+function setMoved(target: DocNode, value: JsonValue, entry: EntrySource | undefined): void {
+    const key = target.path[target.path.length - 1];
+    const parent = target.parent();
+
+    if (entry === undefined || target.exists() || typeof key !== "string" || !parent.isObject()) {
+        target.set(value);
+
+        return;
+    }
+
+    parent.insertKey(key, value, { index: parent.keys().length }, entry.source);
 }
 
 function moveDefinition(): OperationDefinition {
@@ -388,11 +415,12 @@ function moveDefinition(): OperationDefinition {
             checkItemTarget("move", target);
 
             const place = placeOf(source);
+            const entry = source.entrySource();
 
             source.delete();
-            target.set(value);
+            setMoved(target, value, entry);
 
-            return { moved: true, value, ...place, ...replaced };
+            return { moved: true, value, ...place, ...(entry === undefined ? {} : { entry: entry as unknown as JsonValue }), ...replaced };
         },
         down(ctx, params, record) {
             if (!acted(record)) return;

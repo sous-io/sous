@@ -75,9 +75,9 @@ order, or one operation more than once, use an `operations` list:
   recipe's and so wins.
 - **It undoes an edit that is no longer declared:** the recipe was unsubscribed, the plugin removed, a
   condition stopped matching. A value Sous set goes back to what it was before; an item Sous added to
-  a list is removed, and items others added stay. A key Sous deleted comes back with its value at
-  the end of its object, not in its old place. Undoing happens only after a config that loaded
-  without errors.
+  a list is removed, and items others added stay. A key Sous deleted comes back in its old place,
+  after the key that was before it, with its old text and its comments. Undoing happens only after
+  a config that loaded without errors.
 - **A missing file is created** with just the declared content, and removed again (after a backup)
   when nothing declares it any more.
 - **A file Sous cannot parse is skipped** with a warning and left exactly as it is.
@@ -211,8 +211,36 @@ A block added at the end of a file gets a blank line before it. If a marker line
 appears twice, Sous does not guess where the block ends: it skips the edit with a warning, and the
 block's assertion fails.
 
-A key or item that moves (a sort, a key move) takes its own lines and the comment at the end of
-them; a comment on a line of its own stays where it is.
+A key or item that is deleted or moves (a sort, a key move, `moveItem`, `move`) takes its own
+lines, the comment lines directly above it and the comment at the end of its line. Blank lines
+never move with a key: they stay between the same places. Sorting keys whose groups are separated
+by a blank line keeps the blank line where it was, so a key can end up on the other side of it;
+undoing the sort puts every key back, the blank line still in its place. A deleted key leaves the
+blank lines around it, and undoing puts it back between the same ones.
+
+`sortKeys` on this object:
+
+```yaml
+# about b
+b: 2 # two
+
+# about a
+a: 1
+```
+
+gives this one: each key took its comments, and the blank line stayed between the first and
+second places.
+
+```yaml
+# about a
+a: 1
+
+# about b
+b: 2 # two
+```
+
+Undoing an edit gives back the exact text it changed: `unwrapList` undone writes `["only"]` back on
+one line, as it was.
 
 ### Comments
 
@@ -309,9 +337,10 @@ item; to add to a list, use `ensureIncludes`. `copy` has no automatic assertion.
 ### Moving a value
 
 `move` takes the value at `path` to `to`. Within one object it is a rename: the key keeps its
-place, its value's text and the comment on its line. To another object, the value is written at
-`to` in the file's style, and a comment on the moved key's own line stays behind (the document
-library keeps a key's text only within its own object). A value already at `to` is replaced; with
+place, its value's text and the comment on its line. To another object, the key goes last in that
+object with its own text under its new name, at that object's indentation: its comment lines above
+and the comment on its line go with it, and undoing puts it back where it was. A value already at
+`to` is replaced (the new value written in the file's style); with
 `ifMissing: true` it is kept, and nothing moves. Nothing happens while `path` is missing.
 
 ```yaml
@@ -533,11 +562,25 @@ an operation that carries the condition (`setIfMissing`, `setIfEquals`) or an as
 - `.withoutAssertion()` after an operation drops its automatic check;
   `settings.silence("permissions", ["sorted"])`, with `.thisKeyOnly()`, `.belowOnly()` or
   `.except([...])`, and `settings.withoutAutomaticAssertions()` silence more.
-- `expect(...)` takes a value, a file (`expect(oldManifest).to.not.exist()`) or a size
-  (`byteCount`, `characterCount`, `tokenCount`). It reads like Chai, with comparisons spelled out
-  (`lessThan`, `lessThanOrEqualTo`, `greaterThan`, `greaterThanOrEqualTo`), and every assertion ends
-  in a method call: `.to.have.unique.members()`, `.to.be.an("array").that.is.sorted()`,
-  `.to.have.first.member(x)`. `.orWarn()` and `.withMessage("...")` go last.
+- `expect(...)` takes a value, a file (`expect(oldManifest).to.not.exist()`), a size
+  (`byteCount`, `characterCount`, `tokenCount`) or a folder from `editor(config).directory(path)`.
+  It reads like Chai, with comparisons spelled out (`lessThan`, `lessThanOrEqualTo`, `greaterThan`,
+  `greaterThanOrEqualTo`), and every assertion ends in a method call: `.to.have.unique.members()`,
+  `.to.be.an("array").that.is.sorted()`, `.to.have.first.member(x)`. `.orWarn()` and
+  `.withMessage("...")` go last.
+- A text file's lines and managed blocks: `expect( ignore ).to.have.line("dist/")`
+  (`includesLine`) and `expect( ignore ).to.includeBlock("kw")` (`includesBlock`; a second
+  argument also checks the block's content), each with `.not` for the opposite.
+- A folder is checked only for being there: `expect( editor(config).directory("docs/context") ).to.exist()`
+  (`directoryExists`) and `.to.not.exist()` (`directoryDoesNotExist`).
+
+```ts
+const ignore = editor(config).file(".gitignore");
+
+expect( ignore ).to.includeBlock("session-files").withMessage("The session files must stay ignored.");
+expect( editor(config).directory("docs/context") ).to.exist().orWarn();
+expect( editor(config).directory(".old-cache") ).to.not.exist();
+```
 
 ### Editing directly
 

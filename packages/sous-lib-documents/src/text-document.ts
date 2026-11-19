@@ -3,15 +3,35 @@
  * files, changed surgically so every line an edit does not touch stays as it was.
  */
 import { parseDocument as parseYamlModel } from "yaml";
-import { applyPatch } from "./apply.js";
+import { applyPatch, applyPatches } from "./apply.js";
 import { commentSource, readComment, removeComment, restoreCommentSource, setComment, type CommentFormat, type CommentPlace } from "./comments.js";
 import { BaseDocument } from "./document.js";
 import { joinFrontmatter, splitFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 import { getAtPath } from "./json.js";
 import { formatPath, parsePath } from "./path.js";
-import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
-import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
-import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathInput, PathSegment } from "./types.js";
+import {
+    detectLayout,
+    editJsoncText,
+    jsoncEntrySource,
+    jsoncValueSource,
+    parseJsoncText,
+    reorderJsoncText,
+    type RemovedJsoncText,
+    type TextLayout,
+} from "./jsonc-text.js";
+import {
+    detectYamlStyle,
+    editYamlText,
+    parseYamlText,
+    reorderYamlText,
+    reprintYaml,
+    yamlEntrySource,
+    yamlValue,
+    yamlValueSource,
+    type RemovedText,
+    type YamlStyle,
+} from "./yaml-text.js";
+import type { DocumentFormat, EntrySource, JsonValue, Patch, PatchProblem, PathInput, PathSegment, Placement } from "./types.js";
 
 /**
  * A text document. Every change goes through primitives: each is first applied to the value (a
@@ -137,6 +157,124 @@ export class TextDocument extends BaseDocument {
         return getAtPath(this.current, path);
     }
 
+    protected override reorderEntries(path: readonly PathSegment[], order: readonly number[], patches: readonly Patch[]): boolean {
+        const after = applyPatches(this.current, patches);
+        const text = this.yamlStyle === undefined
+            ? reorderJsoncText(this.text, [...path], order)
+            : reorderYamlText(this.text, [...path], order, this.yamlStyle);
+
+        return after !== undefined && text !== undefined && this.commit(text, after, patches);
+    }
+
+    protected override placeEntry(
+        path: readonly PathSegment[],
+        key: string | undefined,
+        value: JsonValue,
+        placement: Placement,
+        source: string | undefined,
+        patches: readonly Patch[],
+    ): boolean {
+        const after = applyPatches(this.current, patches);
+        const where = formatPath(path);
+        const patch: Patch = key === undefined ? { op: "insertAt", path: where, index: placement.index, value } : { op: "setKey", path: where, key, value };
+
+        if (after === undefined) {
+            return false;
+        }
+
+        // The source first; then new text, in case the source does not read as the value.
+        for (const text of [source, undefined]) {
+            const options = { placement, ...(text === undefined ? {} : { source: text }) };
+            let edited: string | undefined;
+
+            try {
+                edited = this.yamlStyle === undefined
+                    ? editJsoncText(this.text, patch, this.current, after, this.layout, this.removedJsonc, options)
+                    : editYamlText(this.text, patch, after, this.yamlStyle, this.removed, options);
+            } catch {
+                edited = undefined;
+            }
+
+            if (edited !== undefined && this.commit(edited, after, patches)) {
+                return true;
+            }
+
+            if (source === undefined) {
+                break;
+            }
+        }
+
+        if (this.yamlStyle !== undefined) {
+            const reprinted = reprintYaml(this.text, patch, key === undefined ? undefined : placement.index);
+
+            if (this.commit(reprinted, after, patches)) {
+                this.reprints++;
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected override entrySourceAt(path: readonly PathSegment[]): EntrySource | undefined {
+        if (path.length === 0 || getAtPath(this.current, path) === undefined) {
+            return undefined;
+        }
+
+        return this.yamlStyle === undefined ? jsoncEntrySource(this.text, [...path]) : yamlEntrySource(this.text, [...path], this.yamlStyle);
+    }
+
+    protected override valueSourceAt(path: readonly PathSegment[]): string | undefined {
+        if (getAtPath(this.current, path) === undefined) {
+            return undefined;
+        }
+
+        return this.yamlStyle === undefined ? jsoncValueSource(this.text, [...path]) : yamlValueSource(this.text, [...path], this.yamlStyle);
+    }
+
+    protected override setFromSource(patch: Patch, source: string): boolean {
+        if (patch.op !== "setKey" && patch.op !== "setIndex") {
+            return false;
+        }
+
+        const after = applyPatch(this.current, patch);
+        const target = patch.op === "setKey" ? [...parsePath(patch.path), patch.key] : [...parsePath(patch.path), patch.index];
+
+        if (after === undefined || getAtPath(this.current, target) === undefined) {
+            return false;
+        }
+
+        let edited: string | undefined;
+
+        try {
+            edited = this.yamlStyle === undefined
+                ? editJsoncText(this.text, patch, this.current, after, this.layout, this.removedJsonc, { source })
+                : editYamlText(this.text, patch, after, this.yamlStyle, this.removed, { source });
+        } catch {
+            edited = undefined;
+        }
+
+        return edited !== undefined && this.commit(edited, after, [patch]);
+    }
+
+    /**
+     * Takes an edited text when it reads as exactly the expected value (key order included), and
+     * records the primitives that made the change. Returns whether it took it.
+     */
+    private commit(text: string, after: JsonValue, patches: readonly Patch[]): boolean {
+        if (!(this.yamlStyle === undefined ? jsoncReadsAs(text, after) : readsAs(text, after))) {
+            return false;
+        }
+
+        this.text = text;
+        this.current = after;
+        this.edited = true;
+        this.recordApplied(patches);
+
+        return true;
+    }
+
     protected applyPrimitive(patch: Patch): PatchProblem | undefined {
         let problem: PatchProblem | undefined;
         let changed = false;
@@ -207,6 +345,15 @@ function describeTarget(patch: Patch): string {
     const where = last === undefined ? patch.path : formatPath([...parsePath(patch.path), ...(last === "end" ? [] : [last])]);
 
     return where === "" ? "the root" : where;
+}
+
+/** Whether JSON or JSONC text parses to exactly this value, key order included. */
+function jsoncReadsAs(text: string, value: JsonValue): boolean {
+    try {
+        return JSON.stringify(parseJsoncText(text)) === JSON.stringify(value);
+    } catch {
+        return false;
+    }
 }
 
 /** Whether YAML text parses, as one document, to exactly this value, key order included. */

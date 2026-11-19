@@ -229,7 +229,9 @@ describe("TextDocument (surgical YAML)", () => {
         expect(edit("---\na: 1\n...\n", (doc) => doc.atPath("b").set(1))).toBe("---\na: 1\nb: 1\n...\n");
         expect(edit("# only a comment\n", (doc) => doc.atPath("a").set("x"))).toBe("# only a comment\na: x\n");
         expect(edit("{}\n", (doc) => doc.atPath("a").set(1))).toBe("a: 1\n");
-        expect(edit("# keep\na: 1\n", (doc) => doc.atPath("a").delete())).toBe("# keep\n");
+        expect(edit("# keep\n\na: 1\n", (doc) => doc.atPath("a").delete())).toBe("# keep\n\n");
+        // A comment directly above a key is the key's own, so it goes with it.
+        expect(edit("# about a\na: 1\n", (doc) => doc.atPath("a").delete())).toBe("");
         expect(edit("- - a\n  - b\n", (doc) => doc.atPath("[0]").prepend("z"))).toBe("- - z\n  - a\n  - b\n");
         expect(edit("- - a\n  - b\n", (doc) => doc.atPath("[0]").removeAt(0))).toBe("- - b\n");
     });
