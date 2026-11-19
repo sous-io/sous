@@ -267,10 +267,30 @@ describe("move", () => {
         const yaml = "env:\n  A: 1\n  MODE: strict # kept\n  DIR: /tmp/a\nother:\n  KEEP: 1\n";
         const moved = await roundTrip("s.yaml", yaml, { move: { path: "env.MODE", to: "other.MODE" } });
 
-        expect(moved.after).toBe("env:\n  A: 1\n  DIR: /tmp/a\nother:\n  KEEP: 1\n  MODE: strict\n");
-        // The comment on the moved key's line does not travel to another object (the library
-        // keeps a key's text only within its own object); every other byte comes back.
-        expect(moved.undone).toBe("env:\n  A: 1\n  MODE: strict\n  DIR: /tmp/a\nother:\n  KEEP: 1\n");
+        expect(moved.after).toBe("env:\n  A: 1\n  DIR: /tmp/a\nother:\n  KEEP: 1\n  MODE: strict # kept\n");
+        expect(moved.undone).toBe(yaml);
+    });
+
+    /**
+     * A key moved to another object takes its comment lines above and the comment on its line,
+     * moved to the new object's indentation and written under its new name; a rollback puts it
+     * back in its old place with its old text, byte for byte.
+     *
+     * move: { path: env.MODE, to: deep.inner.STYLE }
+     * // "  # The mode.\n  MODE: strict # kept\n" -> "    # The mode.\n    STYLE: strict # kept\n"
+     */
+    it("should move a key's comments with it to another object", async () => {
+        const yaml = "env:\n  A: 1\n  # The mode.\n  # Two lines.\n  MODE: strict # kept\n  DIR: /tmp/a\ndeep:\n  inner:\n    KEEP: 1\n";
+        const moved = await roundTrip("s.yaml", yaml, { move: { path: "env.MODE", to: "deep.inner.STYLE" } });
+
+        expect(moved.after).toBe("env:\n  A: 1\n  DIR: /tmp/a\ndeep:\n  inner:\n    KEEP: 1\n    # The mode.\n    # Two lines.\n    STYLE: strict # kept\n");
+        expect(moved.undone).toBe(yaml);
+
+        const jsonc = '{\n  "env": {\n    // The mode.\n    "MODE": "strict", // kept\n    "DIR": "/tmp/a"\n  },\n  "other": {\n    "KEEP": 1\n  }\n}\n';
+        const json = await roundTrip("s.jsonc", jsonc, { move: { path: "env.MODE", to: "other.STYLE" } });
+
+        expect(json.after).toBe('{\n  "env": {\n    "DIR": "/tmp/a"\n  },\n  "other": {\n    "KEEP": 1,\n    // The mode.\n    "STYLE": "strict" // kept\n  }\n}\n');
+        expect(json.undone).toBe(jsonc);
     });
 
     /**
