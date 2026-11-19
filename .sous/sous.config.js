@@ -41,17 +41,8 @@ const projectSkills = {
   outputs: [{ destinationDir: "${claudeSkillsDir}" }],
 };
 
-// [ROOT] The repo-root CLAUDE.md: instructions for agents working ON sous.
-// The source is tracked; the compiled /CLAUDE.md is gitignored output. Named
-// .tpl.md like every markdown source sous compiles, so literal Liquid in it is
-// wrapped in raw tags; its @-includes pull in the memories under prompts/.
-const rootClaude = {
-  entryPoint: "${sousDir}/prompts/root/CLAUDE.tpl.md",
-  outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
-};
-
-// [SITE] Agent instructions for the GitHub Pages site under docs/. Same
-// tracked-source / gitignored-output arrangement as rootClaude.
+// [SITE] Agent instructions for the GitHub Pages site under docs/. The
+// source is tracked; the compiled docs/CLAUDE.md is gitignored output.
 const docsSiteClaude = {
   entryPoint: "${sousDir}/prompts/docs-site/CLAUDE.tpl.md",
   outputs: [{ destinationFile: "${projectRoot}/docs/CLAUDE.md" }],
@@ -122,7 +113,7 @@ export const config = {
   },
   compilation: {
     includeSourceComments: false,
-    targets: [projectSkills, rootClaude, docsSiteClaude],
+    targets: [projectSkills, docsSiteClaude],
   },
   tools: {
     "claude-code": {

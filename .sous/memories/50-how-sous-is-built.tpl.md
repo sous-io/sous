@@ -1,20 +1,3 @@
-# Sous: Agent Configuration Manager
-
-> **GENERATED FILE. DO NOT EDIT the repo-root `CLAUDE.md` DIRECTLY.**
-> It is compiled by sous (`pnpm sous:build`) from
-> `.sous/prompts/root/CLAUDE.tpl.md`. Edit that source, then rebuild. The compiled
-> copy is gitignored; the source is tracked.
-
-Sous is a TypeScript CLI that compiles markdown templates and manages output files for LLM/AI coding agents
-(Claude, Codex, etc.). The binary is named `sous`. Published on npm as `@sous-io/sous`.
-
-@${sousDir}/memories/20-agent-conduct.md
-
-
-@${sousDir}/memories/30-writing-standards.md
-
-@${sousDir}/memories/40-cli-conventions.md
-
 ## How Sous Is Built
 
 Sous is a small engine plus plugins. The engine (`packages/sous-lib-core`) only builds the config and runs
@@ -84,22 +67,3 @@ in a package's `test/` directory. Requires Node 22 or later; TypeScript is stric
 
 Published as `@sous-io/sous` (npm org `sous-io`), public, Apache-2.0. `packages/sous/package.json`
 has the `files` list of what ships.
-
-@${sousDir}/memories/60-release-posture.md
-
-Every merge to `main` publishes, through `.github/workflows/publish.yml` (it reads the version,
-publishes to npm through trusted publishing, then pushes the matching core recipe to
-`sous-io/sous-recipes`). Read the workflow for how the version is chosen. Never write `[skip ci]` or
-`chore: release` into an ordinary commit to `main`: the release job treats those as its own commit
-and the merge would not release. Renaming `publish.yml` breaks npm's trusted publishing until the
-npm setting is changed by hand.
-
-The core recipe (`recipes/core/`) must have exactly the package's version. `pnpm version:sync`
-puts them back in step after a version is set by hand.
-
-## Important!
-
-When working on `sous`, keep this document accurate, but remember it is GENERATED: edit the tracked
-source at `.sous/prompts/root/CLAUDE.tpl.md` (never the compiled root `CLAUDE.md`) after any change
-to how sous is laid out, built or tested, then run `pnpm sous:build`. Keep it short and point to the
-code or the architecture documents instead of copying details from them, because a copy goes stale.
