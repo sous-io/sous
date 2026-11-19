@@ -54,7 +54,43 @@ allow.sort();                                      // fewest moves; compareValue
 doc.root().moveKeyBefore("env", "permissions");    // also moveKeyAfter, moveKeyFirst, moveKeyLast, sortKeys
 ```
 
-A key or item that is moved keeps its old text, comments included.
+A key or list item that starts its line is an entry block: the comment lines directly above it (its "before" comment, see Comments), its own lines and the comment ending them. Removing, moving or sorting it carries the whole block, so a key keeps its comments wherever it goes. Blank lines (and comments that belong to no key) are in no block: they stay between the same places and never move with a key, so sorting and sorting back gives the original text byte for byte.
+
+```yaml
+# about b
+b: 2 # two
+
+# about a
+a: 1
+```
+
+`doc.root().sortKeys()` makes it:
+
+```yaml
+# about a
+a: 1
+
+# about b
+b: 2 # two
+```
+
+A key can be put in a given place without rewriting the keys after it, and a removed key or item put back exactly where it was:
+
+```ts
+doc.root().insertKey("mode", "loose", { after: "name" });   // or { before: "x" }, { index: 2 }
+
+const node = doc.atPath("mode");
+const value = node.get();
+const entry = node.entrySource();   // { source: "# about mode\nmode: loose\n", index: 1, after: "name" }
+
+node.delete();                       // takes its comment lines with it
+// ...later, even in another document opened from the saved text:
+node.restoreEntrySource(value, entry);   // back after "name", between the same blank lines, byte for byte
+
+doc.atPath("single").valueSource();      // '["only"]': a value's text, for restoreValueSource(value, source)
+```
+
+`entrySource()` is plain JSON (`source`, `index`, `after`, and `gap`, the blank or comment lines between it and its neighbour), so it can be kept in a history. When the key before it is gone, the entry goes back at its index; when its source no longer holds the value, it is written as new text in the same place. `insertKey` with a `source` writes that text under the new key name, at the object's indentation, so a key moved to another object keeps its comments. A document with no text (`createDocument`) gets the same key order through primitives.
 
 ### Comments
 
@@ -128,7 +164,7 @@ An opening marker without its closing marker (or the reverse, or a marker twice)
 - `src/node.ts`: the operations on one place in a document.
 - `src/text-document.ts`, `src/value-document.ts`: documents backed by file text, and by plain values.
 - `src/jsonc-text.ts`, `src/yaml-text.ts`, `src/frontmatter.ts`: the format-specific editing.
-- `src/comments.ts`: the comments before and after a key or list item.
+- `src/comments.ts`: the comments before and after a key or list item, and where a key's comment lines start (`commentLinesAbove`), which the entry blocks use.
 - `src/yaml-stream.ts`: a YAML file holding several documents.
 - `src/lines.ts`: plain text files as lines, and managed blocks.
 - `src/formats.ts`: the format and comment style for a path.
