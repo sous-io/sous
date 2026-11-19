@@ -1,12 +1,12 @@
 // A plugin as an outside author writes one: plain JavaScript, zod for the schema, and only
-// definePlugin from @sous-io/plugin-api.
-import { definePlugin, IntentOutputs } from "@sous-io/plugin-api";
+// definePlugin from @sous-io/sous-plugin-api.
+import { definePlugin, IntentOutputs } from "@sous-io/sous-plugin-api";
 import { z } from "zod";
 
 export default definePlugin({
     name: "sous-plugin-diagrams",
     version: "1.0.0",
-    dependsOn: { "@sous-io/plugin-cli": "*" },
+    dependsOn: { "@sous-io/sous-plugin-cli": "*" },
 
     register(sous) {
         sous.entities.add("cli-group", { id: "diagrams", command: ["diagrams"], summary: "Render the project's diagrams" });

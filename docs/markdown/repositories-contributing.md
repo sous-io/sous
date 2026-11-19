@@ -102,7 +102,7 @@ A contribution ships when the repository's maintainers merge it and the reposito
 that happened before you finished, `--finish` already moved your pins to it. If it happens later, move them with
 
 ```bash
-sous subscription update sous-recipes
+sous update sous-recipes
 ```
 
 which runs the same update `unlink --update` runs; with `--dry-run` it only shows what it would move. See

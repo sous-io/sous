@@ -24,11 +24,12 @@ concern into its owner. Four packages are not plugins; every other package is a 
 
 ```text
 packages/
-    core/                     the engine
-    documents/                surgical JSON, JSONC and YAML editing; the config builder is built on it
-    plugin-api/               the plugin interface (see "The Plugin Interface")
-    sous/                     the published package: the bin, the built-in plugin list, the bundle
-    plugin-<concern>/         one package per built-in plugin
+    sous-lib-core/                the engine
+    sous-lib-documents/           surgical JSON, JSONC and YAML editing; the config builder is built on it
+    sous-lib-repository-hosts/    code the repository-host plugins share
+    sous-plugin-api/              the plugin interface (see "The Plugin Interface")
+    sous/                         the published package: the bin, the built-in plugin list, the bundle
+    sous-plugin-<concern>/        one package per built-in plugin
 ```
 
 S6 (concerns and owners), section "Packages", lists every package and what it holds.
@@ -38,11 +39,11 @@ looked up by name. At compile time it may import another plugin's types, and not
 
 ```ts
 // Allowed: a type-only import of another plugin's published types.
-import type {} from "@sous-io/plugin-compiler/types";
+import type {} from "@sous-io/sous-plugin-compiler/types";
 
 // Rejected: another package's code. The package's "exports" map lists only "." and "./types",
 // so this fails to resolve.
-import { StateFile } from "@sous-io/plugin-compiler/src/state-file.js";
+import { StateFile } from "@sous-io/sous-plugin-compiler/src/state-file.js";
 ```
 
 Every package is kept, one per concern, even when it is small (ruled 2026-10-25).
@@ -106,22 +107,22 @@ Decided for the plugin:
 
 ## Bundling
 
-- `core` and every built-in plugin are private and bundled into `@sous-io/sous` when it is
-  published. `@sous-io/plugin-api` stays outside the bundle (see "The bundler"). Sous publishes
+- `sous-lib-core` and every built-in plugin are private and bundled into `@sous-io/sous` when it is
+  published. `@sous-io/sous-plugin-api` stays outside the bundle (see "The bundler"). Sous publishes
   compiled JavaScript, whatever language its source is written in.
 - The list of bundled packages does not change within a major version.
 - An internal package may also be published on its own at any time, without a major version, for
   example for a new first-party app. It stays in the bundle too.
 
 ```text
-@sous-io/sous 2.4.0              bundles @sous-io/plugin-compiler     (always, through 2.x)
-@sous-io/plugin-compiler 2.4.0   also on npm, for a first-party app   (added in 2.4)
+@sous-io/sous 2.4.0              bundles @sous-io/sous-plugin-compiler     (always, through 2.x)
+@sous-io/sous-plugin-compiler 2.4.0   also on npm, for a first-party app   (added in 2.4)
 ```
 
 ### The bundler
 
 Ruled 2026-10-25: esbuild bundles the published package, and `tsc` writes the `.d.ts` type files
-`@sous-io/plugin-api` publishes. Plugins must share sous's copy of `@sous-io/plugin-api`, so it stays
+`@sous-io/sous-plugin-api` publishes. Plugins must share sous's copy of `@sous-io/sous-plugin-api`, so it stays
 outside the bundle. `tsc --noEmit` checks types in CI, since esbuild strips types without checking
 them.
 
@@ -133,7 +134,7 @@ await esbuild.build({
     platform: "node",
     format: "esm",
     outfile: "packages/sous/dist/bin.js",
-    external: ["@sous-io/plugin-api"],
+    external: ["@sous-io/sous-plugin-api"],
     splitting: false,
 });
 ```
@@ -145,7 +146,7 @@ at that version even when it did not change.
 
 ## The Plugin Interface
 
-The plugin interface is its own published package, `@sous-io/plugin-api`. It holds `definePlugin`,
+The plugin interface is its own published package, `@sous-io/sous-plugin-api`. It holds `definePlugin`,
 the empty interfaces every plugin adds its own types to (`SousServices`, `SousIntents`,
 `SousEvents`, `SousEntities`), the `Reporter` and `Prompter` interfaces, and the error classes. Each
 plugin declares the types of its own services, intents, events and entities in its own package
@@ -156,7 +157,7 @@ dependency, so the package manager warns when the project's sous is older than t
 {
     "name": "sous-plugin-diagrams",
     "dependencies": {
-        "@sous-io/plugin-api": "^2.3.0"
+        "@sous-io/sous-plugin-api": "^2.3.0"
     },
     "peerDependencies": {
         "@sous-io/sous": "^2.3.0"
@@ -165,13 +166,13 @@ dependency, so the package manager warns when the project's sous is older than t
 ```
 
 Sous passes everything a plugin uses into `register(sous)` and each `ctx`, so a plugin imports only
-types and `definePlugin` from `@sous-io/plugin-api`. A second copy of that package in a project then
+types and `definePlugin` from `@sous-io/sous-plugin-api`. A second copy of that package in a project then
 does no harm (suggested by an agent).
 
 ## Breaking Changes
 
 - Before 1.0.0, breaking changes are allowed freely, with no migration guide.
-- From 1.0.0, a breaking change to `@sous-io/plugin-api` requires a major version of sous.
+- From 1.0.0, a breaking change to `@sous-io/sous-plugin-api` requires a major version of sous.
 
 ## The Source Is TypeScript
 
@@ -186,4 +187,32 @@ and plugin authors may write their plugins in either language.
 
 ## Changes
 
-None yet.
+### 2026-11-19: The library packages are `@sous-io/sous-lib-*`
+
+> "we will rename `documents` to `sous-lib-documents`, `core` to `sous-lib-core`,
+> `repository-hosts` to `sous-lib-repository-hosts`."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-19)
+
+`packages/core` (`@sous-io/core`), `packages/documents` (`@sous-io/documents`) and
+`packages/repository-hosts` (`@sous-io/repository-hosts`) became `packages/sous-lib-core`
+(`@sous-io/sous-lib-core`), `packages/sous-lib-documents` (`@sous-io/sous-lib-documents`) and
+`packages/sous-lib-repository-hosts` (`@sous-io/sous-lib-repository-hosts`). All three stay
+private and bundled. `packages/sous` (`@sous-io/sous`) keeps its name. The name core registers its
+own entries under follows the package: `@sous-io/sous-lib-core`.
+
+### 2026-11-19: The plugin interface is `@sous-io/sous-plugin-api`
+
+> "`plugin-api` will need to be renamed, as well."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-19)
+
+The plugin interface moved from `@sous-io/plugin-api` in `packages/plugin-api` to
+`@sous-io/sous-plugin-api` in `packages/sous-plugin-api`, alongside the built-in plugins, which
+became `@sous-io/sous-plugin-*`. It is still published, still kept outside the bundle, and still
+shares the one version. A plugin resolves the package from its own `node_modules`, as it always did
+(sous loads a plugin's file by its path, with no loader hook), so a plugin written against
+`@sous-io/plugin-api` keeps working with the copy it installed: the old name stays on npm at 1.0.19
+and earlier, and is not published again. Its types are the old ones; moving to the new name is how
+it gets new types. Nothing is published as a compatibility package. The new name needs npm's trusted
+publishing set up for `publish.yml` before the first release that publishes it.

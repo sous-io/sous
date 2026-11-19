@@ -5,10 +5,10 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import YAML from "yaml";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
-import { parseIndexFile } from "../../../plugin-formats/src/formats/index-file.js";
-import { parseRecipeManifest } from "../../../plugin-formats/src/formats/recipe-manifest.js";
-import { parseRepoManifest } from "../../../plugin-formats/src/formats/repo-manifest.js";
-import { parseLinksMap, type LinksMap } from "../../../plugin-formats/src/formats/links-map.js";
+import { parseIndexFile } from "../../../sous-plugin-formats/src/formats/index-file.js";
+import { parseRecipeManifest } from "../../../sous-plugin-formats/src/formats/recipe-manifest.js";
+import { parseRepoManifest } from "../../../sous-plugin-formats/src/formats/repo-manifest.js";
+import { parseLinksMap, type LinksMap } from "../../../sous-plugin-formats/src/formats/links-map.js";
 import {
   readManagedLayer,
   REPOS_LAYER_FILENAME,
@@ -179,9 +179,12 @@ describe("sous repo init / link / unlink", () => {
       ).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, "README.md"))).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, "CONTRIBUTING.md"))).toBe(true);
-      expect(fs.existsSync(path.join(sourceRepo, "CLAUDE.md"))).toBe(true);
-      expect(fs.existsSync(path.join(sourceRepo, "AGENTS.md"))).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, ".gitignore"))).toBe(true);
+      // The repository is set up for sous too: its instructions are a project memory, and no
+      // root CLAUDE.md or AGENTS.md is written (each coding tool's plugin compiles the memories).
+      expect(fs.existsSync(path.join(sourceRepo, ".sous", "memories", "project.tpl.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sourceRepo, "CLAUDE.md"))).toBe(false);
+      expect(fs.existsSync(path.join(sourceRepo, "AGENTS.md"))).toBe(false);
     },
     CLI_TIMEOUT
   );

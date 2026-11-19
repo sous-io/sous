@@ -23,7 +23,8 @@ in its output, but the edit no longer takes effect:
 
 - `.claude/`: Claude Code configuration, skills, and instructions
 - `.codex/`: Codex configuration and skills
-- `AGENTS.md` and `CLAUDE.md`: agent instruction files
+- `.claude/rules/SOUS-MEMORIES.md` and `AGENTS.override.md`: the memories files Sous compiles for
+  Claude Code and Codex
 - Any file you did not create yourself in a designated source directory
 
 If you need to change something in one of these files, the change must be made at the
@@ -31,21 +32,23 @@ source, in the central configuration this project uses with Sous.
 
 ## Where the Instructions Come From
 
-In a project `sous init` set up, Sous owns all agent configuration. The root `CLAUDE.md` and
-`AGENTS.md` are both compiled from `.sous/memories/instructions.tpl.md`, and they and
+In a project `sous init` set up, Sous owns all agent configuration. Each coding tool's plugin
+compiles one memories file that tool reads in every session: `.claude/rules/SOUS-MEMORIES.md` for
+Claude Code, which Claude Code loads beside any `CLAUDE.md` the project has, and, once a project
+turns Codex on, `AGENTS.override.md`, which holds the project's `AGENTS.md` first. They and
 `.claude/skills/` are gitignored build output, so `sous build` recreates them after a clone.
-That source holds no instructions itself; it includes:
+Their source is `.sous/MEMORIES.tpl.md`, which holds no instructions itself; it includes:
 
 ```markdown
-@*/**/*.md
+@memories/**/*.md
 @#memories/**/*.md
 ```
 
-- The first line pulls in this project's own memories: every markdown file in a folder beside
-  the source, such as `.sous/memories/imported/` (the `CLAUDE.md` or `AGENTS.md` the project had
-  before `sous init`), `.sous/memories/project/` or `.sous/memories/conventions/`. To change the
-  instructions, edit one of these files or add one, then run `sous build`. Keep at least one file
-  there: an include that matches nothing stops the build.
+- The first line pulls in this project's own memories: every markdown file under
+  `.sous/memories/`, such as `.sous/memories/imported/` (the `CLAUDE.md` or `AGENTS.md` the
+  project had before `sous init`) or `.sous/memories/project.tpl.md`. To change the
+  instructions, edit one of these files or add one, then run `sous build`. A memories file that
+  compiles to nothing is not written.
 - Files those memories include by a line holding only `@path.md` were moved or copied to
   `.sous/includes/<their path from the project root>`, outside `memories/`, so each one appears
   only where its include line is. Edit them there.

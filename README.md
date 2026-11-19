@@ -11,9 +11,10 @@
 
 sous compiles AI coding agent configuration from templates. You write skills, memories, and
 instructions once as LiquidJS templates in layered sources, then sous renders them into the
-formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, which sous supports
-out of the box, and other tools' formats (such as `.codex/` plus `AGENTS.md` for Codex) through
-plugins. The CLI binary is named `sous`.
+formats agents actually read: `.claude/` for Claude Code (the skills, and the memories in
+`.claude/rules/SOUS-MEMORIES.md`, beside any `CLAUDE.md` of your own), `AGENTS.override.md` and
+`.agents/skills/` for Codex once a project turns it on, and other tools' formats through plugins.
+The CLI binary is named `sous`.
 
 **New to sous? Watch the animated introduction at [sous.io](https://sous.io).**
 
@@ -41,15 +42,16 @@ output. When the two versions differ, one line on standard error names the versi
 to; `--verbose` announces every hand-off and adds where both installs are. Set
 `SOUS_NO_DELEGATE=1` to run the copy you invoked instead.
 
-To update, run `sous update`. It updates the global install, the project's own install, or both
+To upgrade sous, run `sous upgrade`. It upgrades the global install, the project's own install, or both
 (whichever this directory has), through the package manager that installed each one (npm, pnpm or
 Yarn), and asks before each one. By default each install moves to the newest version in its current
 major; `--major` goes past it and `--version <version|range|tag>` picks one (a downgrade included).
-`sous update --help` lists the rest. After a project update, the new copy builds the project, so its
-lockfile moves to the new version too.
+`sous upgrade --help` lists the rest. After a project upgrade, the new copy runs the migrations its
+version brings, then builds the project, so its lockfile moves to the new version too. To move the
+project's recipes to newer versions, run `sous update`.
 
 ```bash
-sous update --dry-run     # show what would be installed where, and install nothing
+sous upgrade --dry-run    # show what would be installed where, and install nothing
 ```
 
 Or run it from a clone (useful when developing sous itself):
@@ -68,15 +70,17 @@ cd /path/to/your/project
 sous init
 ```
 
-`sous init` imports the project's existing agent files into a new `.sous/` directory and runs
-the first build. From then on sous owns the project's agent configuration: `CLAUDE.md`,
-`AGENTS.md` and `.claude/skills/` at the project root are build output, gitignored, and
-compiled from the sources under `.sous/`. Edit the sources, and run `sous build` after cloning.
+`sous init` imports the project's existing agent files into a new `.sous/` directory, offers
+the git hooks, and runs the first build. From then on sous owns the project's agent
+configuration: the memories file (`.claude/rules/SOUS-MEMORIES.md` for Claude Code) and
+`.claude/skills/` are build output, gitignored, and compiled from the sources under `.sous/`.
+Edit the sources, and run `sous build` after cloning.
 
 What init imports, backing up everything it moves to `.sous/backups/<date>/<time>/`:
 
-- A root `CLAUDE.md` or `AGENTS.md` is copied, as plain markdown, to `.sous/memories/imported/`.
-  One that is only a link to the other, a pointer to it, or the same text is skipped.
+- A root `CLAUDE.md` or `AGENTS.md` is copied, as plain markdown, to `.sous/memories/imported/`,
+  then moved out of the root, since no build writes it any more. One that is only a link to the
+  other, a pointer to it, or the same text is not imported, and moves out too.
 - The files those instructions include (a line holding only `@path.md`) are moved to
   `.sous/includes/`, copied there, or left where they are. Init asks once, and
   `--move-includes` (the default), `--copy-includes`, `--leave-includes` or `--yes` answer
@@ -85,42 +89,28 @@ What init imports, backing up everything it moves to `.sous/backups/<date>/<time
   then on, and the config compiles them into `.claude/skills/`.
   A project skill wins over a recipe skill of the same name.
 
-It also writes a commented `sous.config.js`, the source `.sous/memories/instructions.tpl.md`
-that the config compiles into both `CLAUDE.md` and `AGENTS.md`, the two env files described
-below, a `.sous/.gitignore` covering the files sous keeps local to one machine, and a sous block
-in the project's `.gitignore` for the root build output. When there was nothing to import, it
-writes a starter memory at `.sous/memories/project/overview.tpl.md`. A project with a
-`package.json` also gains `@sous-io/sous` as a devDependency at the running version, so the
-project pins the sous it builds with; run your package manager's install afterwards. The first
-build compiles the instructions and the `core` skills every project gets, and pins them in
+It also writes a commented `sous.config.jsonc`, the memories source `.sous/MEMORIES.tpl.md`, the
+two env files described below, a `.sous/.gitignore` covering the files sous keeps local to one
+machine, and, once, a sous block in the project's `.gitignore` for what the builds write outside
+`.sous/`. When there was nothing to import, it writes a starter memory at
+`.sous/memories/project.tpl.md`. A project with a `package.json` also gains `@sous-io/sous` as a
+devDependency at the running version, so the project pins the sous it builds with. The first
+build compiles the memories and the `core` skills every project gets, and pins them in
 `.sous/sous.lock.json`. A project that already holds a config is left untouched.
 
-The config it writes compiles the instructions into both files:
-
-```js
-export const config = {
-  name: "My Project",
-  compilation: {
-    targets: [
-      {
-        entryPoint: "${sousDir}/memories/instructions.tpl.md",
-        outputs: [
-          { destinationFile: "${projectRoot}/CLAUDE.md" },
-          { destinationFile: "${projectRoot}/AGENTS.md" },
-        ],
-      },
-    ],
-  },
-};
-```
-
-The source includes the project's own memories first, every markdown file in a folder beside it,
-and then every memory the subscribed recipes publish:
+The memories source includes the project's own memories first, every markdown file under
+`.sous/memories/`, and then every memory the subscribed recipes publish. Remove a line to leave
+that part out:
 
 ```markdown
-@*/**/*.md
+@memories/**/*.md
 @#memories/**/*.md
 ```
+
+In a git repository, init asks whether to install a `post-checkout` hook (`sous init hooks`), so
+a new worktree, which starts without the git-ignored output, gets it built: with a `package.json`
+the hook runs the package manager's install through Husky, and the `prepare` script (`postinstall`
+for Yarn) runs `sous build`. `--yes` installs it and runs the install; `--no-hooks` skips it.
 
 `${sousDir}` is the `.sous/` directory sous found, and `${projectRoot}` is the directory that
 holds it, so a config can name paths without hardcoding anything machine-specific. Sous sets
@@ -154,13 +144,14 @@ Useful commands:
 
 | Command | What it does |
 |---|---|
-| `sous init` | Set a project up: import its agent files into a new `.sous/`, then run the first build |
+| `sous init` | Set a project up: import its agent files into a new `.sous/`, offer the git hooks, then run the first build |
+| `sous init hooks` | Install the git hooks that build Sous's output in each new worktree |
 | `sous build` | Compile, then prune stale outputs |
 | `sous build --watch` | Rebuild on source changes |
 | `sous compile` | Compile only |
 | `sous prune` | Remove outputs no longer in the config |
 | `sous clear` | Delete every file sous wrote for the project |
-| `sous launch claude` | Build, then start the agent |
+| `sous launch claude-code` | Build, then start Claude Code (`sous launch codex` for Codex) |
 | `sous config show` | Print the built config as JSON, with every value evaluated |
 | `sous config get <path>` | Read one value by dot-path; `--layers` shows which file or plugin changed it, in order |
 | `sous config validate` | Validate the built config: schema, then variable resolution |
@@ -231,7 +222,7 @@ pass through JSON, so functions, `RegExp`, `Date` and `undefined` do not survive
 
 ```
 .sous/
-  sous.config.js          # base config
+  sous.config.jsonc       # base config
   conf.d/
     100-tools.json        # adds or overrides tools
     200-skills.yaml       # adds compilation targets

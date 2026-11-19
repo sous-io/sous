@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const scriptPath = path.join(repoRoot, "scripts", "sync-core-version.mts");
@@ -274,17 +274,17 @@ describe("sync-core-version", () => {
     "should write the package version into every other workspace package",
     () => {
       writePackageJson("0.2.0");
-      const pluginApi = writeWorkspacePackage("plugin-api", "@sous-io/plugin-api", "0.1.1");
-      const core = writeWorkspacePackage("core", "@sous-io/core", "0.2.0");
+      const pluginApi = writeWorkspacePackage("sous-plugin-api", "@sous-io/sous-plugin-api", "0.1.1");
+      const core = writeWorkspacePackage("core", "@sous-io/sous-lib-core", "0.2.0");
       const coreBefore = fs.readFileSync(core, "utf8");
 
       const result = sync();
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("Set 1 workspace package to version 0.2.0");
-      expect(result.stdout).toContain(path.join("packages", "plugin-api", "package.json") + ", from 0.1.1");
+      expect(result.stdout).toContain(path.join("packages", "sous-plugin-api", "package.json") + ", from 0.1.1");
       expect(JSON.parse(fs.readFileSync(pluginApi, "utf8"))).toEqual({
-        name: "@sous-io/plugin-api",
+        name: "@sous-io/sous-plugin-api",
         version: "0.2.0",
         private: true,
       });

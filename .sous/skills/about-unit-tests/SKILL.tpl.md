@@ -17,15 +17,15 @@ This "topical skill" provides information about a specific concept: unit testing
 Vitest is the test runner. The repository is a pnpm workspace: every package under `packages/`
 has its own `vitest.config.ts`, built from the shared config in `packages/vitest.shared.ts`, and
 the root `vitest.config.ts` runs them all as projects. Tests import other workspace packages by
-name (`@sous-io/plugin-api`, `@sous-io/plugin-<name>/types`); the shared config resolves each to
+name (`@sous-io/sous-plugin-api`, `@sous-io/sous-plugin-<name>/types`); the shared config resolves each to
 its TypeScript source, so no build is needed first.
 
 ```bash
 pnpm test                                                   # every package's tests, once
 pnpm test:watch                                             # watch mode
 pnpm test:coverage                                          # with a v8 coverage report
-pnpm --filter @sous-io/plugin-<name> test                   # one package
-pnpm --filter @sous-io/plugin-<name> exec vitest run <file> # one file
+pnpm --filter @sous-io/sous-plugin-<name> test                   # one package
+pnpm --filter @sous-io/sous-plugin-<name> exec vitest run <file> # one file
 pnpm typecheck                                              # tsc --noEmit in every package
 ```
 
@@ -42,10 +42,10 @@ Each package follows the same layout; the shared config's `include` is `src/**/*
 **Co-located specs** (`*.spec.ts`) sit next to their source file, at any depth:
 
 ```
-packages/plugin-recipe-answers/src/combine.ts
-packages/plugin-recipe-answers/src/combine.spec.ts
-packages/plugin-recipes/src/part-b/resolver/ranges.ts
-packages/plugin-recipes/src/part-b/resolver/ranges.spec.ts
+packages/sous-plugin-recipe-answers/src/combine.ts
+packages/sous-plugin-recipe-answers/src/combine.spec.ts
+packages/sous-plugin-recipes/src/part-b/resolver/ranges.ts
+packages/sous-plugin-recipes/src/part-b/resolver/ranges.spec.ts
 ```
 
 **A package's `test/` directory** holds tests that run several modules together (`*.test.ts`),
@@ -125,18 +125,18 @@ afterEach(() => {
 Code that runs inside the engine receives its services through a context, so a test hands it
 stand-ins rather than mocking modules:
 
-- `BufferedReporter` (`@sous-io/plugin-api`) keeps every reported message; `reporter.at("warn")`
+- `BufferedReporter` (`@sous-io/sous-plugin-api`) keeps every reported message; `reporter.at("warn")`
   returns the text at one level, and `reporter.styled(style)` the messages of one style. Assert on
   those rather than capturing `console` or `process.stdout`.
 - `scriptedPrompter([answers])` answers questions in order and records what was `asked`;
   `nonInteractivePrompter` fails every question the way a run with no terminal does. Both come
-  from `@sous-io/plugin-api`.
+  from `@sous-io/sous-plugin-api`.
 - Several plugin packages have a `makeEngine(...)` helper in `test/` that starts the engine with the
   plugins under test and a `BufferedReporter`.
-- `@sous-io/repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git
+- `@sous-io/sous-lib-repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git
   runner and a fake sous home for the repository host plugins.
 - Timing code takes its timers as a parameter, so a test drives them by hand (for example
-  `ManualTimers` in `packages/plugin-build/test/timers.ts`) instead of using fake timers.
+  `ManualTimers` in `packages/sous-plugin-build/test/timers.ts`) instead of using fake timers.
 
 ## Self-Contained Tests
 
@@ -166,7 +166,7 @@ equivalents of Istanbul's `/* istanbul ignore */` comments. Apply sparingly, onl
 genuinely unreachable branches, not to paper over missing tests.
 
 Coverage measures each package's `src/**/*.ts`, excluding the specs themselves. Give the reason
-after the marker, as `packages/documents/src/yaml-text.ts` does:
+after the marker, as `packages/sous-lib-documents/src/yaml-text.ts` does:
 `/* c8 ignore next: a complex YAML key, which a JSON path cannot name */`.
 
 # Other Skills

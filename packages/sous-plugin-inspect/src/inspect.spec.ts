@@ -1,0 +1,478 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createEngine } from "@sous-io/sous-lib-core";
+import { DataValue, definePlugin, type IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo, Table, TextBlock, Tree } from "@sous-io/sous-plugin-api";
+import { hostPlugin } from "@sous-io/sous-plugin-host";
+import { variablesPlugin } from "@sous-io/sous-plugin-variables";
+import { readdirSync, readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import inspectPlugin from "./index.js";
+import { HIDDEN, redactText } from "./redact.js";
+
+const demo = definePlugin({
+    name: "demo",
+    version: "1.0.0",
+    description: "A plugin that sets some config.",
+    dependsOn: {},
+    register(sous) {
+        sous.entities.add("config-key", {
+            id: "demo",
+            schema: jsonSchema({ type: "object", properties: { count: { type: "integer" } } }),
+        });
+        sous.config.contribute({
+            id: "demo/main",
+            contribute(config) {
+                config.atPath("demo").merge({ count: 2, apiToken: "s3cr3t", list: [1, 2] });
+            },
+        });
+    },
+});
+
+/**
+ * Stands in for sous-plugin-confd and sous-plugin-config-files: lists the `conf.d` files of the project in
+ * name order, and reads a file's text.
+ */
+const confdStandIn = definePlugin({
+    name: "confd-stand-in",
+    version: "1.0.0",
+    register(sous) {
+        sous.services.add(
+            "config-files.loader",
+            () =>
+                ({
+                    findPatches: () => [],
+                    load: async (file: string) => ({ kind: "data", path: file, format: "jsonc", data: {}, text: readFileSync(file, "utf8") }),
+                }) as never,
+            { lifetime: "singleton" },
+        );
+        sous.services.add(
+            "confd.files",
+            (_config, ctx) =>
+                ({
+                    directory: () => ctx.project?.confDir,
+                    list: () =>
+                        ctx.project === undefined
+                            ? []
+                            : readdirSync(ctx.project.confDir)
+                                  .sort()
+                                  .map((name) => ({
+                                      name,
+                                      path: path.join(ctx.project!.confDir, name),
+                                      format: "jsonc",
+                                      contributor: `confd/${name}`,
+                                      managed: false,
+                                  })),
+                }) as never,
+            { lifetime: "singleton" },
+        );
+    },
+});
+
+/** A project with no files: the config intents need one (they fail outside a project). */
+const EMPTY_PROJECT: ProjectInfo = { root: "/no-files", sousDir: "/no-files/.sous", configPath: undefined, confDir: "/no-files/.sous/conf.d" };
+
+async function run(intent: string, input: Record<string, unknown> = {}, project: ProjectInfo = EMPTY_PROJECT, extra: PluginDefinition[] = []) {
+    const engine = createEngine({ builtIns: [inspectPlugin, demo, ...extra], env: {}, project });
+
+    await engine.buildConfig();
+
+    return ((await engine.handle.submit({ intent, input } as never)) as IntentOutputs).toPlain() as any;
+}
+
+/** Runs an intent and gives its outputs, as a front end gets them. */
+async function outputsOf(intent: string, input: Record<string, unknown> = {}, project: ProjectInfo = EMPTY_PROJECT, extra: PluginDefinition[] = []): Promise<IntentOutputs> {
+    const engine = createEngine({ builtIns: [inspectPlugin, demo, ...extra], env: {}, project });
+
+    await engine.buildConfig();
+
+    return (await engine.handle.submit({ intent, input } as never)) as IntentOutputs;
+}
+
+describe("config.show", () => {
+    /** The evaluated config prints with secrets hidden. */
+    it("should show the config and hide secrets", async () => {
+        const result = await run("config.show");
+
+        expect(result.config.demo.count).toBe(2);
+        expect(result.config.demo.apiToken).toBe(HIDDEN);
+        expect(result.passes).toBeGreaterThan(0);
+        expect(result.layers).toBeUndefined();
+    });
+
+    /** --layers lists each contributor's primitive patches, in order, with secrets hidden. */
+    it("should list layers", async () => {
+        const result = await run("config.show", { layers: true });
+        const demoLayers = result.layers.filter((l: any) => l.contributor === "demo/main");
+
+        expect(demoLayers.length).toBeGreaterThan(0);
+        expect(JSON.stringify(demoLayers)).not.toContain("s3cr3t");
+    });
+
+    /** --raw reads the main file and conf.d in name order. */
+    it("should read config files as written", async () => {
+        const root = mkdtempSync(path.join(tmpdir(), "inspect-"));
+        const sousDir = path.join(root, ".sous");
+        const confDir = path.join(sousDir, "conf.d");
+
+        mkdirSync(confDir, { recursive: true });
+        writeFileSync(path.join(sousDir, "sous.config.jsonc"), '{ "name": "x", "password": "hunter2" }\n');
+        writeFileSync(path.join(confDir, "620-b.jsonc"), "{}\n");
+        writeFileSync(path.join(confDir, "510-a.jsonc"), "{}\n");
+
+        const result = await run("config.show", { raw: true }, {
+            root,
+            sousDir,
+            configPath: path.join(sousDir, "sous.config.jsonc"),
+            confDir,
+        }, [confdStandIn]);
+
+        expect(result.raw.map((f: any) => f.contributor)).toEqual(["config-files.main", "confd/510-a.jsonc", "confd/620-b.jsonc"]);
+        expect(result.raw[0].text).not.toContain("hunter2");
+    });
+    /** --layers names each contributor's declared apply order and the one it applied at. */
+    it("should give each layer its apply orders", async () => {
+        const fixups = definePlugin({
+            name: "fixups",
+            version: "1.0.0",
+            register(sous) {
+                sous.config.contribute({ id: "a-fixups", after: ["demo/main"], contribute: (config) => config.atPath("demo.count").setValue(3) });
+            },
+        });
+        const result = await run("config.show", { layers: true }, EMPTY_PROJECT, [fixups]);
+        const demo = result.layers.find((l: any) => l.contributor === "demo/main");
+        const moved = result.layers.find((l: any) => l.contributor === "a-fixups");
+
+        expect([demo.applyOrder, demo.actualApplyOrder]).toEqual([2000, 2000]);
+        expect([moved.applyOrder, moved.actualApplyOrder]).toEqual([2000, 2001]);
+    });
+});
+
+describe("config.get", () => {
+    /** A path gives its value; a path with no value is an error. */
+    it("should get a value and fail on a missing one", async () => {
+        const found = await run("config.get", { path: "demo.list[1]" });
+
+        expect(found).toMatchObject({ exists: true, value: 2 });
+        await expect(run("config.get", { path: "demo.nope" })).rejects.toThrow(/No value at config path 'demo.nope'/);
+    });
+
+    /** A scalar is the bare value for scripts; an object is data; --layers is a table then the result. */
+    it("should show a scalar verbatim, an object as data and layers as a table", async () => {
+        const scalar = (await outputsOf("config.get", { path: "demo.count" })).last()!;
+        const object = (await outputsOf("config.get", { path: "demo" })).last()!;
+        const layers = (await outputsOf("config.get", { path: "demo.count", layers: true })).toArray();
+
+        expect(scalar.result).toBeInstanceOf(TextBlock);
+        expect(scalar.result).toMatchObject({ text: "2", verbatim: true });
+        expect(object.result).toBeInstanceOf(DataValue);
+        expect(layers[0]!.result).toBeInstanceOf(Table);
+        expect(layers[1]!.result!.toText()).toContain("settled after");
+    });
+
+    /** A secret's value is hidden, alone or inside an object. */
+    it("should hide secrets", async () => {
+        expect((await run("config.get", { path: "demo.apiToken" })).value).toBe(HIDDEN);
+        expect((await run("config.get", { path: "demo" })).value.apiToken).toBe(HIDDEN);
+    });
+
+    /** --layers lists the changes that touched the path. */
+    it("should list the layers of a path", async () => {
+        const result = await run("config.get", { path: "demo.count", layers: true });
+
+        expect(result.layers.some((l: any) => l.contributor === "demo/main")).toBe(true);
+    });
+
+    /** Each change that sets the value says what it was and became; one that changes nothing is left out. */
+    it("should say what each change did to the value", async () => {
+        const override = definePlugin({
+            name: "override",
+            version: "1.0.0",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "override/same", after: ["demo/main"], contribute: (config) => void config.atPath("demo").merge({ count: 2 }) });
+                sous.config.contribute({ id: "override/new", after: ["override/same"], contribute: (config) => void config.atPath("demo").merge({ count: 3 }) });
+            },
+        });
+        const result = await run("config.get", { path: "demo.count", layers: true }, undefined, [override]);
+
+        expect(result.layers.map((l: any) => [l.contributor, l.change])).toEqual([
+            ["demo/main", { to: 2 }],
+            ["override/new", { from: 2, to: 3 }],
+        ]);
+    });
+
+    /**
+     * A path holding an index lists only the changes to that one item, following it as items
+     * before it are added or removed; the changes to the array's other items are left out
+     * (gh-229).
+     *
+     * demo.list: demo/main sets [1, 2], list/append adds 3 at the end, list/prepend adds 0 at the
+     * front, giving [0, 1, 2, 3].
+     *
+     * config get demo.list[0] --layers -> list/prepend only
+     * config get demo.list[1] --layers -> demo/main only, which set it to 1
+     * config get demo.list[3] --layers -> list/append only
+     */
+    it("should list only the changes to the item an index names", async () => {
+        const list = definePlugin({
+            name: "list",
+            version: "1.0.0",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "list/append", after: ["demo/main"], contribute: (config) => void config.atPath("demo.list").appendValue(3) });
+                sous.config.contribute({ id: "list/prepend", after: ["list/append"], contribute: (config) => void config.atPath("demo.list").prependValue(0) });
+            },
+        });
+        const layersAt = async (path: string) =>
+            (await run("config.get", { path, layers: true }, undefined, [list])).layers.map((l: any) => [l.contributor, l.change]);
+
+        expect(await layersAt("demo.list[0]")).toEqual([["list/prepend", { to: 0 }]]);
+        expect(await layersAt("demo.list[1]")).toEqual([["demo/main", { to: 1 }]]);
+        expect(await layersAt("demo.list[3]")).toEqual([["list/append", { to: 3 }]]);
+    });
+});
+
+describe("config.validate", () => {
+    /** A `${name}` defined nowhere is reported, naming it, as a build would refuse it. */
+    it("should report a variable defined nowhere", async () => {
+        const vars = definePlugin({
+            name: "vars",
+            version: "1.0.0",
+            dependsOn: { "@sous-io/sous-plugin-host": "*" },
+            register(sous) {
+                // Stands in for sous-plugin-host's identity of the installed sous, which the auto-variables read.
+                const identity = { name: "@sous-io/sous", version: "1.0.0", root: "/opt/sous", realRoot: "/opt/sous", bin: undefined };
+
+                sous.services.replace("host.package", () => ({ identity: () => identity }) as never, { lifetime: "singleton" });
+                sous.config.contribute({ id: "vars/main", contribute: (config) => void config.atPath("_vars").merge({ thing: "${bogus}" }) });
+            },
+        });
+        const result = await run("config.validate", {}, undefined, [hostPlugin, variablesPlugin, vars]);
+
+        expect(result.ok).toBe(false);
+        expect(result.issues.join("\n")).toMatch(/bogus/);
+    });
+
+    /** A good config gives what was checked, for the summary. */
+    it("should summarize a good config", async () => {
+        const result = await run("config.validate");
+
+        expect(result.summary).toEqual({ configFile: undefined, layers: 0, targets: 0, tools: [] });
+    });
+
+    /** A value that breaks its key's schema is reported with who set it. */
+    it("should report issues and name the contributor", async () => {
+        const bad = definePlugin({
+            name: "bad",
+            version: "1.0.0",
+            description: "Sets a bad value.",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({
+                    id: "bad/main",
+                    after: ["demo"],
+                    contribute(config) {
+                        config.atPath("demo").merge({ count: "many" });
+                    },
+                });
+            },
+        });
+        const good = await run("config.validate");
+
+        expect(good).toMatchObject({ ok: true, issues: [] });
+
+        const engine = createEngine({ builtIns: [inspectPlugin, demo, bad], env: {}, project: EMPTY_PROJECT });
+
+        try {
+            await engine.buildConfig();
+        } catch {
+            return; // The engine itself already refuses a config that fails its schemas.
+        }
+
+        const result = await engine.handle.submit({ intent: "config.validate" } as never) as any;
+
+        expect(result.ok).toBe(false);
+        expect(result.issues[0]).toContain("bad/main");
+    });
+});
+
+describe("plugins.show", () => {
+    /** Every plugin shows what it registered; a name narrows it; an unknown name is an error. */
+    it("should list plugins and filter by name", async () => {
+        const all = await run("plugins.show");
+        const one = await run("plugins.show", { name: "demo" });
+
+        expect(all.plugins.map((p: any) => p.name)).toEqual(expect.arrayContaining(["demo", "@sous-io/sous-plugin-inspect"]));
+        expect(one.plugins).toHaveLength(1);
+        expect(one.plugins[0].registrations).toContainEqual({ kind: "entity", name: "config-key: demo" });
+        await expect(run("plugins.show", { name: "nope" })).rejects.toThrow(/No plugin named/);
+    });
+});
+
+describe("timings.show", () => {
+    /** Timings come slowest first and can be narrowed by category. */
+    it("should list and filter timings", async () => {
+        const all = (await run("timings.show")).timings;
+        const contributors = (await run("timings.show", { category: "contributor" })).timings;
+        const over = (await run("timings.show", { overBudget: true })).timings;
+
+        expect(all.length).toBeGreaterThan(0);
+        expect(contributors.every((e: any) => e.category === "contributor")).toBe(true);
+        expect(over.every((e: any) => e.overBudget > 0)).toBe(true);
+        expect(all[0].totalMs).toBeGreaterThanOrEqual(all[all.length - 1].totalMs);
+    });
+});
+
+describe("redactText()", () => {
+    /** Values after secret keys are hidden; others stay. */
+    it("should hide secret values line by line", () => {
+        const out = redactText('{\n  "name": "x",\n  "apiKey": "abc",\n}');
+
+        expect(out).toContain('"name": "x"');
+        expect(out).toContain(`"apiKey": "${HIDDEN}",`);
+        expect(out).not.toContain("abc");
+    });
+});
+
+describe("the secret policy", () => {
+    /**
+     * With sous-plugin-variables loaded, a value in a known token format is hidden under any name, and
+     * a plain value under a secret-sounding name (a flag) is not.
+     */
+    it("should use variables.secrets when it is loaded", async () => {
+        const token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+        const tokens = definePlugin({
+            name: "tokens",
+            version: "1.0.0",
+            register(sous) {
+                sous.config.contribute({
+                    id: "tokens/main",
+                    contribute(config) {
+                        config.atPath("demo").merge({ note: token, tokenCount: 3, apiToken: "s3cr3t", useToken: "true" });
+                    },
+                });
+            },
+        });
+        const result = await run("config.show", {}, undefined, [hostPlugin, variablesPlugin, tokens]);
+
+        expect(result.config.demo.note).toBe(HIDDEN);
+        expect(result.config.demo.apiToken).toBe(HIDDEN);
+        expect(result.config.demo.tokenCount).toBe(3);
+        expect(result.config.demo.useToken).toBe("true");
+    });
+});
+
+describe("outputs", () => {
+    /** config show prints the config as data, and --layers a tree then the pass count. */
+    it("should show the config as data and its layers as a tree", async () => {
+        const plain = (await outputsOf("config.show")).toArray();
+        const layered = (await outputsOf("config.show", { layers: true })).toArray();
+
+        expect(plain).toHaveLength(1);
+        expect(plain[0]!.result).toBeInstanceOf(DataValue);
+        expect(layered[0]!.result).toBeInstanceOf(Tree);
+        expect(layered[1]!.result!.toText()).toMatch(/^result: settled after \d+ pass/);
+    });
+
+    /** A valid config gives a titled summary; one with problems ends with exit code 1 (not an exception). */
+    it("should end config validate with exit code 1 when the config has problems", async () => {
+        const good = await outputsOf("config.validate");
+
+        expect(good.first()?.title).toBe("Config is valid");
+        expect(good.exitCode).toBeUndefined();
+
+        const vars = definePlugin({
+            name: "vars",
+            version: "1.0.0",
+            description: "Sets a bad variable.",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "vars/main", contribute: (config) => void config.atPath("_vars").merge({ thing: "${bogus}" }) });
+            },
+        });
+        const bad = await outputsOf("config.validate", {}, undefined, [hostPlugin, variablesPlugin, vars]);
+
+        expect(bad.exitCode).toBe(1);
+        expect(bad.first()?.title).toMatch(/^The config has \d+ problems?$/);
+        expect(bad.toPlain()).toMatchObject({ ok: false });
+    });
+
+    /** plugins show has one titled output per plugin; timings show is a table slowest first. */
+    it("should title each plugin and show timings as a table", async () => {
+        const plugins = await outputsOf("plugins.show", { name: "demo" });
+        const timings = await outputsOf("timings.show");
+
+        expect(plugins.toArray().map((output) => output.title)).toEqual(["demo 1.0.0 (built in)"]);
+        expect(timings.last()!.result).toBeInstanceOf(Table);
+        expect((timings.last()!.result as Table).title).toBe("Timings");
+    });
+});
+
+/**
+ * Registers the harness `codex`, and contributes `demo.tool` (the build's harness, or `none`) and
+ * an edit to `editor.edits` that only the `codex` build makes.
+ */
+const harnessDemo = definePlugin({
+    name: "harness-demo",
+    version: "1.0.0",
+    register(sous) {
+        sous.entities.define("harness", jsonSchema({}));
+        sous.entities.add("harness", { id: "codex" } as never);
+        sous.entities.add("config-key", { id: "editor", schema: jsonSchema({}) });
+        sous.config.contribute({
+            id: "harness-demo/main",
+            contribute(config) {
+                const id = config.harness.id;
+
+                config.atPath("demo.tool").set(id === "" ? "none" : id);
+                config.atPath("editor").set({ edits: id === "codex" ? [{ file: "AGENTS.md" }] : [] });
+            },
+        });
+    },
+});
+
+describe("--harness", () => {
+    /** Without --harness the merged config shows; with it, that harness's own build. */
+    it("should show one harness's config", async () => {
+        const merged = await run("config.show", {}, EMPTY_PROJECT, [harnessDemo]);
+        const codex = await run("config.show", { harness: "codex" }, EMPTY_PROJECT, [harnessDemo]);
+
+        expect(merged.config.demo.tool).toBe("none");
+        expect(merged.config.editor.edits).toEqual([{ file: "AGENTS.md", harness: "codex" }]);
+        expect(merged.harness).toBeUndefined();
+        expect(codex.config.demo.tool).toBe("codex");
+        expect(codex.config.editor.edits).toEqual([{ file: "AGENTS.md" }]);
+        expect(codex.harness).toBe("codex");
+    });
+
+    it("should get one value from one harness's config", async () => {
+        expect((await run("config.get", { path: "demo.tool" }, EMPTY_PROJECT, [harnessDemo])).value).toBe("none");
+        expect((await run("config.get", { path: "demo.tool", harness: "codex" }, EMPTY_PROJECT, [harnessDemo])).value).toBe("codex");
+    });
+
+    /** A harness with no build is an error that names the ones built. */
+    it("should refuse a harness that has no build", async () => {
+        await expect(run("config.get", { path: "demo.tool", harness: "zed" }, EMPTY_PROJECT, [harnessDemo])).rejects.toThrow(/No config was built for the harness "zed"/);
+        await expect(run("config.show", { harness: "zed" })).rejects.toThrow(/No config was built for the harness "zed"/);
+    });
+
+    /** --layers names the build each change came from, once any came from a harness's build. */
+    it("should name the build in --layers", async () => {
+        const result = await run("config.get", { path: "editor.edits", layers: true }, EMPTY_PROJECT, [harnessDemo]);
+        const table = (await outputsOf("config.get", { path: "editor.edits", layers: true }, EMPTY_PROJECT, [harnessDemo])).toArray()[0]!.result as Table;
+
+        expect(result.layers.map((layer: any) => [layer.contributor, layer.build])).toEqual([
+            ["harness-demo/main", ""],
+            ["harness-demo/main", "codex"],
+        ]);
+        expect(table.rows.map((row) => row.source)).toEqual(["harness-demo/main (no harness)", "harness-demo/main (harness codex)"]);
+    });
+
+    /** A project with no harness sees the layers as before, with no build named. */
+    it("should not name the build when no change came from a harness's build", async () => {
+        const table = (await outputsOf("config.get", { path: "demo.count", layers: true })).toArray()[0]!.result as Table;
+
+        expect(table.rows.map((row) => row.source)).toEqual(["demo/main"]);
+    });
+});

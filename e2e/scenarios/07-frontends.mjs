@@ -79,8 +79,8 @@ exit 0
     );
     const withFake = { PATH: `${bin}:${process.env.PATH}` };
 
-    await t.step("sous launch claude builds, then starts claude with the arguments after --", () => {
-      const r = t.sous(["launch", "claude", "--", "--e2e-flag", "value"], { cwd: project, env: withFake });
+    await t.step("sous launch claude-code builds, then starts claude with the arguments after --", () => {
+      const r = t.sous(["launch", "claude-code", "--", "--e2e-flag", "value"], { cwd: project, env: withFake });
       assert.equal(r.code, 0, r.stderr + r.stdout);
       const args = fs.readFileSync(argsLog, "utf8");
       expectIncludes(args, "--e2e-flag", "claude args");
@@ -89,15 +89,16 @@ exit 0
     });
 
     await t.step("sous launch --no-build skips the build", () => {
-      t.sh("rm -f AGENTS.md", { cwd: project });
-      const r = t.sous(["launch", "claude", "--no-build"], { cwd: project, env: withFake });
+      // A core skill: an output every build writes, now that init compiles no AGENTS.md.
+      t.sh("rm -f .claude/skills/about-sous/SKILL.md", { cwd: project });
+      const r = t.sous(["launch", "claude-code", "--no-build"], { cwd: project, env: withFake });
       assert.equal(r.code, 0, r.stderr + r.stdout);
-      assert.equal(t.exists("AGENTS.md", project), false);
+      assert.equal(t.exists(".claude/skills/about-sous/SKILL.md", project), false);
     });
 
     await t.step("sous launch with a build first rewrites missing outputs", () => {
-      expectExit(t.sous(["launch", "claude"], { cwd: project, env: withFake }));
-      assert.ok(t.exists("AGENTS.md", project));
+      expectExit(t.sous(["launch", "claude-code"], { cwd: project, env: withFake }));
+      assert.ok(t.exists(".claude/skills/about-sous/SKILL.md", project));
     });
 
     await t.step("sous launch of a tool that is not installed fails naming it", () => {

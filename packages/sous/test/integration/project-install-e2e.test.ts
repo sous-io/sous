@@ -66,7 +66,7 @@ describe("hand-off to the project's own install", () => {
 
     // Build the published package's layout under a project's node_modules, where a devDependency
     // install would put it: the bundle (dist/bin.js and dist/sous.js), the packaged core recipe and
-    // the package.json, with its version relabelled. Its dependencies (only @sous-io/plugin-api stays outside the bundle) are
+    // the package.json, with its version relabelled. Its dependencies (only @sous-io/sous-plugin-api stays outside the bundle) are
     // the package's own, through a symlinked node_modules.
     projectRoot = path.join(tmp.path, "project");
     projectCopy = path.join(projectRoot, "node_modules", "@sous-io", "sous");

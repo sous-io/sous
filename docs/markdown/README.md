@@ -59,9 +59,9 @@ $ SOUS_NO_DELEGATE=1 sous --version
 v0.3.0
 ```
 
-### Updating
+### Upgrading
 
-`sous update` moves each copy of sous to a newer version (or one you choose) through the package
+`sous upgrade` moves each copy of sous to a newer version (or one you choose) through the package
 manager that installed it, so you never need to remember which one that was or its syntax:
 
 - **Outside a project**, or in a project that does not install sous, it updates the global install.
@@ -73,7 +73,8 @@ manager that installed it, so you never need to remember which one that was or i
   It updates the global install as well when there is one. A Yarn Plug'n'Play project, which has
   no `node_modules`, counts as installing sous when its `package.json` declares it and a `.pnp.cjs`
   sits beside it or above it; the installed version is read from `yarn.lock`.
-- **After a project update**, the newly installed copy builds the project, so
+- **After a project upgrade**, the newly installed copy runs the migrations its version brings (see
+  [`sous doctor`](commands.md#sous-doctor)), then builds the project, so
   `.sous/sous.lock.json` pins the core recipe at the new version. Under Yarn Plug'n'Play, Yarn
   runs that build (`yarn run --binaries-only sous build`). `--no-build` skips it.
 
@@ -84,7 +85,7 @@ it fails with `EBADF: bad file descriptor`. Unpack it in `package.json`, then ru
 "dependenciesMeta": { "@sous-io/sous": { "unplugged": true } }
 ```
 
-`update` always runs in the copy you invoked, never handed off to the project's own; a project copy
+`upgrade` always runs in the copy you invoked, never handed off to the project's own; a project copy
 may be too old to have the command. A project config this copy cannot load (one written for a newer
 sous, say) is a warning rather than a stop, since installing a newer copy may be the fix.
 
@@ -98,16 +99,16 @@ its own question. Each is judged on its own version:
   dist-tag such as `next` points at. This is how you downgrade, and the plan says when it is one.
 
 `--dry-run` prints the plans, with the command each would run, and installs nothing. The other flags
-(prereleases, one install only, answering every question) are in `sous update --help`.
+(prereleases, one install only, answering every question) are in `sous upgrade --help`.
 
 A copy run through `npx`, or one managed by Volta or by a manager sous does not drive, is listed
 with the command to run by hand, and the rest are still updated. A package manager's own failure
 is printed as the manager reported it; sous never retries with `sudo`.
 
 ```term
-$ sous update --dry-run
+$ sous upgrade --dry-run
 // every install's plan, and nothing installed
-$ sous update --global --yes
+$ sous upgrade --global --yes
 ```
 
 ## Where to look

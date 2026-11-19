@@ -29,11 +29,11 @@ Ruled by the user:
   restated on 2026-10-28 to be about intents, since an intent is written once and every front end
   calls it.
 - Every package is kept, one per concern (2026-10-25).
-- Today's `src/lib/vars/` becomes two packages, `plugin-variables` and `plugin-recipe-answers`
+- Today's `src/lib/vars/` becomes two packages, `sous-plugin-variables` and `sous-plugin-recipe-answers`
   (2026-10-25).
 - The one definition of the project root, with no override (2026-10-25).
 - Pointer files come from plugins, and each file is written once (2026-10-25).
-- Only `plugin-compiler` writes build outputs; it overwrites by default and takes ownership, and
+- Only `sous-plugin-compiler` writes build outputs; it overwrites by default and takes ownership, and
   `compilation.overwriteUntracked: false` opts out (2026-10-29). Before it overwrites or removes a
   file it did not write, or an output edited by hand since it wrote it (its content no longer
   matches the recorded `destHash`), it copies the file to
@@ -77,7 +77,7 @@ entities   a kind in kebab case    harness   skill-target   memory-target
 - A name starting with another plugin's prefix is allowed; sous warns once, naming both plugins.
 
 In the tables below, a plugin's prefix is its package name without `plugin-` (`compiler.state` is
-owned by `plugin-compiler`). A few intents keep the name users already type, such as `build` and
+owned by `sous-plugin-compiler`). A few intents keep the name users already type, such as `build` and
 `subscription.add`.
 
 ## Rules for Owners
@@ -90,9 +90,9 @@ rule 7 (one intent per operation) were later restated for the engine:
    Inversify. An intent is registered with `sous.intents.add`, and an entity kind with
    `sous.entities.define`.
 2. **Each plugin declares its own types.** A plugin adds its services, intents, events and entity
-   kinds to the empty interfaces in `@sous-io/plugin-api`, in its own package's `types` entry. A
+   kinds to the empty interfaces in `@sous-io/sous-plugin-api`, in its own package's `types` entry. A
    plugin that uses them imports those types only, and lists the owner in `dependsOn`. This is what
-   lets `plugin-compiler` use a namespace resolver that `plugin-recipes` implements, without either
+   lets `sous-plugin-compiler` use a namespace resolver that `sous-plugin-recipes` implements, without either
    importing the other's code.
 3. **The plugin that owns a concept defines its entity kind.** Any plugin may add entities of that
    kind; contributors read them through the config builder (S1, the engine).
@@ -104,23 +104,23 @@ rule 7 (one intent per operation) were later restated for the engine:
 6. **Services never print, prompt, exit or read `process.env` or `process.cwd()` directly.** They
    report through a `Reporter`, ask through a `Prompter`, read the environment through `ctx.env`
    and the project through `ctx.project`.
-7. **A user-facing operation is written once, as an intent.** `plugin-cli` generates its commands
-   and flags from each intent's input schema, and `plugin-mcp` its tools, so neither holds the
+7. **A user-facing operation is written once, as an intent.** `sous-plugin-cli` generates its commands
+   and flags from each intent's input schema, and `sous-plugin-mcp` its tools, so neither holds the
    operation itself.
 
 ```ts
-// plugin-recipes: registers its owners through the engine
+// sous-plugin-recipes: registers its owners through the engine
 export default definePlugin({
-    name: "@sous-io/plugin-recipes",
+    name: "@sous-io/sous-plugin-recipes",
     dependsOn: {
-        "@sous-io/plugin-config-files": "^1.0.0",
-        "@sous-io/plugin-refs": "^1.0.0",
+        "@sous-io/sous-plugin-config-files": "^1.0.0",
+        "@sous-io/sous-plugin-refs": "^1.0.0",
     },
 
     register(sous) {
         sous.services.add("recipes.lock", (config) => new LockService(config), { lifetime: "config" });
 
-        // Implements a service type plugin-compiler declares; neither imports the other's code.
+        // Implements a service type sous-plugin-compiler declares; neither imports the other's code.
         sous.services.add("compiler.namespace-resolver", (config) => new LockedNamespaceResolver(config), {
             lifetime: "config",
         });
@@ -144,40 +144,42 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 
 | Package | Holds |
 | --- | --- |
-| `core` | the engine (see "Core") |
-| `documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
-| `plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
+| `sous-lib-core` | the engine (see "Core") |
+| `sous-lib-documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
+| `sous-plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
 | `sous` | the published package: the bin, the hand-off to a project's own sous, finding the project, the list of built-in plugins, the bundle |
-| `plugin-host` (agent decision, which the user may overrule) | the machine sous runs on: running processes, HTTP, globs and paths, sous home, sous's own self-describing directories, the sous block in `.gitignore`, package identity |
-| `plugin-git` | the one git runner |
-| `plugin-refs` | parsing and resolving refs, picking among matches, `#` names, repository locations and identity |
-| `plugin-formats` | one parser per on-disk format, and the recipe content hash |
-| `plugin-variables` | `${var}` substitution, `_vars` resolution, auto-variables (`projectRoot` among them), variable names, which values are secret |
-| `plugin-liquid` | building a configured LiquidJS engine, and the Liquid tags and filters plugins add |
-| `plugin-expressions` | config expressions (S5, config expressions) and the expression languages plugins add |
-| `plugin-config-files` | `sous.config.*` as a contributor, setting one value from the command line, the `.env` files |
-| `plugin-confd` | the `conf.d` files, one contributor per file, and surgical edits to the managed `conf.d/5xx` files |
-| `plugin-recipes` | repositories, trust, subscriptions, the lockfile, the store, the index cache, freshness, links and checkouts, the core recipe, the catalog, downloading during config building, recipe config layers, loading plugins recipes ship |
-| `plugin-recipe-answers` | recipe variable definitions, the answer ladder, asking for answers, answer files, variable mappings |
-| `plugin-compiler` | compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing every build output, pruning |
-| `plugin-build` | the `build`, `prune` and `clear` intents, preparing for a build, watch mode, the PID file, the runtime context file |
-| `plugin-skills` | skills: where they come from, the `skill-target` entity, the compilation targets for them |
-| `plugin-memories` | memories: selecting them, the `memory-target` entity, the compilation targets for them, the `#memories` name |
-| `plugin-harnesses` | the `harness` entity, launching a harness, headless runs, the `tools` settings |
-| `plugin-authoring` | releasing, submitting and contributing to recipe repositories, scaffolding one |
-| `plugin-init` | setting a project up for sous (`sous init`): importing its existing agent files, scaffolding its `.sous/` |
-| `plugin-update` | updating sous itself, installing plugins a recipe requires, the `package-manager` entity, scanning for installed plugins |
-| `plugin-inspect` (agent decision, which the user may overrule) | showing the engine's state: `config show`, `config get`, `plugins show`, timings |
-| `plugin-cli` | the CLI front end: commands generated from intents, terminal output and prompts, error messages and exit codes |
-| `plugin-mcp` | the `sous mcp` front end: tools generated from intents, MCP logging and elicitation |
-| `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | a `package-manager` entity each |
-| `plugin-github`, `plugin-gitlab`, `plugin-local` | a `repository-host` entity each |
-| `plugin-claude-code` | everything sous knows about Claude Code: its `harness`, `skill-target` and `memory-target` entities |
+| `sous-plugin-host` (agent decision, which the user may overrule) | the machine sous runs on: running processes, HTTP, globs and paths, sous home, sous's own self-describing directories, the sous block in `.gitignore`, package identity |
+| `sous-plugin-git` | the one git runner |
+| `sous-plugin-refs` | parsing and resolving refs, picking among matches, `#` names, repository locations and identity |
+| `sous-plugin-formats` | one parser per on-disk format, and the recipe content hash |
+| `sous-plugin-variables` | `${var}` substitution, `_vars` resolution, auto-variables (`projectRoot` among them), variable names, which values are secret |
+| `sous-plugin-liquid` | building a configured LiquidJS engine, and the Liquid tags and filters plugins add |
+| `sous-plugin-expressions` | config expressions (S5, config expressions) and the expression languages plugins add |
+| `sous-plugin-config-files` | `sous.config.*` as a contributor, setting one value from the command line, the `.env` files |
+| `sous-plugin-confd` | the `conf.d` files, one contributor per file, and surgical edits to the managed `conf.d/5xx` files |
+| `sous-plugin-recipes` | repositories, trust, subscriptions, the lockfile, the store, the index cache, freshness, links and checkouts, the core recipe, the catalog, downloading during config building, recipe config layers, loading plugins recipes ship |
+| `sous-plugin-recipe-answers` | recipe variable definitions, the answer ladder, asking for answers, answer files, variable mappings |
+| `sous-plugin-compiler` | compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing every build output, pruning |
+| `sous-plugin-build` | the `build`, `prune` and `clear` intents, preparing for a build, watch mode, the PID file, the runtime context file |
+| `sous-plugin-skills` | skills: where they come from, the `skill-target` entity, the compilation targets for them |
+| `sous-plugin-memories` | memories: selecting them, the `memory-target` entity, the compilation targets for them, the `#memories` name |
+| `sous-plugin-handlers` | handlers: the `handler` entity, `recipes.handlers`, the helpers a handler receives, `handlers.system`, the intents that run each purpose, when `migrate`, `uninstall` and `check` on subscribing run (S13) |
+| `sous-plugin-harnesses` | the `harness` entity, launching a harness, headless runs, the `tools` settings |
+| `sous-plugin-authoring` | releasing, submitting and contributing to recipe repositories, scaffolding one |
+| `sous-plugin-init` | setting a project up for sous (`sous init`): importing its existing agent files, scaffolding its `.sous/` |
+| `sous-plugin-update` | updating sous itself, installing plugins a recipe requires, the `package-manager` entity, scanning for installed plugins |
+| `sous-plugin-inspect` (agent decision, which the user may overrule) | showing the engine's state: `config show`, `config get`, `plugins show`, timings |
+| `sous-plugin-cli` | the CLI front end: commands generated from intents, terminal output and prompts, error messages and exit codes |
+| `sous-plugin-mcp` | the `sous mcp` front end: tools generated from intents, MCP logging and elicitation |
+| `sous-plugin-npm`, `sous-plugin-pnpm`, `sous-plugin-yarn` | a `package-manager` entity each |
+| `sous-plugin-github`, `sous-plugin-gitlab`, `sous-plugin-local` | a `repository-host` entity each |
+| `sous-plugin-claude-code` | everything sous knows about Claude Code: its `harness`, `skill-target` and `memory-target` entities |
+| `sous-plugin-codex` | everything sous knows about Codex: its `harness`, `skill-target` and `memory-target` entities, added only while a project turns Codex on (S16) |
 
-Codex, and every other agent tool, is a separately installed plugin. A web front end, such as the
-one `sous serve` would start, is a plugin of the same shape as `plugin-mcp` (see "Front ends" in S1, the engine).
+Every other agent tool is a separately installed plugin. A web front end, such as the
+one `sous serve` would start, is a plugin of the same shape as `sous-plugin-mcp` (see "Front ends" in S1, the engine).
 
-`plugin-claude-code` is the Sous plugin that teaches sous about Claude Code. It is not the
+`sous-plugin-claude-code` is the Sous plugin that teaches sous about Claude Code. It is not the
 Sous-provided Claude Code plugin that S3 (packaging and releases) describes, which is a Claude Code plugin that defers to the
 installed `sous`.
 
@@ -188,70 +190,72 @@ types only. What orders them is `dependsOn`, which sous checks at load (S1, the 
 has no cycles: a plugin depends only on plugins on lower rows (agent suggestion):
 
 ```text
-top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugin-npm  plugin-pnpm  plugin-yarn
+top      sous-plugin-claude-code   sous-plugin-codex   sous-plugin-github  sous-plugin-gitlab  sous-plugin-local   sous-plugin-npm  sous-plugin-pnpm  sous-plugin-yarn
            │
-         plugin-cli   plugin-mcp   plugin-inspect          (depend on nothing: they use intents by name)
+         sous-plugin-cli   sous-plugin-mcp   sous-plugin-inspect          (depend on nothing: they use intents by name)
            │
-         plugin-authoring                                  (runs init after scaffolding a repository)
+         sous-plugin-authoring                                  (runs init after scaffolding a repository)
            │
-         plugin-init   plugin-harnesses   plugin-update
+         sous-plugin-init   sous-plugin-harnesses
            │
-         plugin-build
+         sous-plugin-build   sous-plugin-update
            │
-         plugin-skills   plugin-memories
+         sous-plugin-skills   sous-plugin-memories
            │
-         plugin-compiler   plugin-recipe-answers
+         sous-plugin-compiler   sous-plugin-recipe-answers
            │
-         plugin-recipes
+         sous-plugin-recipes
            │
-         plugin-config-files   plugin-confd
+         sous-plugin-config-files   sous-plugin-confd
            │
-         plugin-expressions   plugin-formats
+         sous-plugin-expressions   sous-plugin-formats
            │
-         plugin-liquid   plugin-variables   plugin-refs   plugin-git
+         sous-plugin-liquid   sous-plugin-variables   sous-plugin-refs   sous-plugin-git
            │
-         plugin-host
+         sous-plugin-host
            │
-         plugin-api   core   sous           (not plugins; every plugin uses plugin-api's types)
+         sous-plugin-api   sous-lib-core   sous   (not plugins; every plugin uses sous-plugin-api's types)
            │
-         documents                  (not a plugin; core's config builder is built on it)
+         sous-lib-documents         (not a plugin; the engine's config builder is built on it)
 ```
 
 | Plugin | Depends on |
 | --- | --- |
-| `plugin-host` | nothing |
-| `plugin-git`, `plugin-refs`, `plugin-variables`, `plugin-liquid` | `plugin-host` |
-| `plugin-formats` | `plugin-refs` |
-| `plugin-expressions` | `plugin-liquid`, `plugin-variables` |
-| `plugin-config-files` | `plugin-expressions`, `plugin-variables`, `plugin-host` |
-| `plugin-confd` | `plugin-expressions`, `plugin-variables`, `plugin-host` |
-| `plugin-recipes` | `plugin-confd`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git` |
-| `plugin-recipe-answers` | `plugin-recipes`, `plugin-confd`, `plugin-formats`, `plugin-refs`, `plugin-variables` |
-| `plugin-compiler` | `plugin-liquid`, `plugin-refs`, `plugin-variables`, `plugin-host` |
-| `plugin-skills` | `plugin-compiler`, `plugin-recipes` |
-| `plugin-memories` | `plugin-compiler`, `plugin-recipes`, `plugin-refs` |
-| `plugin-build` | `plugin-compiler`, `plugin-recipes`, `plugin-recipe-answers`, `plugin-git` |
-| `plugin-harnesses` | `plugin-build`, `plugin-host` |
-| `plugin-authoring` | `plugin-recipes`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git`, `plugin-init`, `plugin-config-files` |
-| `plugin-init` | `plugin-build`, `plugin-config-files`, `plugin-host` |
-| `plugin-update` | `plugin-host` |
-| `plugin-cli`, `plugin-mcp`, `plugin-inspect` | nothing |
-| `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | `plugin-update` |
-| `plugin-github`, `plugin-gitlab`, `plugin-local` | `plugin-recipes` |
-| `plugin-claude-code` | `plugin-skills`, `plugin-memories`, `plugin-harnesses` |
+| `sous-plugin-host` | nothing |
+| `sous-plugin-git`, `sous-plugin-refs`, `sous-plugin-variables`, `sous-plugin-liquid` | `sous-plugin-host` |
+| `sous-plugin-formats` | `sous-plugin-refs` |
+| `sous-plugin-expressions` | `sous-plugin-liquid`, `sous-plugin-variables` |
+| `sous-plugin-config-files` | `sous-plugin-expressions`, `sous-plugin-variables`, `sous-plugin-host` |
+| `sous-plugin-confd` | `sous-plugin-expressions`, `sous-plugin-variables`, `sous-plugin-host` |
+| `sous-plugin-recipes` | `sous-plugin-confd`, `sous-plugin-formats`, `sous-plugin-refs`, `sous-plugin-variables`, `sous-plugin-git` |
+| `sous-plugin-recipe-answers` | `sous-plugin-recipes`, `sous-plugin-confd`, `sous-plugin-formats`, `sous-plugin-refs`, `sous-plugin-variables` |
+| `sous-plugin-compiler` | `sous-plugin-liquid`, `sous-plugin-refs`, `sous-plugin-variables`, `sous-plugin-host` |
+| `sous-plugin-skills` | `sous-plugin-compiler`, `sous-plugin-recipes` |
+| `sous-plugin-memories` | `sous-plugin-compiler`, `sous-plugin-recipes`, `sous-plugin-refs` |
+| `sous-plugin-handlers` | `sous-plugin-host`, `sous-plugin-recipes` |
+| `sous-plugin-build` | `sous-plugin-compiler`, `sous-plugin-recipes`, `sous-plugin-recipe-answers`, `sous-plugin-git` |
+| `sous-plugin-harnesses` | `sous-plugin-build`, `sous-plugin-host` |
+| `sous-plugin-authoring` | `sous-plugin-recipes`, `sous-plugin-formats`, `sous-plugin-refs`, `sous-plugin-variables`, `sous-plugin-git`, `sous-plugin-init`, `sous-plugin-config-files` |
+| `sous-plugin-init` | `sous-plugin-build`, `sous-plugin-config-files`, `sous-plugin-host`, `sous-plugin-update` |
+| `sous-plugin-update` | `sous-plugin-host` |
+| `sous-plugin-cli`, `sous-plugin-mcp`, `sous-plugin-inspect` | nothing |
+| `sous-plugin-npm`, `sous-plugin-pnpm`, `sous-plugin-yarn` | `sous-plugin-update` |
+| `sous-plugin-github`, `sous-plugin-gitlab`, `sous-plugin-local` | `sous-plugin-recipes` |
+| `sous-plugin-claude-code` | `sous-plugin-skills`, `sous-plugin-memories`, `sous-plugin-harnesses` |
+| `sous-plugin-codex` | `sous-plugin-skills`, `sous-plugin-memories`, `sous-plugin-harnesses`, `sous-plugin-host` |
 
 Reading the diagram:
 
-- `plugin-compiler` does not depend on `plugin-recipes`, `plugin-recipe-answers` or
-  `plugin-config-files`. It compiles whatever compilation targets the config holds, with a scope and
+- `sous-plugin-compiler` does not depend on `sous-plugin-recipes`, `sous-plugin-recipe-answers` or
+  `sous-plugin-config-files`. It compiles whatever compilation targets the config holds, with a scope and
   a namespace resolver, so a front end can render with it alone (G7, any combination of sous's parts
   inside the monorepo).
-- `plugin-config-files` does not depend on the features above it. They change the config through
+- `sous-plugin-config-files` does not depend on the features above it. They change the config through
   their own contributors, and add their keys as `config-key` entities.
-- `plugin-refs` depends on nothing but `plugin-host`.
-- `plugin-recipe-answers` depends on `plugin-recipes`, never the other way.
-- `plugin-skills` and `plugin-memories` only add compilation targets; they write nothing.
-- `plugin-claude-code` sits on top: nothing depends on it (G8, works without any one agent tool).
+- `sous-plugin-refs` depends on nothing but `sous-plugin-host`.
+- `sous-plugin-recipe-answers` depends on `sous-plugin-recipes`, never the other way.
+- `sous-plugin-skills` and `sous-plugin-memories` only add compilation targets; they write nothing.
+- `sous-plugin-claude-code` and `sous-plugin-codex` sit on top: nothing depends on them (G8, works without any one agent tool).
 
 A test in the workspace checks `dependsOn` against the type imports on every run, so an undeclared
 dependency fails the build (G5, obvious, enforceable boundaries).
@@ -262,7 +266,7 @@ Grouped by package. Each table names the owner of each concern and its kind (ser
 entity kind, or a contributor). Intents shown are examples of the full set, which follows from
 today's commands.
 
-### The engine: `core`
+### The engine: `sous-lib-core`
 
 Ruled 2026-10-28: core holds only the engine. The details of each part are in S1 (the engine).
 
@@ -304,11 +308,11 @@ root is the parent of the directory holding that file, as `sousDir` is defined t
 
 - A project cannot set its root anywhere else.
 - `ctx.project` carries `root`, `sousDir`, `configPath` and `confDir`.
-- `plugin-variables` publishes the root as the auto-variable `projectRoot`, so a config no longer
+- `sous-plugin-variables` publishes the root as the auto-variable `projectRoot`, so a config no longer
   writes `projectRoot: "${sousDir}/.."` by hand, and every existing `${projectRoot}` keeps working.
 - Setting `projectRoot` in any `_vars` is an error saying that sous sets it.
 
-### `plugin-api`
+### `sous-plugin-api`
 
 | Concern | Owner |
 | --- | --- |
@@ -340,7 +344,7 @@ export interface Prompter {
 
 A front end hands its own `Reporter` and `Prompter` over with each chain it submits (S1, the engine).
 
-### The machine: `plugin-host`
+### The machine: `sous-plugin-host`
 
 Agent suggestion: these small services have one shared reason to exist, the machine sous runs on,
 so they share one plugin rather than one each.
@@ -362,70 +366,71 @@ tells an agent to read the README) comes from a `pointer-file` entity another pl
 plugins may name the same file; sous writes each file once. A file that already exists is never
 overwritten.
 
-Agent decision, which the user may overrule: `plugin-memories` adds a `pointer-file` entity for every `memory-target` whose
+Agent decision, which the user may overrule: `sous-plugin-memories` adds a `pointer-file` entity for every `memory-target` whose
 harness reads it in any directory, so a harness plugin declares its memory file once:
 
 ```ts
-// plugin-memories, in its config contributor
+// sous-plugin-memories, in its config contributor
 for (const target of config.entities("memory-target")) {
     if (target.readIn === "any-directory") {
         config.addEntity("pointer-file", { id: target.id, fileName: target.fileName });
     }
 }
 
-// With plugin-claude-code (CLAUDE.md) and sous-plugin-codex (AGENTS.md),
-// host.directories writes README.md, CLAUDE.md and AGENTS.md, each once.
+// With sous-plugin-claude-code (CLAUDE.md, read in any directory), host.directories writes
+// README.md and CLAUDE.md, each once. sous-plugin-codex's AGENTS.override.md is read at the
+// project root only, so it makes no pointer file.
 ```
 
 ### Shared building blocks
 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
-| Running git, one runner for every caller | `git.runner` | `plugin-git` | service, singleton |
-| Parsing a written ref into every reading it could have | `refs.parser` | `plugin-refs` | service; readings come from `ref-splitter` entities |
-| Which readings count in each place a ref is written | `refs.resolver` | `plugin-refs` | service; uses `ref-pruner` and `ref-lookup` entities |
-| Settling which of several matches a run proceeds with | `refs.picker` | `plugin-refs` | service; asks through the chain's `Prompter` |
-| `#` names (`#project`, `#memories`) and what each stands for | `hash-name` | `plugin-refs` | entity kind |
-| Repository locations (`github://...`) and canonical identity | `refs.locations` | `plugin-refs` | service; reads `repository-host` entities |
-| One parser per on-disk format: lockfile, recipe manifest, repo manifest, index file, links map, store entry, variable definition | `formats.<name>` | `plugin-formats` | service each, singleton |
-| Reading a manifest file from disk | `formats.manifests` | `plugin-formats` | service, singleton |
-| The content hash a release writes and the store checks | `formats.recipe-hash` | `plugin-formats` | service, singleton |
-| `${var}` substitution, the `_vars` loop, the four scope levels, auto-variables | `variables.resolver` | `plugin-variables` | service, config |
-| Extra sources of variables, such as recipe answers | `variable-source` | `plugin-variables` | entity kind |
-| Variable names and their spellings (`bareName`) | `variables.names` | `plugin-variables` | service, singleton |
-| Which values are secret, and hiding them | `variables.secrets` | `plugin-variables` | service, config |
-| Building a LiquidJS engine with every tag and filter | `liquid.engine` | `plugin-liquid` | service, factory |
-| Liquid tags and filters plugins add | `liquid-tag`, `liquid-filter` | `plugin-liquid` | entity kinds |
-| Which expression languages exist, Liquid first (S5, config expressions) | `expression-language` | `plugin-expressions` | entity kind |
-| Evaluating config expressions inside each layer, before it merges (S2, config building; S5, config expressions) | `expressions.evaluator` | `plugin-expressions` | service, used by the config-file contributors |
+| Running git, one runner for every caller | `git.runner` | `sous-plugin-git` | service, singleton |
+| Parsing a written ref into every reading it could have | `refs.parser` | `sous-plugin-refs` | service; readings come from `ref-splitter` entities |
+| Which readings count in each place a ref is written | `refs.resolver` | `sous-plugin-refs` | service; uses `ref-pruner` and `ref-lookup` entities |
+| Settling which of several matches a run proceeds with | `refs.picker` | `sous-plugin-refs` | service; asks through the chain's `Prompter` |
+| `#` names (`#project`, `#memories`) and what each stands for | `hash-name` | `sous-plugin-refs` | entity kind |
+| Repository locations (`github://...`) and canonical identity | `refs.locations` | `sous-plugin-refs` | service; reads `repository-host` entities |
+| One parser per on-disk format: lockfile, recipe manifest, repo manifest, index file, links map, store entry, variable definition | `formats.<name>` | `sous-plugin-formats` | service each, singleton |
+| Reading a manifest file from disk | `formats.manifests` | `sous-plugin-formats` | service, singleton |
+| The content hash a release writes and the store checks | `formats.recipe-hash` | `sous-plugin-formats` | service, singleton |
+| `${var}` substitution, the `_vars` loop, the four scope levels, auto-variables | `variables.resolver` | `sous-plugin-variables` | service, config |
+| Extra sources of variables, such as recipe answers | `variable-source` | `sous-plugin-variables` | entity kind |
+| Variable names and their spellings (`bareName`) | `variables.names` | `sous-plugin-variables` | service, singleton |
+| Which values are secret, and hiding them | `variables.secrets` | `sous-plugin-variables` | service, config |
+| Building a LiquidJS engine with every tag and filter | `liquid.engine` | `sous-plugin-liquid` | service, factory |
+| Liquid tags and filters plugins add | `liquid-tag`, `liquid-filter` | `sous-plugin-liquid` | entity kinds |
+| Which expression languages exist, Liquid first (S5, config expressions) | `expression-language` | `sous-plugin-expressions` | entity kind |
+| Evaluating config expressions inside each layer, before it merges (S2, config building; S5, config expressions) | `expressions.evaluator` | `sous-plugin-expressions` | service, used by the config-file contributors |
 
 `variables.resolver` is used by the config files (S2, config building) and by the compiler (per-target and per-output
-scopes), so it lives below both. `plugin-recipe-answers` adds the recipe answers as a
+scopes), so it lives below both. `sous-plugin-recipe-answers` adds the recipe answers as a
 `variable-source` entity, so config expressions can read answers (see "Recipe answers" in S2, config building) without
-`plugin-variables` knowing recipes exist.
+`sous-plugin-variables` knowing recipes exist.
 
 Ruled 2026-10-29: config expressions can use every `liquid-filter` entity plugins add. S5 (config
 expressions), "Expression Languages", says how a filter that is not loaded yet is handled.
 
-### Config files: `plugin-config-files` and `plugin-confd`
+### Config files: `sous-plugin-config-files` and `sous-plugin-confd`
 
 | Concern | Owner | Plugin | Kind |
 | --- | --- | --- | --- |
-| Finding `sous.config.*` | `config-files.main` | `plugin-config-files` | contributor |
-| Reading one config file (`.json`, `.jsonc`, `.yaml` parsed; `.js`, `.ts` imported) | `config-files.loader` | `plugin-config-files` | service, singleton |
-| Setting one value from the command line | `config.set` | `plugin-config-files` | intent |
-| Reading and writing `.sous/.env` and `.sous/.env.local` | `config-files.env` | `plugin-config-files` | service, singleton; adds to `ctx.env` |
-| Finding the `conf.d` files, one contributor per file (`confd/<file name>`) | `confd.files` | `plugin-confd` | contributor per file |
-| Reading patch files (`.patch.json`, `.patch.jsonl`) as contributors, in `conf.d` and beside `sous.config.*` (see "Patch files" in S2, config building) | `confd.files`, `config-files.main` | `plugin-confd`, `plugin-config-files` | contributor per file |
-| Surgical edits to the managed `conf.d/5xx` files (S2, config building) | `confd.managed` | `plugin-confd` | service, config |
+| Finding `sous.config.*` | `config-files.main` | `sous-plugin-config-files` | contributor |
+| Reading one config file (`.json`, `.jsonc`, `.yaml` parsed; `.js`, `.ts` imported) | `config-files.loader` | `sous-plugin-config-files` | service, singleton |
+| Setting one value from the command line | `config.set` | `sous-plugin-config-files` | intent |
+| Reading and writing `.sous/.env` and `.sous/.env.local` | `config-files.env` | `sous-plugin-config-files` | service, singleton; adds to `ctx.env` |
+| Finding the `conf.d` files, one contributor per file (`confd/<file name>`) | `confd.files` | `sous-plugin-confd` | contributor per file |
+| Reading patch files (`.patch.json`, `.patch.jsonl`) as contributors, in `conf.d` and beside `sous.config.*` (see "Patch files" in S2, config building) | `confd.files`, `config-files.main` | `sous-plugin-confd`, `sous-plugin-config-files` | contributor per file |
+| Surgical edits to the managed `conf.d/5xx` files (S2, config building) | `confd.managed` | `sous-plugin-confd` | service, config |
 
 The `sous.config.*` contributor and each `conf.d` contributor apply their file as one merge at the
 root, so each monitors the whole config automatically; any change in a pass re-runs them. Their
 apply orders put their patches after every plugin's: `sous.config.*` at 89900, each `conf.d` file at
-90000 plus the number its name starts with (90500 without one), so the files keep today's order (see "Order and stages" in S2, config building). `plugin-confd` uses `plugin-config-files`' loader to read each
+90000 plus the number its name starts with (90500 without one), so the files keep today's order (see "Order and stages" in S2, config building). `sous-plugin-confd` uses `sous-plugin-config-files`' loader to read each
 file.
 
-### Recipes: `plugin-recipes`
+### Recipes: `sous-plugin-recipes`
 
 The name is an agent decision, which the user may overrule; the concern is everything about getting recipes into a project.
 
@@ -436,7 +441,9 @@ The name is an agent decision, which the user may overrule; the concern is every
 | Trust: which repositories the project accepts recipes from; nothing inside an untrusted repository runs | `recipes.trust` | service, config; `repo.trust` intent |
 | Subscriptions (`conf.d/510`) | `subscription.add`, `.remove`, `.enable`, `.disable`, `.list` | intents |
 | Which recipes are active on this machine: reached from the subscriptions in force (S4, private GitLab and switched-off subscriptions) | `recipes.active` | service, config |
-| Which files a recipe publishes: its manifest `contents` globbed, each file with the base of the include pattern that matched it; plugins that consume a content kind (skills, memories) ask here and never glob a manifest themselves | `recipes.contents` | service, singleton |
+| Each active recipe's manifest added to the config (law L8): `contents` groups to the `recipes.contents` key, `edits` to `editor.edits`, expressions evaluated (S12) | `recipes.manifests` | contributor |
+| The kinds of content a manifest may publish; `skills`, `memories`, `prompts`, `config` registered here, others by plugins; an unregistered kind is an error once the config is built | `content-kind` | entity kind |
+| Which files a recipe publishes: a reader of the `recipes.contents` key, each file with the base of the include pattern that matched it; plugins that consume a content kind (skills, memories) ask here and never read a manifest themselves | `recipes.contents` | service, singleton |
 | Resolving subscriptions to versions, and keeping only what is reachable | `recipes.resolver` | service, config |
 | The lockfile | `recipes.lock` | service, config; `lock.rebuild` intent |
 | Downloading what subscribed recipes need, during config building, cached | `recipes.fetch` | contributor |
@@ -447,7 +454,7 @@ The name is an agent decision, which the user may overrule; the concern is every
 | Loading the plugins recipes ship (one bundled file each; types copied to `.sous/types/`) | `recipes.plugins` | contributor |
 | Links: the project and machine-wide links maps; editable checkouts | `repo.link`, `repo.unlink` | intents; `recipes.links` service |
 | How one recipe brings in another (`depends`, `subscribes`) | `recipes.declarations` | service, singleton |
-| The `~` sigil: which directory an include of a pinned recipe means | `compiler.namespace-resolver` | service, config; type declared by `plugin-compiler` |
+| The `~` sigil: which directory an include of a pinned recipe means | `compiler.namespace-resolver` | service, config; type declared by `sous-plugin-compiler` |
 | Index and lockfile lookups for refs | `ref-lookup` entities | entities |
 | Browsing namespaces and recipes | `catalog.list`, `catalog.show` | intents |
 | Planning an update of pinned versions | `recipe.update` | intent |
@@ -456,13 +463,13 @@ The name is an agent decision, which the user may overrule; the concern is every
 Removing a repository reports what it deletes from the compiler's state file (ruled 2026-10-29):
 
 ```ts
-// plugin-recipes, in its "repo.remove" intent
+// sous-plugin-recipes, in its "repo.remove" intent
 const files = ctx.services.get("compiler.state").filesFrom({ repository: input.repository });
 
 ctx.reporter.warn(`Removing ${input.repository} deletes ${files.length} built files.`);
 ```
 
-### Recipe answers: `plugin-recipe-answers`
+### Recipe answers: `sous-plugin-recipe-answers`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -475,14 +482,17 @@ ctx.reporter.warn(`Removing ${input.repository} deletes ${files.length} built fi
 | Checking an answer against its definition, with a time-limited regex | `recipe-answers.validator` | service, singleton |
 | Ref lookups over variables | `ref-lookup` entities | entities |
 
-### Compiler: `plugin-compiler`
+### Compiler: `sous-plugin-compiler`
 
 Ruled 2026-10-29: among the built-in plugins, only the compiler writes build outputs. Other plugins
-add compilation targets to the config.
+add compilation targets to the config. Changed 2026-11-18: the compiler writes the files Sous owns;
+the editor (below) edits files Sous does not own. See "Changes".
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
 | Compiling every target's templates into outputs | `compiler.compile` | intent, internal |
+| Listing every file a build writes (`compilation.files`), the one place a target's `entryGlob` is matched against the disk | `compiler.files` | contributor, config stage 1 |
+| Variables by output path (`compilation.varOverrides`), set on the listed files | `compiler.var-overrides` | contributor, config stage 1 |
 | Include resolution: include lines and `{% render %}` paths, `@`, `~` and `#` | `compiler.includes` | service, config |
 | Aliases | `compiler.aliases` | service, config |
 | Compilation settings: targets, entry globs, `content` targets, outputs, runtime context | the `compilation` config key | `config-key` entity |
@@ -490,14 +500,14 @@ add compilation targets to the config.
 | The state file: every file sous wrote, and which recipe it came from | `compiler.state` | service, config |
 | Writing outputs: overwrite and take ownership, unless `compilation.overwriteUntracked` is `false`; back up content sous did not produce before overwriting or removing it | `compiler.writer` | service, config |
 | Pruning outputs no target produces any more | `compiler.prune` | intent, internal |
-| The namespace resolver the `~` sigil uses | `compiler.namespace-resolver` | service type, implemented by `plugin-recipes` |
+| The namespace resolver the `~` sigil uses | `compiler.namespace-resolver` | service type, implemented by `sous-plugin-recipes` |
 | Announcing what a compile wrote | `compiler.wrote` | event |
 
 A compilation target may give its source as `content`, a template string, instead of `entryGlob` or
 `entryPoint`. Such a target needs an `id`, which names the source in errors (ruled 2026-10-29).
 
 ```jsonc
-// What `sous config show compilation.targets` prints for a target plugin-memories added
+// What `sous config show compilation.targets` prints for a target sous-plugin-memories added
 {
     "id": "memories/claude-code",
     "content": "@/home/luke/.sous/cache/.../workflow/github-projects/memories/board.md\n\n@...",
@@ -516,7 +526,55 @@ name is never silent ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
 /home/luke/code/acme/.claude/skills/review/SKILL.md is written by this project's own target, so the copy from the recipe workflow/review is not written.
 ```
 
-### Build: `plugin-build`
+### The editor: `sous-plugin-editor`
+
+Edits to files Sous does not own: surgical, recorded, undone when no longer declared, and checked by
+assertions (S9, the editor).
+
+| Concern | Owner | Kind |
+| --- | --- | --- |
+| The master list of edits and where the history is kept | the `editor` config key (`editor.edits`) | `config-key` entity |
+| Applying the list, undoing what is no longer declared, the assertions | `editor.apply` | intent, internal; run by `build` after the compiler |
+| Editing one file directly | `editor` | service, config |
+| The record of applied edits | `.sous/sous.edits.json` | file, git-ignored |
+Every output file is its own entry in the config (law L8, goal G10). The `compiler.files` contributor
+runs in config stage 1, after stage 0 has added every target, matches each target's `entryGlob`
+against the disk, and sets `compilation.files`: one entry per output of each source, with its source
+and its destination from before any transform. The compiler compiles those entries and never matches a
+glob itself. The targets stay in the config as written. What listing found wrong (a variable no one
+sets, a glob that matches nothing) is kept under `compilation.listing` and reported when a build runs,
+not on every command. A target a later stage adds has no entries, and the build reports it as never
+listed.
+
+```jsonc
+// sous config get compilation.files (excerpt)
+[
+    {
+        "target": "projectSkills",
+        "targetIndex": 0,
+        "source": "/home/luke/code/acme/.sous/skills/review/SKILL.tpl.md",
+        "output": 0,
+        "destination": "/home/luke/code/acme/.claude/skills/review/SKILL.md",
+        "_vars": { "tool": "claude" }
+    }
+]
+```
+
+The `compiler.var-overrides` contributor then applies `compilation.varOverrides`: each rule's `match`
+and `exclude` (one entry or a list; a glob, or a regular expression written between two slashes, as
+`recipes.memories.first` takes them) is matched against each entry's destination, and the matching
+rules' `_vars` are set on the entry, a later rule winning for a name both set. The compiler lays an
+entry's `_vars` over the output's own scope, so a rule wins over the output's `_vars`. Matching a glob
+or a regular expression list is one implementation, in `sous-plugin-host` (`compilePatternList`), used here
+and by `sous-plugin-memories`.
+
+While a template renders, it reads `sousOutputPath` and `sousOutputDir` (the output's destination and
+its directory, from before any transform; a file included into the output sees the same),
+`host.platform`, and `harness.id` (the output's `harness`, or `""`). An output's `_if` is removed in
+favor of config expressions. A file that is not a template and includes nothing is copied byte for
+byte, and an executable source gives an executable output, templated or not.
+
+### Build: `sous-plugin-build`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -529,7 +587,7 @@ name is never silent ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
 | The PID file | `build.pid` | service, singleton |
 | The runtime context file (git branch, task file) | `build.runtime-context` | service, config |
 
-### Skills: `plugin-skills`
+### Skills: `sous-plugin-skills`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -547,7 +605,7 @@ Skipped the skills of 3 recipes: nothing says where skills go.
   Set recipes.skills.outputs in the config, or enable an agent plugin (sous-plugin-claude-code).
 ```
 
-### Memories: `plugin-memories`
+### Memories: `sous-plugin-memories`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -564,7 +622,7 @@ recipes' memories, the config's selection, the target's `filter()`, then its `fo
 Sous does not report what a filter left out; a plugin that wants the user to know says so itself.
 
 ```ts
-// plugin-memories, in its config contributor
+// sous-plugin-memories, in its config contributor
 contribute(config) {
     for (const target of config.entities("memory-target")) {
         const memories = selectMemories(config).filter((m) => target.filter?.(m) ?? true);
@@ -581,7 +639,7 @@ contribute(config) {
 }
 ```
 
-### Harnesses: `plugin-harnesses`
+### Harnesses: `sous-plugin-harnesses`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -595,11 +653,11 @@ each optional. Anything that depends on the config, such as a user's launch argu
 the method when it runs:
 
 ```ts
-// plugin-claude-code
+// sous-plugin-claude-code
 sous.entities.add("harness", {
-    id: "claude",
+    id: "claude-code",
     launch: (args, ctx) => {
-        const settings = ctx.config.get("tools.claude");
+        const settings = ctx.config.get("tools.claude-code");
 
         return spawnInteractive(settings?.command ?? "claude", [...(settings?.args ?? []), ...args], ctx);
     },
@@ -610,7 +668,7 @@ sous.entities.add("harness", {
 
 A tool written under `tools` in the config launches with no plugin at all (G8, works without any one agent tool).
 
-### Authoring: `plugin-authoring`
+### Authoring: `sous-plugin-authoring`
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
@@ -626,17 +684,18 @@ After the scaffold, `repo.init` runs `init` in the same directory, passing its a
 recipe repository is also a sous project; a directory that already holds a sous config keeps it, and
 `init` is not run ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
 
-### Project setup and updates: `plugin-init`, `plugin-update`
+### Project setup and updates: `sous-plugin-init`, `sous-plugin-update`
 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
-| Setting a project up: importing its existing agent files, scaffolding its `.sous/`, the first build | `init` | `plugin-init` | intent |
-| Updating sous itself (`sous update`) | `update` | `plugin-update` | intent |
-| Installing a plugin a recipe requires (`--install-plugins`) | `plugins.install` | `plugin-update` | intent |
-| Package managers: detecting one, listing installed packages, installing | `package-manager` | `plugin-update` | entity kind |
-| Scanning installed packages for plugins, when the config asks for it | `update.scan` | `plugin-update` | contributor; adds to the `plugins` key |
+| Setting a project up: importing its existing agent files, scaffolding its `.sous/`, the first build | `init` | `sous-plugin-init` | intent |
+| Installing the git hooks that build Sous's output in a new worktree (`sous init hooks`, S14) | `init.hooks` | `sous-plugin-init` | intent; asks `package-manager` for the install command |
+| Upgrading sous itself (`sous upgrade`) | `upgrade` | `sous-plugin-update` | intent |
+| Installing a plugin a recipe requires (`--install-plugins`) | `plugins.install` | `sous-plugin-update` | intent |
+| Package managers: detecting one, listing installed packages, installing, a project's install command and the script run after it | `package-manager` | `sous-plugin-update` | entity kind |
+| Scanning installed packages for plugins, when the config asks for it | `update.scan` | `sous-plugin-update` | contributor; adds to the `plugins` key |
 
-### Showing the engine's state: `plugin-inspect`
+### Showing the engine's state: `sous-plugin-inspect`
 
 Agent suggestion: these intents show what the engine built, rather than any one plugin's data, so
 they share one plugin.
@@ -647,20 +706,20 @@ they share one plugin.
 | Every plugin, and what it registered, wrapped or replaced | `plugins.show` | intent |
 | Every timing of the last run | `timings.show` | intent |
 
-### Front ends: `plugin-cli`, `plugin-mcp`
+### Front ends: `sous-plugin-cli`, `sous-plugin-mcp`
 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
-| Turning argv into an intent: the command tree, groups, aliases, flags, `--help`, completion and "did you mean", generated from every intent's declaration, on Node's `util.parseArgs` (S1, the engine) | `cli.commands` | `plugin-cli` | service, config |
-| Arguments every command accepts, and command groups' help | `cli-global-argument`, `cli-group` | `plugin-cli` | entity kinds |
-| `--debug` and `--log-level <level>` | `cli-global-argument` entities | `plugin-cli` | entities |
-| Whether a prompt is possible in this run | `cli.interactivity` | `plugin-cli` | service, singleton |
-| Terminal output: how each message, payload and result looks (colors, wrapping, tables); results to standard output, everything else to standard error | `TerminalReporter` | `plugin-cli` | a `Reporter` |
-| Terminal prompts | `TerminalPrompter` | `plugin-cli` | a `Prompter` |
-| Turning an error into a message and an exit code | `cli.errors` | `plugin-cli` | service, singleton |
-| `sous --version` | `version` | `plugin-cli` | intent |
-| The MCP server: tools generated from every intent's input schema | `mcp.serve` | `plugin-mcp` | intent, background |
-| MCP output and questions | `McpReporter`, `ElicitationPrompter` | `plugin-mcp` | a `Reporter` and a `Prompter` |
+| Turning argv into an intent: the command tree, groups, aliases, flags, `--help`, completion and "did you mean", generated from every intent's declaration, on Node's `util.parseArgs` (S1, the engine) | `cli.commands` | `sous-plugin-cli` | service, config |
+| Arguments every command accepts, and command groups' help | `cli-global-argument`, `cli-group` | `sous-plugin-cli` | entity kinds |
+| `--debug` and `--log-level <level>` | `cli-global-argument` entities | `sous-plugin-cli` | entities |
+| Whether a prompt is possible in this run | `cli.interactivity` | `sous-plugin-cli` | service, singleton |
+| Terminal output: how each message, payload and result looks (colors, wrapping, tables); results to standard output, everything else to standard error | `TerminalReporter` | `sous-plugin-cli` | a `Reporter` |
+| Terminal prompts | `TerminalPrompter` | `sous-plugin-cli` | a `Prompter` |
+| Turning an error into a message and an exit code | `cli.errors` | `sous-plugin-cli` | service, singleton |
+| `sous --version` | `version` | `sous-plugin-cli` | intent |
+| The MCP server: tools generated from every intent's input schema | `mcp.serve` | `sous-plugin-mcp` | intent, background |
+| MCP output and questions | `McpReporter`, `ElicitationPrompter` | `sous-plugin-mcp` | a `Reporter` and a `Prompter` |
 
 Every front end can do anything another can, because they all submit the same intents (ruled
 2026-10-28). How a result is shown belongs to the plugin that owns it: its intent returns `IntentOutputs` built
@@ -668,7 +727,7 @@ from its data (a `Table` for the catalog), and each front end draws them (S1, "W
 returns"). The CLI knows no domain.
 
 ```ts
-// plugin-mcp
+// sous-plugin-mcp
 sous.intents.add({
     intent: "mcp.serve",
     background: true,
@@ -695,13 +754,13 @@ refactor.
 
 | Plugin | Adds |
 | --- | --- |
-| `plugin-npm` | a `package-manager` entity: detect npm, list installed packages, install |
-| `plugin-pnpm` | a `package-manager` entity: the same for pnpm |
-| `plugin-yarn` | a `package-manager` entity: the same for Yarn, plus Yarn Plug'n'Play's resolver for plugin lookup |
-| `plugin-github` | a `repository-host` entity: reading indexes, the token (`GITHUB_TOKEN`, then `gh`), proposing changes, the CI workflow for a scaffold |
-| `plugin-gitlab` | a `repository-host` entity: the same for GitLab, with the fixes S4 (private GitLab and switched-off subscriptions) makes to the index address and the token |
-| `plugin-local` | a `repository-host` entity: a repository on disk |
-| `plugin-claude-code` | a `harness` (`claude`), a `skill-target` (`.claude/skills`) and a `memory-target` (`CLAUDE.md`) |
+| `sous-plugin-npm` | a `package-manager` entity: detect npm, list installed packages, install |
+| `sous-plugin-pnpm` | a `package-manager` entity: the same for pnpm |
+| `sous-plugin-yarn` | a `package-manager` entity: the same for Yarn, plus Yarn Plug'n'Play's resolver for plugin lookup |
+| `sous-plugin-github` | a `repository-host` entity: reading indexes, the token (`GITHUB_TOKEN`, then `gh`), proposing changes, the CI workflow for a scaffold |
+| `sous-plugin-gitlab` | a `repository-host` entity: the same for GitLab, with the fixes S4 (private GitLab and switched-off subscriptions) makes to the index address and the token |
+| `sous-plugin-local` | a `repository-host` entity: a repository on disk |
+| `sous-plugin-claude-code` | a `harness` (`claude`), a `skill-target` (`.claude/skills`) and a `memory-target` (`CLAUDE.md`) |
 
 ## Where Each Setting Goes
 
@@ -711,12 +770,12 @@ config through `ctx.config`. None of them reads a config file.
 
 | Settings | Owner | Package |
 | --- | --- | --- |
-| Aliases | `compiler.aliases` | `plugin-compiler` |
-| Compilation (targets, outputs, runtime context, `overwriteUntracked`) | the `compilation` key | `plugin-compiler` |
-| Tools | the `tools` key | `plugin-harnesses` |
-| Watch (poll interval, extra paths) | the `watch` key | `plugin-build` |
-| Skill destinations | `recipes.skills.outputs` | `plugin-skills` |
-| Memory selection | `recipes.memories` | `plugin-memories` |
+| Aliases | `compiler.aliases` | `sous-plugin-compiler` |
+| Compilation (targets, outputs, runtime context, `overwriteUntracked`) | the `compilation` key | `sous-plugin-compiler` |
+| Tools | the `tools` key | `sous-plugin-harnesses` |
+| Watch (poll interval, extra paths) | the `watch` key | `sous-plugin-build` |
+| Skill destinations | `recipes.skills.outputs` | `sous-plugin-skills` |
+| Memory selection | `recipes.memories` | `sous-plugin-memories` |
 
 ## Where Each Concern Lives Before the Refactor
 
@@ -827,9 +886,9 @@ Today:
   its exports, because the ladder reaches config discovery, which reaches back into refs through the
   recipe formats.
 
-After: the two variable lookups are lookups over variables, so they move to `plugin-recipe-answers`
-and are added as `ref-lookup` entities. `plugin-refs` knows nothing of variables or answers;
-`plugin-recipe-answers` depends on `plugin-refs`, one way.
+After: the two variable lookups are lookups over variables, so they move to `sous-plugin-recipe-answers`
+and are added as `ref-lookup` entities. `sous-plugin-refs` knows nothing of variables or answers;
+`sous-plugin-recipe-answers` depends on `sous-plugin-refs`, one way.
 
 ### vars and repos
 
@@ -845,9 +904,9 @@ Today:
 
 After:
 
-- Reading manifests moves to `plugin-formats` (`formats.manifests`); managed layers move to
-  `plugin-confd` (`confd.managed`). `plugin-recipe-answers` reads active recipes from
-  `plugin-recipes`, one way.
+- Reading manifests moves to `sous-plugin-formats` (`formats.manifests`); managed layers move to
+  `sous-plugin-confd` (`confd.managed`). `sous-plugin-recipe-answers` reads active recipes from
+  `sous-plugin-recipes`, one way.
 - `renderFacts`, `formatQuestionPlan` and the update plan become the outputs of the intents that
   own their data.
 - Subscribing no longer asks anything itself. The `subscription.add` intent subscribes, then runs
@@ -867,14 +926,14 @@ Today:
 
 After:
 
-- Recipe targets become contributors in `plugin-skills` and `plugin-memories`, which add
+- Recipe targets become contributors in `sous-plugin-skills` and `sous-plugin-memories`, which add
   compilation targets to the config.
-- `inferGlobBase` and `realPathInside` move to `plugin-host` (`host.globs`).
-- `plugin-compiler` declares the `compiler.namespace-resolver` service type and
-  `formatNamespaceProblem`, which describes a failed include; `plugin-recipes` registers the
+- `inferGlobBase` and `realPathInside` move to `sous-plugin-host` (`host.globs`).
+- `sous-plugin-compiler` declares the `compiler.namespace-resolver` service type and
+  `formatNamespaceProblem`, which describes a failed include; `sous-plugin-recipes` registers the
   implementation.
 - What removing a repository deletes is read from the compiler's state file, which records every
-  file each recipe's outputs wrote, instead of recomputing output paths in `plugin-recipes`.
+  file each recipe's outputs wrote, instead of recomputing output paths in `sous-plugin-recipes`.
 
 ### refs and repos
 
@@ -887,10 +946,10 @@ Today:
 - repos imports refs from twelve modules, among them `resolver.ts`, `lock-service.ts`,
   `locked-recipes.ts` and `subscription-service.ts`.
 
-After: `plugin-refs` reads the `repository-host` entities, a kind `plugin-recipes` defines;
+After: `sous-plugin-refs` reads the `repository-host` entities, a kind `sous-plugin-recipes` defines;
 `ProviderId`, a closed list of three hosts today, becomes an entity's string id. Repository identity
-moves into `plugin-refs` with locations. The index lookups move to `plugin-recipes`, added as
-`ref-lookup` entities, and `plugin-memories` adds the `#memories` name. `plugin-refs` depends on
+moves into `sous-plugin-refs` with locations. The index lookups move to `sous-plugin-recipes`, added as
+`ref-lookup` entities, and `sous-plugin-memories` adds the `#memories` name. `sous-plugin-refs` depends on
 neither.
 
 Agent suggestion: reading `repository-host` entities defined by a plugin above it is fine, because an
@@ -906,9 +965,9 @@ Today:
 - `src/lib/repos/formats/lockfile.ts` imports `repoIdentity` and `requireProvider` from repos, to
   work out a missing identity while parsing.
 
-After: the lookups have moved to `plugin-recipes`, so `plugin-formats` uses `plugin-refs` one way.
+After: the lookups have moved to `sous-plugin-recipes`, so `sous-plugin-formats` uses `sous-plugin-refs` one way.
 Parsing a lockfile never works out an identity; `recipes.lock` does that after parsing, so
-`plugin-formats` stays pure.
+`sous-plugin-formats` stays pure.
 
 ### config and the features above it
 
@@ -920,9 +979,9 @@ Today the config code imports the features that depend on it:
 - `src/lib/settings.ts` imports `src/lib/repos/defaults.ts`, `src/lib/vars/answers.ts`,
   `src/lib/markdown-compiler.ts`, `src/lib/include-resolver.ts` and the ref resolver's `#` names.
 
-After: `plugin-recipes` adds its layers through its own contributors and its keys as `config-key`
-entities; `plugin-recipe-answers` adds recipe answers as a `variable-source` entity; compilation,
-aliases, tools and watch settings move to their plugins. `plugin-config-files` depends on none of
+After: `sous-plugin-recipes` adds its layers through its own contributors and its keys as `config-key`
+entities; `sous-plugin-recipe-answers` adds recipe answers as a `variable-source` entity; compilation,
+aliases, tools and watch settings move to their plugins. `sous-plugin-config-files` depends on none of
 them.
 
 ### The compiler and the build
@@ -942,7 +1001,7 @@ Today services import presentation, and presentation imports services: about twe
 imports the error classes.
 
 After: presentation lives only in the front-end plugins. Services report through the chain's
-`Reporter` and ask through its `Prompter` (L3, services never print, prompt or exit). The sous-directory helper moves to `plugin-host`.
+`Reporter` and ask through its `Prompter` (L3, services never print, prompt or exit). The sous-directory helper moves to `sous-plugin-host`.
 
 ### repos and authoring
 
@@ -950,32 +1009,32 @@ Today `src/lib/repos/contribute.ts` imports `FORK_REMOTE` from
 `src/lib/repos/release/submit-service.ts`, and the `src/lib/repos/index.ts` barrel exports the
 recipe-repository scaffold, though nothing outside its own test imports the barrel.
 
-After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), which depends on
-`plugin-recipes`. The barrel goes.
+After: contributing moves to `sous-plugin-authoring` (the `repo.contribute` intent), which depends on
+`sous-plugin-recipes`. The barrel goes.
 
 ## Misfiled Modules
 
 | Module | What it is | Where it goes |
 | --- | --- | --- |
-| `src/lib/repos/recipe-targets.ts` | turning recipe content into compilation targets | `plugin-skills` and `plugin-memories`, as contributors |
-| `src/lib/repos/catalog-display.ts` | a view | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
-| `src/lib/repos/update-plan.ts` | a view (it says so: "It is pure: it formats what it is handed") | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
-| `src/services/ref-resolver/ref-report.ts` | a view | `plugin-refs` reports it; `plugin-cli` draws it |
-| `src/lib/vars/display.ts`, `report.ts`, `question-plan.ts` | views | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
-| `src/lib/version-report.ts` | a view | the `version` intent's outputs (`plugin-cli`) |
-| The reporting half of `src/lib/build-preparation.ts` | a view | `plugin-build`: `build.prepare` reports events |
-| `colorizeJson`, `renderJson` in `src/lib/config-inspect.ts` | a view | `plugin-cli` |
-| `src/utils/sous-directory.ts` | a file-system service, not presentation | `plugin-host`, `host.directories` |
-| `src/lib/repos/managed-layer.ts` | a `conf.d` concern | `plugin-confd`, `confd.managed` |
-| `src/lib/repos/providers/index-cache.ts` | the index cache, filed with the providers | `plugin-recipes`, `recipes.index-cache` |
-| `src/lib/repos/providers/{github,gitlab,local}.ts` | host-specific code | `plugin-github`, `plugin-gitlab`, `plugin-local` |
-| `src/lib/self-update/managers.ts` | package-manager-specific code | `plugin-npm`, `plugin-pnpm`, `plugin-yarn` |
-| The GitHub Actions workflow in `src/lib/repos/scaffold/templates.ts` | host-specific | `plugin-github` |
-| The `.claude/skills` default in `src/lib/repos/recipe-targets.ts` | tool-specific | `plugin-claude-code`, as a `skill-target` entity |
+| `src/lib/repos/recipe-targets.ts` | turning recipe content into compilation targets | `sous-plugin-skills` and `sous-plugin-memories`, as contributors |
+| `src/lib/repos/catalog-display.ts` | a view | the outputs of the intents that own the data (`sous-plugin-recipes`, `sous-plugin-recipe-answers`) |
+| `src/lib/repos/update-plan.ts` | a view (it says so: "It is pure: it formats what it is handed") | the outputs of the intents that own the data (`sous-plugin-recipes`, `sous-plugin-recipe-answers`) |
+| `src/services/ref-resolver/ref-report.ts` | a view | `sous-plugin-refs` reports it; `sous-plugin-cli` draws it |
+| `src/lib/vars/display.ts`, `report.ts`, `question-plan.ts` | views | the outputs of the intents that own the data (`sous-plugin-recipes`, `sous-plugin-recipe-answers`) |
+| `src/lib/version-report.ts` | a view | the `version` intent's outputs (`sous-plugin-cli`) |
+| The reporting half of `src/lib/build-preparation.ts` | a view | `sous-plugin-build`: `build.prepare` reports events |
+| `colorizeJson`, `renderJson` in `src/lib/config-inspect.ts` | a view | `sous-plugin-cli` |
+| `src/utils/sous-directory.ts` | a file-system service, not presentation | `sous-plugin-host`, `host.directories` |
+| `src/lib/repos/managed-layer.ts` | a `conf.d` concern | `sous-plugin-confd`, `confd.managed` |
+| `src/lib/repos/providers/index-cache.ts` | the index cache, filed with the providers | `sous-plugin-recipes`, `recipes.index-cache` |
+| `src/lib/repos/providers/{github,gitlab,local}.ts` | host-specific code | `sous-plugin-github`, `sous-plugin-gitlab`, `sous-plugin-local` |
+| `src/lib/self-update/managers.ts` | package-manager-specific code | `sous-plugin-npm`, `sous-plugin-pnpm`, `sous-plugin-yarn` |
+| The GitHub Actions workflow in `src/lib/repos/scaffold/templates.ts` | host-specific | `sous-plugin-github` |
+| The `.claude/skills` default in `src/lib/repos/recipe-targets.ts` | tool-specific | `sous-plugin-claude-code`, as a `skill-target` entity |
 | The `CLAUDE.md` and `AGENTS.md` pointer files in `src/utils/sous-directory.ts` | tool-specific | `pointer-file` entities, from memory targets |
-| The contract half of `src/lib/repos/namespace-resolver.ts` | an interface the compiler consumes | `plugin-compiler`'s types; its test-only `StaticNamespaceResolver` goes to the test helpers |
-| `generateRuntimeSessionContext` in `src/lib/markdown-compiler.ts` | a product feature inside the compiler | `plugin-build`, `build.runtime-context` |
-| `resolveAliases`, `resolveCompilation`, `resolveTools`, `resolveWatchConfig` in `src/lib/settings.ts` | feature code in the config module | `plugin-compiler`, `plugin-harnesses`, `plugin-build` |
+| The contract half of `src/lib/repos/namespace-resolver.ts` | an interface the compiler consumes | `sous-plugin-compiler`'s types; its test-only `StaticNamespaceResolver` goes to the test helpers |
+| `generateRuntimeSessionContext` in `src/lib/markdown-compiler.ts` | a product feature inside the compiler | `sous-plugin-build`, `build.runtime-context` |
+| `resolveAliases`, `resolveCompilation`, `resolveTools`, `resolveWatchConfig` in `src/lib/settings.ts` | feature code in the config module | `sous-plugin-compiler`, `sous-plugin-harnesses`, `sous-plugin-build` |
 | The domain rules in `src/commands/repo/release.ts`, `repo/link.ts`, `repo/unlink.ts`, `lock/rebuild.ts` | rules living in commands | the `repo.release`, `repo.link`, `repo.unlink` and `lock.rebuild` intents |
 
 ## Open Questions
@@ -984,16 +1043,123 @@ None.
 
 ## Changes
 
+### 2026-11-18: The built-in plugins are `@sous-io/sous-plugin-*`; their old names still work
+
+Luke's ruling (2026-11-17): "We will rename the package syntax to `@sous-io/sous-plugin-*` and the
+folders to `sous-plugin-*`." Every built-in plugin moved from `@sous-io/plugin-<name>` in
+`packages/plugin-<name>` to `@sous-io/sous-plugin-<name>` in `packages/sous-plugin-<name>`.
+The plugin interface moved too, to `@sous-io/sous-plugin-api` (S3, 2026-11-19). Because a project's config names
+built-in plugins, core reads the old name as the new one in `plugins.options` (the new name wins
+when both are written), `plugins.disabled`, `services.replace` and `intents.replace`. The agent's
+choice of how old names keep working, in the finishing pass.
+
+### 2026-11-18: Codex is a built-in plugin
+
+`sous-plugin-codex` is a new built-in plugin (S16), loaded right after `sous-plugin-claude-code`. This
+replaces the line "Codex, and every other agent tool, is a separately installed plugin": Luke ruled
+that the Codex work "will be done as part of this body of work" (2026-11-17), and the brief for the
+build made it built in. It adds nothing until a project turns Codex on, so a project that does not
+use Codex pays nothing for it. Every other agent tool is still a separately installed plugin.
+
+### 2026-11-18: Claude Code owns its kinds, its memories file and its migrations
+
+Built from Luke's rulings of 2026-11-15 to 2026-11-18; the design is S15.
+
+- `sous-plugin-claude-code` now owns, besides its `harness` (id `claude-code`, was `claude`) and `skill-target`: the
+  `memory-target` for `.claude/rules/SOUS-MEMORIES.md` (its `memoriesOutputPath` option), the `CLAUDE.md`
+  `pointer-file` entity, the content kinds `claude-code-plugin` and `claude-code-agent` with the contributor that
+  turns them into compilation targets, the `/reload-plugins` line, and the two 1.1.0 migrations (`tools.claude`
+  renamed, the memories file moved or kept). Luke: "its better to be overly verbose than regret inspecificity
+  later."
+- It therefore depends on `sous-plugin-recipes` (`recipes.contents`, the `content-kind` kind), `sous-plugin-compiler`
+  (types, the events it listens to), `sous-plugin-migrations` (`sous.migrations`), and, for types only,
+  `sous-plugin-build`, `sous-plugin-config-files` and `sous-plugin-confd`. It still sits on top: nothing depends on it.
+- `sous-plugin-memories` no longer chooses which memories a file takes or formats them: the `memory-target` entity is
+  now `{ id, harness?, outputPath, prependWith?, backupExisting? }`, the file's content comes from
+  `.sous/MEMORIES.tpl.md` or the default source, and the `pointer-file` it used to add for `readIn:
+  "any-directory"` moves to `sous-plugin-claude-code`.
+- `sous-plugin-skills` and `sous-plugin-memories` mark each output with the harness of the entity it was written for.
+- The compiler gains `backupExisting` on an output, and stops counting an output a transform left out as
+  produced, so the prune removes an earlier copy.
+
+### 2026-11-18: Handlers
+
+`sous-plugin-handlers` is a new built-in plugin, owning handlers (S13): functions a recipe or plugin
+provides for a purpose. It sits above `sous-plugin-host` and `sous-plugin-recipes`, and loads after
+`sous-plugin-memories`, before `sous-plugin-build`. Approved by Luke with the handlers design (2026-11-17 and
+2026-11-18).
+
+### 2026-11-18: The compiler is not the only built-in plugin that writes to the project
+
+The ruling of 2026-10-29, "among the built-in plugins, only the compiler writes build outputs",
+described the build as it was and was never meant as a rule for all time:
+
+> "The compiler is the only thing that builds outputs, today, and we have intentionally pushed in
+> that direction. However, I don't recall deciding that the compiler should be the _only_ thing
+> that outputs, forever."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-17)
+
+The new built-in `sous-plugin-editor` edits files Sous does not own (S9, the editor). The line
+between the two is ownership: the compiler writes the files Sous owns, overwriting them and deleting
+one nothing produces any more; the editor changes only the values it was told to change in a file
+the project or another tool owns, and undoes exactly that. Other plugins still add compilation
+targets for files Sous owns, and add entries to `editor.edits` for files it does not. Approved by
+Luke on 2026-11-17, when he agreed a separate plugin carries out declared edits.
+
+### 2026-11-18: Outputs are config entries; variables by output path; what templates read
+
+Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18.
+
+> "So issue 2 should include moving the glob expansion out to a contributor, with glob-based variable
+> overrides becoming a little added bonus."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-16)
+
+> "I'm definitely wanting to drop that `_if` logic in favor of conditionals"
+>
+>   -- **Luke Chavers** in an agent session (2026-11-18)
+
+**What changed.** The compiler gains two contributors, `compiler.files` and `compiler.var-overrides`,
+both in config stage 1. Matching a target's `entryGlob` moves from the compile to config building
+(the concern keeps its owner, L1; only the time changes), so every output file is an entry under
+`compilation.files` and the compiler compiles those entries. `compilation.varOverrides` sets variables
+by output path; a rule wins over the output's own `_vars`, and a later rule wins over an earlier one.
+The glob-or-regular-expression list matcher moves from `sous-plugin-memories` to `sous-plugin-host`, so both
+plugins use one implementation. An output may carry `harness`; templates read `harness.id`,
+`host.platform`, `sousOutputPath` and `sousOutputDir`. An output's `_if` is removed. Files that need no
+rendering are copied as bytes, and an executable source stays executable. In watch mode, a file added
+to or removed from a glob target's folder rebuilds the config.
+
+**Why stage 1.** Listing must see every target, and in stage 0 it ran on every pass in which a target
+changed (three times on this repository) and its result made the user's config files, which watch the
+whole config, run again. In stage 1 it runs once.
+
+### 2026-11-18: `init.hooks`; `sous-plugin-init` depends on `sous-plugin-update`
+
+`sous-plugin-init` gains the `init.hooks` intent (`sous init hooks`, S14), which asks the
+`package-manager` entities which manager owns the project, through `sous-plugin-update`'s `ownerOf`, and
+for the install command and the script run after an install, two new members of the entity. So
+`sous-plugin-init` depends on `sous-plugin-update`, which moves a row down. Approved with S14, from Luke's
+ruling: "I want a new command: `sous init hooks` that all of this is packaged in."
+
+### 2026-11-18: Manifests as config
+
+The `recipes.manifests` contributor and the `content-kind` entity kind join sous-plugin-recipes, and the
+`recipes.contents` service becomes a reader of the `recipes.contents` config key (S12). Reason: law
+L8, "manifests as config", ruled by Luke on 2026-11-16 ("One plugin, perhaps `sous-plugin-recipes`, adds
+every manifest to the config. Then, another plugin ... responds to those new entries.").
+
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 
 `init` now imports a project's existing agent files before its first build, and `repo.init` runs
-`init` after its scaffold, so `plugin-authoring` depends on `plugin-init` and sits above it. A
+`init` after its scaffold, so `sous-plugin-authoring` depends on `sous-plugin-init` and sits above it. A
 recipe's output now yields to a target from the project's config that writes the same file, as a
 plugin's already did, with a warning (ADR 0024).
 
 ### 2026-10-30: No views; intents return outputs
 
-The views of domain data no longer belong to `plugin-cli`: each intent returns `IntentOutputs`
+The views of domain data no longer belong to `sous-plugin-cli`: each intent returns `IntentOutputs`
 built from its data, and `TerminalReporter` draws them (ADR 0022).
 
 ### 2026-10-30: Reporting is a level and a style

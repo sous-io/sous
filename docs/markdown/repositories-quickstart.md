@@ -27,8 +27,9 @@ Everything else has a default: skills compile into `<project root>/.claude/skill
 Claude Code plugin built into sous puts them), and the lockfile, the state file and the `conf.d`
 files sous writes land under `.sous/`. Outside a
 walkthrough, `sous init` writes a fuller starting point (it imports the project's existing
-`CLAUDE.md`, `AGENTS.md` and skills, and writes a commented config, the source both instruction
-files compile from, the env files and the ignore blocks) and runs the first build for you; the one-line config is
+`CLAUDE.md`, `AGENTS.md` and skills, and writes a commented `sous.config.jsonc`, the memories
+source `.sous/MEMORIES.tpl.md`, the env files and the ignore blocks, and offers the git hooks) and runs the first
+build for you; the one-line config is
 used here so that each step shows one thing. `SOUS_HOME` puts
 the machine-wide store somewhere throwaway, so this walkthrough leaves your real one alone. See
 [The config file](configuration.md) for the keys you will want later.
@@ -174,8 +175,8 @@ sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
   wrote .gitignore
 ```
 
-The output goes on with what `sous init` writes and with its first build, which compiles
-`CLAUDE.md` and `AGENTS.md`. The scaffold validates as written, and every file it leaves is heavily commented. `sous.repo.yaml`
+The output goes on with what `sous init` writes and with its first build, which compiles the
+memories file. The scaffold validates as written, and every file it leaves is heavily commented. `sous.repo.yaml`
 declares the namespaces and lists every recipe folder; each folder's `sous.recipe.yaml` is one
 recipe, with its own version.
 

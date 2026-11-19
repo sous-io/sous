@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo, gitIn, writeFixtureFile } from "../utils/fixture-repo.js";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 import { binPath } from "../utils/sous-bin.js";
 
@@ -399,9 +399,11 @@ describe("a compile error fails the build", () => {
   /**
    * The gh-127 reproduction: a clean build, then an include of a missing
    * file. The build still compiles the other target, names the error, exits
-   * 1, and AGENTS.md keeps the contents of the last good build.
+   * 1, and AGENTS.md keeps the contents of the last good build. A plain
+   * `@missing.md` is text now, as in Claude Code, so the include is one of
+   * Sous's own forms, which stays an error.
    *
-   * sous build  (AGENTS.md: "Before\n@missing.md\nAfter")
+   * sous build  (AGENTS.md: "Before\n@#project/missing.md\nAfter")
    * // -> exit 1; AGENTS.md still "first build"; OTHER.md updated
    */
   it("should exit non-zero and keep the last good output", () => {
@@ -410,14 +412,14 @@ describe("a compile error fails the build", () => {
 
     writeFixtureFile(
       path.join(brokenRoot, ".sous", "prompts", "AGENTS.md"),
-      "Before\n@missing.md\nAfter\n"
+      "Before\n@#project/missing.md\nAfter\n"
     );
     writeFixtureFile(path.join(brokenRoot, ".sous", "prompts", "OTHER.md"), "other two\n");
 
     const result = sous(brokenRoot, "build");
 
     expect(result.status, result.output).toBe(1);
-    expect(result.output).toContain("Include not found: @missing.md");
+    expect(result.output).toContain("Include not found: @#project/missing.md");
     expect(result.output).toContain("Done with 1 error(s).");
     expect(fs.readFileSync(path.join(brokenRoot, "AGENTS.md"), "utf8")).toBe("first build\n");
     expect(fs.readFileSync(path.join(brokenRoot, "OTHER.md"), "utf8")).toBe("other two\n");

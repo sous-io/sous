@@ -9,7 +9,7 @@ section "Reporting: levels and styles".
 
 Plugins built their own output text (glyphs, indentation, aligned labels) and the CLI printed it as
 given, so most output lost its color and the same layout was rebuilt by hand in many places. Command
-results went through a second renderer, the plugin-cli views' `Printer`.
+results went through a second renderer, the sous-plugin-cli views' `Printer`.
 
 ## Decision
 

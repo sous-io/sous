@@ -4,17 +4,17 @@ Every old test that changed during the refactor, grouped by package. Each entry 
 old file (and new file when it moved), what it expected before, what it expects now, and why.
 "Old" means the code before the refactor (commit `6845d0c`), where everything lived under `src/`.
 
-## plugin-liquid
+## sous-plugin-liquid
 
 ### "should register the bulletList filter…" and "should register the showVars tag…"
 
-- **File:** `src/templating/init-liquid-engine.spec.ts` → `packages/plugin-liquid/test/engine.test.ts`
+- **File:** `src/templating/init-liquid-engine.spec.ts` → `packages/sous-plugin-liquid/test/engine.test.ts`
 - **Before:** `createLiquidEngine([])` had `bulletList` and `showVars` built in.
 - **Now:** the test adds stand-in `liquid-filter` and `liquid-tag` entities and expects the engine to
   register them. The `showVars` stand-in prints its own simple JSON, so the test checks the dump, not
-  the exact `# Sous Debug` heading (that output is tested in plugin-compiler).
-- **Why:** the `bulletList` filter and the `showVars` tag now belong to plugin-compiler, which adds
-  them as entities. plugin-liquid only registers the filters and tags that entities add.
+  the exact `# Sous Debug` heading (that output is tested in sous-plugin-compiler).
+- **Why:** the `bulletList` filter and the `showVars` tag now belong to sous-plugin-compiler, which adds
+  them as entities. sous-plugin-liquid only registers the filters and tags that entities add.
 
 ### "should set engine.options.root…", "should return a Liquid instance", "should not throw when roots is an empty array"
 
@@ -22,9 +22,9 @@ old file (and new file when it moved), what it expected before, what it expects 
 - **Before / now:** unchanged, except they create the engine through `liquid.engine`'s
   `create({ root })`.
 
-## plugin-skills
+## sous-plugin-skills
 
-All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/plugin-skills`.
+All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/sous-plugin-skills`.
 
 ### "destinationsFor() should default skills to the project's .claude/skills directory"
 
@@ -40,20 +40,20 @@ All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/plugin-skil
 - **Before:** `${root}` was replaced from a scope.
 - **Now:** `${var}` is kept as written in `destinationDir` (`outputDir()`), and relative paths are
   placed under `${projectRoot}`.
-- **Why:** replacing `${var}` is plugin-variables' job, and this code runs before variables are
+- **Why:** replacing `${var}` is sous-plugin-variables' job, and this code runs before variables are
   resolved.
 
 ### "buildRecipeTargets() should warn once about prompts and copy no memories"
 
 - **Before:** one warning about prompts.
 - **Now:** only checks that memories and prompts are not treated as skills (`sources.spec.ts`).
-- **Why:** prompts are not plugin-skills' concern; the warning belongs to whichever plugin handles
+- **Why:** prompts are not sous-plugin-skills' concern; the warning belongs to whichever plugin handles
   prompts.
 
 ### "buildRecipeTargets() should report a linked recipe's directory for watching"
 
 - **Now:** dropped.
-- **Why:** which directories watch mode follows is plugin-build's `build.watch`, which can read linked
+- **Why:** which directories watch mode follows is sous-plugin-build's `build.watch`, which can read linked
   recipes from the `active-recipe` entities.
 
 ### "buildRecipeTargets() should produce one target per contributed file"
@@ -63,7 +63,7 @@ All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/plugin-skil
   output or a skill target. Otherwise the same: one target per file, with `globBase` the include's
   static base.
 
-## plugin-formats
+## sous-plugin-formats
 
 ### "should derive a missing identity from a hosted repository url" and "... from a local path"
 
@@ -78,7 +78,7 @@ All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/plugin-skil
 - **File:** `src/lib/repos/formats/recipe-manifest.spec.ts`
 - **Before:** used the real ref parser inside the schema.
 - **Now:** pass a stand-in `DependencyRefChecker` to `parseRecipeManifest`.
-- **Why:** plugin-formats now receives the ref check from `refs.resolver` instead of importing the
+- **Why:** sous-plugin-formats now receives the ref check from `refs.resolver` instead of importing the
   ref resolver.
 
 ### `hash.spec.ts`
@@ -90,10 +90,10 @@ All from `src/lib/repos/recipe-targets.spec.ts`, ported to `packages/plugin-skil
 **Only imports changed:** the other formats specs and `load-manifest.spec.ts` (import paths and where
 `isConfigError` comes from).
 
-## plugin-variables
+## sous-plugin-variables
 
 From `src/lib/settings.spec.ts`, `src/lib/include-resolver.spec.ts`, `src/lib/vars/names.spec.ts` and
-`src/lib/vars/secrets.spec.ts`, ported to `packages/plugin-variables`.
+`src/lib/vars/secrets.spec.ts`, ported to `packages/sous-plugin-variables`.
 
 ### substituteVars(), findUnresolvedVars(), substituteVarsStrict()
 
@@ -124,7 +124,7 @@ From `src/lib/settings.spec.ts`, `src/lib/include-resolver.spec.ts`, `src/lib/va
 - **Now:** inside a project, `projectRoot` and `sousConfDir` too; outside one, still only `sousHome`,
   `sousRootPath`, `sousVersion`. The values come from stand-ins of `host.package` and `host.sous-home`.
 - **Why:** `projectRoot` is now an auto-variable. Knowing which sous package is running belongs to
-  plugin-host.
+  sous-plugin-host.
 
 ### resolveEnvScope()
 
@@ -148,9 +148,9 @@ From `src/lib/settings.spec.ts`, `src/lib/include-resolver.spec.ts`, `src/lib/va
 - **Now:** test `sharedName` (the same function as `deriveEnvName`) and `isSecret`.
 - **Why:** those are the names the `variables.names` and `variables.secrets` services give them.
 
-## plugin-build
+## sous-plugin-build
 
-Build, watch and PID tests, ported to `packages/plugin-build`.
+Build, watch and PID tests, ported to `packages/sous-plugin-build`.
 
 ### The watch service tests
 
@@ -186,8 +186,8 @@ Build, watch and PID tests, ported to `packages/plugin-build`.
 - **File:** `src/test/integration/build-service.test.ts` → `test/build.test.ts`
 - **Before:** checked written files, the state file and pruning on disk; also tested
   `resolveStateFilePath()`.
-- **Now:** plugin-build's tests check that `build` runs the compiler's intents with the right input and
-  in the right order, using compiler stand-ins. The on-disk checks moved to plugin-compiler
+- **Now:** sous-plugin-build's tests check that `build` runs the compiler's intents with the right input and
+  in the right order, using compiler stand-ins. The on-disk checks moved to sous-plugin-compiler
   (`compiler.compile`, `compiler.prune`, `compiler.state`), and so did the `resolveStateFilePath()`
   tests, with the state file.
 
@@ -204,9 +204,9 @@ Build, watch and PID tests, ported to `packages/plugin-build`.
 - **File:** `src/test/e2e/watch-loop.test.ts` → `test/chokidar.test.ts`
 - **Now:** checks `chokidarWatcher` itself: a change arrives, and nothing arrives after `close()`.
 
-## plugin-recipe-answers
+## sous-plugin-recipe-answers
 
-From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
+From `src/lib/vars/*.spec.ts`, ported to `packages/sous-plugin-recipe-answers`.
 
 ### Every test in ladder.spec.ts
 
@@ -214,7 +214,7 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
 - **Before:** an answer's `source.file` was `".env"` or `".env.local"`.
 - **Now:** `"shared"` or `"local"`. `recordAnswerInContext` and `lookupEnvName` are now `Ladder.record`
   and `Ladder.lookup`, with the same expectations otherwise.
-- **Why:** the service's `AnswerSourceFile` type is `"shell"` or an `EnvFileKind`; plugin-config-files
+- **Why:** the service's `AnswerSourceFile` type is `"shell"` or an `EnvFileKind`; sous-plugin-config-files
   decides the file names.
 
 ### "parseAnswerPair()", "loadAnswersFile()", "applyProvidedAnswers()"
@@ -227,7 +227,7 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
   directory" resolves against `PWD`. `applyProvidedAnswers` is now `storeGivenAnswers`, with the same
   expectations, and a secret's value shows as `(hidden)` in the result.
 - **Why:** `recipe-answers.preanswers` is defined to throw an `InputError` for a malformed or unknown
-  answer. Parsing YAML and JSONC is plugin-formats' `formats.manifests.readFile`, which is a stand-in
+  answer. Parsing YAML and JSONC is sous-plugin-formats' `formats.manifests.readFile`, which is a stand-in
   here. Services never read `process.cwd()`.
 
 ### "StaticDefinitionSource", "loadProjectDefinitions()", "loadDefinitionsFile()"
@@ -235,11 +235,11 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
 - **File:** `src/lib/vars/definition-source.spec.ts`
 - **Before:** definitions were read from the lockfile and the recipe store on disk; the definitions
   file was YAML.
-- **Now:** `definitionsFromRecipes` reads the `active-recipe` entities plugin-recipes adds. The
+- **Now:** `definitionsFromRecipes` reads the `active-recipe` entities sous-plugin-recipes adds. The
   definitions file is JSON (see above), and the invalid-definition test expects the stand-in parser's
   issue in `details`.
 - **Why:** only active recipes count (those reached from subscriptions switched on on this machine),
-  and reading the lockfile and store is plugin-recipes' job.
+  and reading the lockfile and store is sous-plugin-recipes' job.
 
 ### "writeMappingRecord()" (comments kept, the old `.json` layer migrated, an interrupted write, a missing file)
 
@@ -247,7 +247,7 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
 - **Before:** tested writing the mappings file on disk.
 - **Now:** dropped here. `MappingsService.set`/`remove` are tested against a stand-in `confd.managed`.
   Reading the old `520-var-mappings.json` name is not carried over.
-- **Why:** careful, all-or-nothing edits to the `conf.d/5xx` files are plugin-confd's job
+- **Why:** careful, all-or-nothing edits to the `conf.d/5xx` files are sous-plugin-confd's job
   (`confd.managed`).
 
 ### "resolveRootScope() with recipe answers"
@@ -259,13 +259,13 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
   `variable-source` entity (tested in `test/plugin.test.ts`). "should read answers from the project
   when none are handed in" is now the engine test "should give a build its answers". The rest expect the
   same values, with `byRecipe` a plain object.
-- **Why:** which value wins is plugin-variables' scope resolution.
+- **Why:** which value wins is sous-plugin-variables' scope resolution.
 
 ### "basicViewLines()", "questionHint()", "nameChoices()", "fileChoices() and committedFileWarning()"
 
 - **File:** `src/lib/vars/ask.spec.ts`
 - **Now:** dropped. "askLeadIn()" and "recipeOpeningLine()" are unchanged.
-- **Why:** they test the terminal view and the Tab "advanced view". Views moved to plugin-cli, and
+- **Why:** they test the terminal view and the Tab "advanced view". Views moved to sous-plugin-cli, and
   these cannot be expressed through the `Prompter` interface.
 
 ### Asking without a terminal (no old unit test; the behavior of `askForMissing`)
@@ -276,10 +276,10 @@ From `src/lib/vars/*.spec.ts`, ported to `packages/plugin-recipe-answers`.
 - **Why:** anything sous asks at a prompt can also be answered with a flag, and front ends recognize
   the non-interactive error.
 
-## plugin-refs
+## sous-plugin-refs
 
 From `src/services/ref-resolver/**/*.spec.ts` and `src/lib/repos/identity.spec.ts`, ported to
-`packages/plugin-refs`. Every case now runs against the `refs.*` services of a real build, with
+`packages/sous-plugin-refs`. Every case now runs against the `refs.*` services of a real build, with
 stand-in `repository-host` entities for GitHub, GitLab and local (`test/fixtures.ts`) and a stand-in
 catalog `ref-lookup` (`test/catalog-lookup.ts`, the old `CatalogMatcher`), instead of the Inversify
 container and the built-in providers.
@@ -319,7 +319,7 @@ container and the built-in providers.
   When the prompter cannot ask, a `NonInteractiveError` names `--accept-first`, with the candidates in
   `details`.
 - **Why:** services never print or prompt themselves, and every question can be answered with a flag.
-  Laying out the facts is plugin-cli's view (`ref-report.ts` moves there, with its spec).
+  Laying out the facts is sous-plugin-cli's view (`ref-report.ts` moves there, with its spec).
 
 ### `ref-resolver-service.spec.ts`
 
@@ -349,26 +349,26 @@ container and the built-in providers.
 
 - **Now:** only `isGlobName` and `splitSegments` are tested here.
 - **Why:** `hasGlob` belongs to `host.globs`, and `matchName`/`matchNames` to the lookups in
-  plugin-recipes.
+  sous-plugin-recipes.
 
 ### `ref-search.spec.ts`
 
 - **Now:** the repository and location cases are in `test/search.test.ts`. The variable and
-  environment-variable cases moved with `VariableLookup` and `EnvVarLookup` to plugin-recipe-answers.
+  environment-variable cases moved with `VariableLookup` and `EnvVarLookup` to sous-plugin-recipe-answers.
 
 ### Not ported: `container.spec.ts`, `dependency.spec.ts`, and the lookup specs (`cached-index`, `fetched-index`, `recorded-dependency`, `chained-lookup`, `variable`, `env-var`)
 
-- **Why:** there is no container any more, and the code of the others moved to plugin-recipes and
-  plugin-recipe-answers as `ref-lookup` entities.
+- **Why:** there is no container any more, and the code of the others moved to sous-plugin-recipes and
+  sous-plugin-recipe-answers as `ref-lookup` entities.
 
 **Only imports changed:** `src/lib/repos/identity.spec.ts`, whose cases now test `repositoryIdentity`,
 `identitySegments` and `shortNameFromIdentity` in `locations/identity.ts`.
 
-## plugin-config-files and plugin-confd
+## sous-plugin-config-files and sous-plugin-confd
 
 Config discovery, the config kernel, env files and managed layers, ported to
-`packages/plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.ts`, `test/main-config.test.ts`,
-`test/config-set.test.ts`) and `packages/plugin-confd` (`src/managed.spec.ts`,
+`packages/sous-plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.ts`, `test/main-config.test.ts`,
+`test/config-set.test.ts`) and `packages/sous-plugin-confd` (`src/managed.spec.ts`,
 `test/confd-files.test.ts`).
 
 ### "should throw ConfigError listing every file when multiple primaries exist"
@@ -436,7 +436,7 @@ Config discovery, the config kernel, env files and managed layers, ported to
 - **File:** `config-kernel.test.ts`
 - **Now:** not ported.
 - **Why:** the engine's `BuiltConfig.layers()` and `contributions()` replace the trace, and
-  plugin-inspect shows them.
+  sous-plugin-inspect shows them.
 
 ### "loadSettings() flat-schema guard"
 
@@ -475,17 +475,17 @@ Config discovery, the config kernel, env files and managed layers, ported to
 ### `config-inspect.spec.ts`
 
 - **Now:** not ported.
-- **Why:** path syntax is the documents package's `parsePath`; the JSON views belong to plugin-cli and
-  plugin-inspect.
+- **Why:** path syntax is the documents package's `parsePath`; the JSON views belong to sous-plugin-cli and
+  sous-plugin-inspect.
 
 **Only imports changed:** `src/lib/env-local.spec.ts` and `src/lib/env-file.spec.ts` (`parseEnvLocal`
 is now `parseEnv`; the environment type is `MutableEnvironment`, not `NodeJS.ProcessEnv`).
 
-## plugin-init
+## sous-plugin-init
 
 ### The project scaffold tests
 
-- **File:** `src/lib/project-scaffold/index.spec.ts` → `packages/plugin-init/test/init.test.ts`, run
+- **File:** `src/lib/project-scaffold/index.spec.ts` → `packages/sous-plugin-init/test/init.test.ts`, run
   through the `init` handler
 - **Before:** the scaffolded config held `_vars.projectRoot` and `recipes.skills.outputs` with
   `.claude/skills`. The `json` format wrote `sous.config.json`. "should refuse to overwrite any file it
@@ -505,11 +505,11 @@ is now `parseEnv`; the environment type is `MutableEnvironment`, not `NodeJS.Pro
 - **Why:** sous sets `projectRoot` itself (setting it is an error), and skill folders come from agent
   tool plugins, not from the starter config. The init result has a `kept` list.
 
-## plugin-update
+## sous-plugin-update
 
 ### The registry tests
 
-- **File:** `src/lib/self-update/registry.spec.ts` → `packages/plugin-update/test/registry.test.ts`
+- **File:** `src/lib/self-update/registry.spec.ts` → `packages/sous-plugin-update/test/registry.test.ts`
 - **Before:** used an injected `fetch`; failure messages held the hints; there was an abort-signal case.
 - **Now:** the stand-in is an http service, since the fetch is `host.http.get`. Failure messages are
   the first line of the `ConfigError`, with the hints in `details` ("answered 404 Failed for <url>" with
@@ -524,7 +524,7 @@ is now `parseEnv`; the environment type is `MutableEnvironment`, not `NodeJS.Pro
   "unsupported-manager" carried a `manualCommand`, and its message named the manager.
 - **Now:** installs carry a `package-manager` entity, so the commands in the expectations come from
   stand-in entities with the flags the real plugins use. The Yarn Berry case no longer checks yarn's
-  flags (that is plugin-yarn's test). "unsupported-manager" has no `manualCommand`, and its message does
+  flags (that is sous-plugin-yarn's test). "unsupported-manager" has no `manualCommand`, and its message does
   not name the manager.
 - **Why:** each package manager is now its own plugin. When no plugin claims a project, sous does not
   know the manager's name or its `add` command.
@@ -537,7 +537,7 @@ is now `parseEnv`; the environment type is `MutableEnvironment`, not `NodeJS.Pro
 - **Now:** the `findProjectInstallInfo` and `findGlobalInstalls` cases drive stand-in entities
   (`detect`, `installed`). The detection cases are not ported here. `declaredDependency()` and
   `classifyRunning()` are unchanged.
-- **Why:** detecting the package manager moved to plugin-npm, plugin-pnpm and plugin-yarn.
+- **Why:** detecting the package manager moved to sous-plugin-npm, sous-plugin-pnpm and sous-plugin-yarn.
 
 ### The update command
 
@@ -546,14 +546,14 @@ is now `parseEnv`; the environment type is `MutableEnvironment`, not `NodeJS.Pro
 **Only formatting changed:** `src/lib/self-update/versions.spec.ts` → `test/versions.test.ts` (import
 path and 4-space indentation).
 
-## plugin-github, plugin-gitlab, plugin-local
+## sous-plugin-github, sous-plugin-gitlab, sous-plugin-local
 
-From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `packages/plugin-gitlab`,
-`packages/plugin-local` and `packages/repository-hosts`.
+From `src/lib/repos/providers/*.spec.ts`, ported to `packages/sous-plugin-github`, `packages/sous-plugin-gitlab`,
+`packages/sous-plugin-local` and `packages/sous-lib-repository-hosts`.
 
 ### GitlabProvider "should read the index from the instance's raw endpoint"
 
-- **File:** → `plugin-gitlab/src/host.spec.ts`, "should use the API address with the project path
+- **File:** → `sous-plugin-gitlab/src/host.spec.ts`, "should use the API address with the project path
   encoded"
 - **Before:** `https://<host>/<group>/<repo>/-/raw/HEAD/sous.index.json`.
 - **Now:** the API address with the whole project path encoded,
@@ -612,21 +612,21 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 
 - **Before:** `["fetch", "submit"]`.
 - **Now:** `["fetch", "submit", "proposals"]`, using `glab mr list/view/update`.
-- **Why:** plugin-gitlab now supports merge requests as proposals.
+- **Why:** sous-plugin-gitlab now supports merge requests as proposals.
 
 ### `requireProvider()`, `builtInProviders()`, `detectProvider()`, `assertLocalRepoDirectory()`
 
 - **Now:** not ported. `looksLikeLocalPath()` and `resolveRepoArgument()` now take `cwd` and `home`
   instead of reading `process.cwd()` and the home directory.
-- **Why:** choosing a host for a URL is `refs.locations` (plugin-refs) and the repository entry's job
-  (plugin-recipes); checking that a path holds a repo manifest needs `formats.manifests`. Services
+- **Why:** choosing a host for a URL is `refs.locations` (sous-plugin-refs) and the repository entry's job
+  (sous-plugin-recipes); checking that a path holds a repo manifest needs `formats.manifests`. Services
   never read `process.cwd()` directly.
 
-## plugin-recipes
+## sous-plugin-recipes
 
 ### TrustService "should fail hard in a non-interactive run"
 
-- **File:** `src/lib/repos/trust.spec.ts` → `packages/plugin-recipes/src/part-a/**/*.spec.ts`
+- **File:** `src/lib/repos/trust.spec.ts` → `packages/sous-plugin-recipes/src/part-a/**/*.spec.ts`
 - **Before:** a `NonInteractiveError` whose message listed every repository and the
   `sous repo add … --trust` commands.
 - **Now:** the error names `--yes` as the flag that answers the question; the repositories and
@@ -639,7 +639,7 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 - **Before:** the colored notice on the console.
 - **Now:** the notice is reported as `notice` lines through the chain's reporter; only its wording is
   checked.
-- **Why:** services never print; plugin-cli decides how it looks.
+- **Why:** services never print; sous-plugin-cli decides how it looks.
 
 ### SubscriptionService unsubscribe "written in the project's own config"
 
@@ -670,8 +670,8 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 - **Before:** took a ref string and resolved it inside.
 - **Now:** take the repository and key already found; matching a ref is `findInCatalog`, over readings
   from `refs.resolver`. `contents[].destinations` is `[]`.
-- **Why:** resolving refs is plugin-refs' job, and where each kind of file lands is the job of
-  plugin-skills and plugin-memories.
+- **Why:** resolving refs is sous-plugin-refs' job, and where each kind of file lands is the job of
+  sous-plugin-skills and sous-plugin-memories.
 
 ### locked-recipes `listLockedRecipes`
 
@@ -689,7 +689,7 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 
 ### lock-service "diff … lines"
 
-- **File:** `src/lib/repos/lock-service.spec.ts` → `packages/plugin-recipes/src/part-b/**/*.spec.ts`
+- **File:** `src/lib/repos/lock-service.spec.ts` → `packages/sous-plugin-recipes/src/part-b/**/*.spec.ts`
 - **Before:** `diff().lines`.
 - **Now:** the lines come from `describeLockDiff(diff)`.
 - **Why:** `LockDiff` has no `lines`; wording is presentation.
@@ -740,7 +740,7 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 
 - **File:** `src/lib/repos/namespace-resolver.spec.ts`
 - **Now:** not ported here.
-- **Why:** describing a failed include is plugin-compiler's job.
+- **Why:** describing a failed include is sous-plugin-compiler's job.
 
 ### git-clone `repoNameFromUrl` and "recognize clonable forms"
 
@@ -753,7 +753,7 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 
 - **File:** `src/lib/repos/links.spec.ts`
 - **Now:** not ported; `ensureLocalFilesIgnored` is tested through `host.gitignore`.
-- **Why:** the sous-managed `.gitignore` block belongs to `host.gitignore` (plugin-host).
+- **Why:** the sous-managed `.gitignore` block belongs to `host.gitignore` (sous-plugin-host).
 
 ### recipe-config-layers "listRecipeConfigLayers reads the lockfile and store"
 
@@ -762,10 +762,10 @@ From `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-github`, `p
 - **Now:** `readRecipeConfigLayers` reads the `active-recipe` entities.
 - **Why:** `recipes.fetch` finds the recipes, and config layers come only from active ones.
 
-## plugin-compiler
+## sous-plugin-compiler
 
 Compiling, includes, the state file, tags and filters, and pruning, ported to
-`packages/plugin-compiler`. Every compile test now goes through a real engine and `compiler.compile`,
+`packages/sous-plugin-compiler`. Every compile test now goes through a real engine and `compiler.compile`,
 with targets in the config (`compilation.targets`). An output's variables are its `_vars`, an alias is
 `_aliases` or a `hash-name` entity, the include scope is `_vars`, and the namespace resolver is the
 `compiler.namespace-resolver` service. Messages are read from the chain's reporter, not `console`.
@@ -812,7 +812,7 @@ with targets in the config (`compilation.targets`). An output's variables are it
 - **File:** `src/lib/markdown-compiler.spec.ts` → `src/paths.spec.ts`
 - **Now:** the `inferGlobBase` tests are gone; the `destinationDir`/`globBase` tests check
   `resolveOutputPath` directly.
-- **Why:** finding a glob's static base is `host.globs.staticBase`, tested in plugin-host.
+- **Why:** finding a glob's static base is `host.globs.staticBase`, tested in sous-plugin-host.
 
 ### The include resolver tests
 
@@ -820,7 +820,7 @@ with targets in the config (`compilation.targets`). An output's variables are it
 - **Now:** unchanged expectations, through adapters over `planInclude`/`resolveIncludeFiles`.
   "substituteVars()" is gone. The `~/` test passes the home directory in instead of setting
   `process.env.HOME`. `buildAliasMap` takes a `substitute` function instead of a scope.
-- **Why:** replacing `${var}` is plugin-variables' job, and services never read `process.env`.
+- **Why:** replacing `${var}` is sous-plugin-variables' job, and services never read `process.env`.
 
 ### The include containment tests
 
@@ -855,14 +855,14 @@ with targets in the config (`compilation.targets`). An output's variables are it
     `_aliases` schema).
   - "should resolve a repo-qualified, differently cased recipe reference" is not ported.
   - "should prefer the exact spelling of a recipe name" runs against the static test resolver.
-- **Why:** the case rules for recipe names belong to the real namespace resolver in plugin-recipes.
+- **Why:** the case rules for recipe names belong to the real namespace resolver in sous-plugin-recipes.
 
 ### The entry glob alias tests
 
 - **File:** `src/test/integration/entry-glob-aliases.test.ts` → `test/targets.test.ts`
 - **Now:** same, except "should expand alias entryGlobs in the watch config" is not ported, and
-  `#project` comes from plugin-refs' `hash-name` entity instead of a `_vars.projectRoot` override.
-- **Why:** the watch settings are plugin-build's, and sous sets `projectRoot` itself.
+  `#project` comes from sous-plugin-refs' `hash-name` entity instead of a `_vars.projectRoot` override.
+- **Why:** the watch settings are sous-plugin-build's, and sous sets `projectRoot` itself.
 
 ### resolveCompilation()
 
@@ -878,13 +878,13 @@ with targets in the config (`compilation.targets`). An output's variables are it
 - **Now:** unchanged expectations. `registerShowVarsTag(engine)` and the rest are shims in
   `test/liquid.ts` that register the `liquid-tag`/`liquid-filter` entities. The "very probably a
   secret" cases use a stand-in of `variables.secrets`. (`src/templating/init-liquid-engine.spec.ts`
-  went to plugin-liquid; see above.)
+  went to sous-plugin-liquid; see above.)
 
-## plugin-authoring
+## sous-plugin-authoring
 
 From `src/lib/repos/release/*.spec.ts`, `src/lib/repos/contribute.spec.ts`,
 `src/lib/repos/scaffold/index.spec.ts` and `src/test/integration/repo-{release,submit,contribute}.test.ts`,
-ported to `packages/plugin-authoring`.
+ported to `packages/sous-plugin-authoring`.
 
 Every module now takes the services it uses (`git.runner`, the format parsers, `formats.recipe-hash`,
 `refs.*`, `variables.names`, `repository-host` entities) as one bundle, so the specs call
@@ -908,7 +908,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 - **File:** `index-builder.spec.ts`
 - **Before:** the message matched `/repo index/`.
 - **Now:** it matches `/sous\.index\.json/`.
-- **Why:** the wording is the index parser's (plugin-formats), which names the file.
+- **Why:** the wording is the index parser's (sous-plugin-formats), which names the file.
 
 ### The settle tests, and "should fail on a tie, naming the /* form"
 
@@ -918,7 +918,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 - **Now:** indexes come from an injected index reader; reading through a host is tested on its own
   (`readIndexThroughHost()`, new). The tie test checks the `/*` form and the "each of these publishes
   it" list.
-- **Why:** writing the canonical spelling of a ref is plugin-refs' job.
+- **Why:** writing the canonical spelling of a ref is sous-plugin-refs' job.
 
 ### The submit service tests
 
@@ -950,7 +950,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 - **File:** `submit-checkout.spec.ts` → `src/submit/checkout.spec.ts`
 - **Now:** rewritten against a `recipes.links` stand-in. The no-longer-linked test is not ported.
-- **Why:** where `repo link` clones is plugin-recipes' business, and `recipes.links` does not expose it.
+- **Why:** where `repo link` clones is sous-plugin-recipes' business, and `recipes.links` does not expose it.
 
 ### The contribute tests, and "locatorArgs()"
 
@@ -967,7 +967,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 - **Before:** expected `.github/workflows/sous-release.yml`, and a test of the release workflow.
 - **Now:** with no host named or found, no CI file. The workflow test is replaced by "should write the
   CI files of the host it is given" and two tests for picking the host.
-- **Why:** core features must not depend on one host. The GitHub workflow belongs to plugin-github
+- **Why:** core features must not depend on one host. The GitHub workflow belongs to sous-plugin-github
   (`scaffoldFiles`).
 
 ### The repo release tests
@@ -985,14 +985,14 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 - **Now:** covered by `contribute.spec.ts` (through a stand-in intent runner) and `submit.spec.ts`. The
   `gh` stand-in script is now a stand-in host entity.
 
-## plugin-memories
+## sous-plugin-memories
 
 ### "the #memories view"
 
-- **File:** `packages/plugin-memories/test/plugin.test.ts`
+- **File:** `packages/sous-plugin-memories/test/plugin.test.ts`
 - **Before:** `view.bases(ctx)` returned `[]`.
 - **Now:** `view.bases` is `undefined`.
-- **Why:** plugin-refs' `hash-name` schema refuses a name with both `bases` and `view`, so the
+- **Why:** sous-plugin-refs' `hash-name` schema refuses a name with both `bases` and `view`, so the
   `#memories` entity has only `view`. Without this change, an engine with every built-in plugin failed
   to start.
 
@@ -1020,7 +1020,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   hash).
 - **Now:** each test runs the bundled bin, built once per test run by `test/global-setup.ts` (into a
   directory of its own, so test runs side by side never overwrite each other's bin). The helpers come
-  from the packages (`@sous-io/plugin-formats` for the hash and the parsers, plugin-host for the
+  from the packages (`@sous-io/sous-plugin-formats` for the hash and the parsers, sous-plugin-host for the
   gitignore markers) or from small files in `test/utils/` (`package-info.ts` for the version,
   `managed-layer.ts` for reading a `conf.d` layer). `whole-build.test.ts` works out a local
   repository's identity itself instead of calling the old provider code. The `env` objects are typed
@@ -1049,8 +1049,8 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### projectRoot in _vars
 
-- **File:** `packages/plugin-variables/test/plugin.test.ts` ("should refuse projectRoot in the root
-  _vars"), `packages/plugin-variables/src/resolve-block.spec.ts`
+- **File:** `packages/sous-plugin-variables/test/plugin.test.ts` ("should refuse projectRoot in the root
+  _vars"), `packages/sous-plugin-variables/src/resolve-block.spec.ts`
 - **Before:** `_vars.projectRoot: "${sousDir}/.."` failed the build.
 - **Now:** a value other than the one sous sets is refused when the scope resolves; writing it the way
   sous sets it is accepted and ignored. A new test covers the accepted case.
@@ -1059,7 +1059,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### Contributors that read sous.entities directly
 
-- **File:** `packages/core/test/config-loop.test.ts`
+- **File:** `packages/sous-lib-core/test/config-loop.test.ts`
 - **Before:** "should warn when a contributor reads sous.entities directly" expected a warning.
 - **Now:** "should note, at the debug level, ..." expects a debug message and no warning.
 - **Why:** the note is for the plugin's author. As a warning it printed on every command (the recipe
@@ -1067,7 +1067,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### The contributor budget
 
-- **File:** `packages/core/test/timing.test.ts`
+- **File:** `packages/sous-lib-core/test/timing.test.ts`
 - **Before:** a contributor's default budget was 50ms.
 - **Now:** 100ms.
 - **Why:** the built-in core-recipe contributor measured 50–80ms on ordinary runs, so 50ms warned on
@@ -1075,7 +1075,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### package-identity: the package name
 
-- **File:** `packages/plugin-host/src/package-identity.spec.ts`
+- **File:** `packages/sous-plugin-host/src/package-identity.spec.ts`
 - **Before:** found the package under `@sous-io/sous` and `@sous-io/sous-next`.
 - **Now:** only `@sous-io/sous`.
 - **Why:** packages/sous is now the published `@sous-io/sous`; the temporary name is gone.
@@ -1097,8 +1097,8 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### Messages the vars unit tests check
 
-- **File:** `packages/plugin-recipe-answers/test/plugin.test.ts` ("should narrow to one recipe, and to a
-  namespace"), `packages/plugin-recipe-answers/src/definitions.spec.ts` ("should report an invalid file
+- **File:** `packages/sous-plugin-recipe-answers/test/plugin.test.ts` ("should narrow to one recipe, and to a
+  namespace"), `packages/sous-plugin-recipe-answers/src/definitions.spec.ts` ("should report an invalid file
   with the file and the field")
 - **Before:** expected "Nothing this project's recipes define matches 'nothing'", and a problem line
   "type: is required".
@@ -1121,7 +1121,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   - **Now:** at most one banner.
   - **Why:** the new CLI prints the banner only on a terminal, and the test runs with none. What the
     test guards (a chained run never prints a second banner) still holds.
-- **Test:** `plugin-authoring/src/contribute/contribute.spec.ts`, "should say which steps completed
+- **Test:** `sous-plugin-authoring/src/contribute/contribute.spec.ts`, "should say which steps completed
   when one fails".
   - **Before:** the failure said "this step failed" and "What had already been done:".
   - **Now:** it says "The contribution stopped", "Failed step: ..." and "These steps had completed
@@ -1130,16 +1130,16 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ## Switch-over: config and inspect (config show, get, validate)
 
-- **Test:** `packages/core/test/order-and-stages.test.ts`, the unknown top-level key message.
+- **Test:** `packages/sous-lib-core/test/order-and-stages.test.ts`, the unknown top-level key message.
   - **Before:** `mystery: Not a known config key. (set by confd/610-mac.jsonc)`.
   - **Now:** `mystery: Not a known config key; likely a typo. (set by confd/610-mac.jsonc)`.
   - **Why:** the old CLI said an unknown key was "likely a typo", and the old `config validate` test
     checks for that word.
-- **Test:** `packages/plugin-inspect/src/inspect.spec.ts`, "should read config files as written".
+- **Test:** `packages/sous-plugin-inspect/src/inspect.spec.ts`, "should read config files as written".
   - **Before:** the files were read straight from disk.
   - **Now:** the test adds a stand-in `config-files.loader`, because `--raw` now reads each file
     through it (the same text the build used).
-- **Test:** `packages/plugin-inspect/src/inspect.spec.ts`, "should report issues and name the
+- **Test:** `packages/sous-plugin-inspect/src/inspect.spec.ts`, "should report issues and name the
   contributor".
   - **Before:** a good config gave exactly `{ ok: true, issues: [] }`.
   - **Now:** it gives at least that; the result also carries a summary (the config file, how many
@@ -1160,11 +1160,11 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   case expects `.sous/sous.config.jsonc` and reads `$schema` out of the text.
 - **Why:** the first build reports its progress (the lockfile pins among it) on standard error, as
   every build now does. The `json` format writes JSON with comments under the `.jsonc` name (see
-  "plugin-init" above).
+  "sous-plugin-init" above).
 
 ### `sous init`, the plugin tests
 
-- **File:** `packages/plugin-init/test/init.test.ts`, `packages/plugin-init/test/index.test.ts`
+- **File:** `packages/sous-plugin-init/test/init.test.ts`, `packages/sous-plugin-init/test/index.test.ts`
 - **Before:** five cases assumed the default format was `json` (`sous.config.jsonc`), and the format
   list was `["json", "js"]`. "should keep files that already exist" and "should write nothing on a dry
   run" expected the handler to report "Kept ..." and "Nothing was written".
@@ -1182,12 +1182,12 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   0.2.30 to 0.2.34?"` and `pass '--yes'`.
 - **Now:** expects `Error: sous needed to ask "Update the global install from 0.2.30 to 0.2.34?"` and
   `Pass --yes`.
-- **Why:** a question that cannot be asked is one error for every command now (plugin-api's
+- **Why:** a question that cannot be asked is one error for every command now (sous-plugin-api's
   `NonInteractiveError`), with that wording. The exit code (1) and what it names are the same.
 
 ### `update`, the plugin tests
 
-- **File:** `packages/plugin-update/test/update.test.ts`, `test/helpers.ts`
+- **File:** `packages/sous-plugin-update/test/update.test.ts`, `test/helpers.ts`
 - **Before:** expected the handler to report "Nothing was installed" (dry run) and "There is no
   install of sous here", and the build result to be exactly `{ result, directory, exitCode }`.
 - **Now:** those two messages are printed by the `update` view (the handler reports only each command
@@ -1199,7 +1199,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### The `init` and `update` views
 
-- **File:** `packages/plugin-cli/src/views/domains/setup.spec.ts`
+- **File:** `packages/sous-plugin-cli/src/views/domains/setup.spec.ts`
 - **Before:** the `init` dry run printed only the `package.json` notice; with no plans `update`
   printed nothing; "Then builds" said only "yes".
 - **Now:** the `init` view lists the files (`wrote`, `kept`, `[Dry Run] would write`) and the dry run
@@ -1216,7 +1216,7 @@ tests had been written against the first new layout, and were brought in line:
 
 ### Help layout
 
-- **Files:** `packages/plugin-cli/test/cli.test.ts` (help cases), `packages/sous/test/bin.test.ts`
+- **Files:** `packages/sous-plugin-cli/test/cli.test.ts` (help cases), `packages/sous/test/bin.test.ts`
 - **Before:** expected `Usage:\n  sous namespace list [<repository>] [flags]`, `Commands:`,
   `Aliases:\n  sous render`, `Examples:` and `<repository>` as the argument name.
 - **Now:** expect `USAGE\n  $ sous namespace list [REPOSITORY] [flags]`, `TOPICS` and `COMMANDS`
@@ -1227,8 +1227,8 @@ tests had been written against the first new layout, and were brought in line:
 
 ### Usage error wording
 
-- **Files:** `packages/plugin-cli/test/cli.test.ts` (mistakes, extra arguments, schema problems),
-  `packages/plugin-cli/src/parse.spec.ts`
+- **Files:** `packages/sous-plugin-cli/test/cli.test.ts` (mistakes, extra arguments, schema problems),
+  `packages/sous-plugin-cli/src/parse.spec.ts`
 - **Before:** `There is no flag --priorty. Did you mean --priority?`, `--name needs a value.`,
   `"sous namespace list" takes at most 1 argument, but was also given "b".`, and a bad `--mode`
   choice reported as `The input to "repo.add" is not valid.` with `--mode:` and `<url>:` lines.
@@ -1240,8 +1240,8 @@ tests had been written against the first new layout, and were brought in line:
 
 ### A question that cannot be asked exits 1
 
-- **Files:** `packages/plugin-cli/test/cli.test.ts` ("should fail a question it cannot ask"),
-  `packages/plugin-cli/src/errors.spec.ts`, `packages/plugin-api/src/errors.spec.ts`
+- **Files:** `packages/sous-plugin-cli/test/cli.test.ts` ("should fail a question it cannot ask"),
+  `packages/sous-plugin-cli/src/errors.spec.ts`, `packages/sous-plugin-api/src/errors.spec.ts`
 - **Before:** `NonInteractiveError` exited 2, and the CLI printed only the error.
 - **Now:** it exits 1, and the command's help follows the error on standard error.
 - **Why:** the old CLI exited 2 only for command lines it could not parse, and printed the help under
@@ -1270,11 +1270,11 @@ tests had been written against the first new layout, and were brought in line:
 
 ### Unincluded-memory warning cases from `src/test/integration/memories-warning.test.ts`
 
-- **File:** `packages/plugin-build/test/build.test.ts` and `packages/plugin-build/src/report.spec.ts`
+- **File:** `packages/sous-plugin-build/test/build.test.ts` and `packages/sous-plugin-build/src/report.spec.ts`
 - **Before:** drove the old build service with a stand-in store.
 - **Now:** the full-build, included-memory, partial-build and failed-compile cases run the `build` intent with
   stand-ins; the wording case checks `unincludedMemoriesMessage()`.
-- **Why:** the check moved from the old build service into plugin-build.
+- **Why:** the check moved from the old build service into sous-plugin-build.
 
 ## Switch-over: repos and links
 
@@ -1288,7 +1288,7 @@ tests had been written against the first new layout, and were brought in line:
 
 ### `src/test/integration/per-file-rendering.test.ts` (10 cases)
 
-- **File:** `packages/plugin-compiler/test/compilation.test.ts`, "per-file Liquid rendering"
+- **File:** `packages/sous-plugin-compiler/test/compilation.test.ts`, "per-file Liquid rendering"
 - **Before:** drove the old `CompilationService` class, read its console output, and called `includedFiles()`.
 - **Now:** run `compiler.compile` with the real Liquid, variables and host plugins; an output's variables are its
   `_vars`; "unchanged" is read from the result's `action`, and the files read from its `included`. Nine cases
@@ -1332,7 +1332,7 @@ tests had been written against the first new layout, and were brought in line:
   the same message, now about that path. One test was added: every other
   `packages/<name>/package.json` is set to the same version (only its `version` value changes),
   and a package already at it is left byte for byte, because every workspace package is released
-  at one version and `pnpm pack` writes plugin-api's version into the published sous's dependency.
+  at one version and `pnpm pack` writes sous-plugin-api's version into the published sous's dependency.
 
 ## Switch-over: subscriptions and catalog
 
@@ -1368,19 +1368,19 @@ tests had been written against the first new layout, and were brought in line:
   - **Now:** it also holds a subscriptions layer subscribing to `workflow/alpha`.
   - **Why:** only a pin a switched-on subscription reaches is restored (see "lock-service restore
     with no keys" above).
-- **`plugin-refs`: `format.spec.ts`, `resolver.spec.ts`, `test/search.test.ts`**
+- **`sous-plugin-refs`: `format.spec.ts`, `resolver.spec.ts`, `test/search.test.ts`**
   - **Before:** `refs.format.key()` of `r:workflow/alpha` was `r:workflow/alpha`.
   - **Now:** `workflow/alpha`; the cases that tell two repositories apart use `refs.format.identity()`.
   - **Why:** `key()` is the stored key its contract describes, with no repository: configs, lockfiles
     and indexes key recipes that way, and a release recorded a dependency in another repository under
     a key the index format refuses.
-- **`plugin-recipes/src/part-a/config-keys.spec.ts`** (new): the "Repositories keys" cases of the old
+- **`sous-plugin-recipes/src/part-a/config-keys.spec.ts`** (new): the "Repositories keys" cases of the old
   `src/lib/config-schema.spec.ts` (a URL is required and must be one sous can read, a repo name is
   kebab-case, a subscription key has no qualifier or range, a range is a real range, store numbers are
   whole, unknown keys in an entry are refused), against the `config-key` schemas. Unknown keys are
   named "Not a known key." where the old schema said "unknown key(s)".
-- **View and unit specs** (`plugin-cli` `catalog.spec.ts`, `repos.spec.ts`; `plugin-build`
-  `report.spec.ts`; `plugin-recipes` `intents.spec.ts`): `recipe show` expects "What subscribing
+- **View and unit specs** (`sous-plugin-cli` `catalog.spec.ts`, `repos.spec.ts`; `sous-plugin-build`
+  `report.spec.ts`; `sous-plugin-recipes` `intents.spec.ts`): `recipe show` expects "What subscribing
   installs" and the old question wording; `subscription list` always has a latest column; the build
   states a newer version as `<key>: <to> this project pins <from>`; `subscription.list` returns
   `latest`; the `vars.ask` after subscribing is no longer narrowed to the new recipe. Each follows
@@ -1388,22 +1388,22 @@ tests had been written against the first new layout, and were brought in line:
 
 ### "should fail a question it cannot ask, naming the flag"
 
-- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **File:** `packages/sous-plugin-cli/test/cli.test.ts`
 - **Before:** the error line was followed directly by the command's help.
 - **Now:** a `Why: …` line comes between them ("Why: neither input nor output is a terminal.").
 - **Why:** the old CLI said why it could not ask (for example "the 'CI' environment variable is set
   to 'true'"), and the old `repositories` test checks for it.
 
-### The plugin-inspect specs
+### The sous-plugin-inspect specs
 
-- **File:** `packages/plugin-inspect/src/inspect.spec.ts`
+- **File:** `packages/sous-plugin-inspect/src/inspect.spec.ts`
 - **Before:** ran the config intents in an engine with no project.
 - **Now:** in an engine with an empty project.
 - **Why:** `config show`, `get` and `validate` now require a project, as the old commands did.
 
 ### "should subscribe and run the follow-ups"
 
-- **File:** `packages/plugin-recipes/src/part-a/intents/intents.spec.ts`
+- **File:** `packages/sous-plugin-recipes/src/part-a/intents/intents.spec.ts`
 - **Before:** expected `vars.ask` to be run with only the given answers.
 - **Now:** also with `within: ["workflow/task-files"]`, the recipes the subscription installed.
 - **Why:** after subscribing, the old CLI asked only what the new recipes required and nobody had
@@ -1418,39 +1418,39 @@ Every test file under `src/` was checked against the packages before `src/` was 
 missing were added during the switch-over: the project-install hand-off
 (`packages/sous/src/hand-off.spec.ts`), the config flag forms of the old base command
 (`packages/sous/src/project.spec.ts`), the per-file Liquid rendering cases
-(`packages/plugin-compiler/test/compilation.test.ts`), masking a secret answer
-(`packages/plugin-cli/src/terminal-prompter.spec.ts`), and the `repos`, `subscriptions` and `store`
-config-key checks (`packages/plugin-recipes`).
+(`packages/sous-plugin-compiler/test/compilation.test.ts`), masking a secret answer
+(`packages/sous-plugin-cli/src/terminal-prompter.spec.ts`), and the `repos`, `subscriptions` and `store`
+config-key checks (`packages/sous-plugin-recipes`).
 
 These were deleted with nothing to port, because the code they tested has no counterpart:
 
 - `src/services/ref-resolver/container.spec.ts`: the old dependency-injection container is gone.
 - `src/services/ref-resolver/lookups/chained-lookup.spec.ts`: there is no chain object; the resolver
-  asks each `ref-lookup` entity in turn (covered by `plugin-refs/src/resolver.spec.ts`).
+  asks each `ref-lookup` entity in turn (covered by `sous-plugin-refs/src/resolver.spec.ts`).
 - `src/lib/repos/index.spec.ts`: it checked what the old `repos` module exported.
 - `src/utils/flags.spec.ts`: the oclif `confirmationFlag` helper; flags with several aliases and
-  short forms are tested in plugin-cli.
+  short forms are tested in sous-plugin-cli.
 - `src/lib/repos/store/settings.spec.ts`: `resolveStoreSettings` is gone; the store settings are
-  schema defaults of plugin-recipes' config keys.
+  schema defaults of sous-plugin-recipes' config keys.
 - `src/utils/choice-prompt.spec.ts` and `src/utils/confirm-prompt.spec.ts`: the arrow-key picker and
   its Tab "advanced view" are gone; choosing and confirming are tested in
-  `plugin-cli/src/terminal-prompter.spec.ts`.
+  `sous-plugin-cli/src/terminal-prompter.spec.ts`.
 - Parts of ported files that tested oclif plumbing, the config kernel subprocess and tsx (in
   `src/base-command.spec.ts`, `src/test/integration/config-kernel.test.ts`), and the Tab advanced
   view (in `vars-ask` and `self-update`).
 
-## plugin-confd (apply order)
+## sous-plugin-confd (apply order)
 
 ### "should sort conf.d bytewise, so 10- loads before 2-"
 
 Now "should apply conf.d files by the number their names start with", in
-`packages/plugin-confd/test/confd-files.test.ts`. It expected `10-early.json` to apply before
+`packages/sous-plugin-confd/test/confd-files.test.ts`. It expected `10-early.json` to apply before
 `2-late.json` (bytewise); it now expects `2-late.json` (apply order 90002) before `10-early.json`
 (90010). Luke ruled on 2026-10-30 that each `conf.d` file applies at 90000 plus the number its name
 starts with, and that the numbers in conf.d names do not differ in length, so real projects keep
 their order.
 
-## plugin-cli reporter
+## sous-plugin-cli reporter
 
 All changed because output now goes through the reporter: `debug`, `info` and `notice` to standard
 output, `warning` and above to standard error, a command's output closed by two blank lines, and
@@ -1458,49 +1458,49 @@ text wrapped to the terminal width.
 
 ### "should draw tables, row notes, and the empty sentence"
 
-- **File:** `packages/plugin-cli/src/terminal-reporter.spec.ts`
+- **File:** `packages/sous-plugin-cli/src/terminal-reporter.spec.ts`
 - **Before:** a row note sat at the same indent as its row (`  careful`).
 - **Now:** the note sits two spaces deeper than its row (`    careful`).
 - **Why:** the reporter indents a row note under its row; the facts are unchanged.
 
 ### "should show the whole config's layers as a tree"
 
-- **File:** `packages/plugin-cli/src/views/domains/inspect.spec.ts`
-- **Before:** one-line labels such as `confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)` and `removeWhere > removeIndex ...`.
+- **File:** `packages/sous-plugin-cli/src/views/domains/inspect.spec.ts`
+- **Before:** one-line labels such as `confd/620-no-diagrams.js (@sous-io/sous-plugin-confd, apply order 90620)` and `removeWhere > removeIndex ...`.
 - **Now:** the exact `reporter.tree` output: bullets nested two spaces per level, the detail after the label with no parentheses, and `result: settled after 1 pass`.
 - **Why:** `layerTree` reports a tree, and the reporter draws it. Every fact is still shown.
 
 ### "should warn about a config it could not load, and list what it cannot update"
 
-- **File:** `packages/plugin-cli/src/views/domains/setup.spec.ts`
+- **File:** `packages/sous-plugin-cli/src/views/domains/setup.spec.ts`
 - **Before:** the sentence was matched as one line.
 - **Now:** whitespace is collapsed before matching.
 - **Why:** the warning is wrapped to the terminal width, so the sentence spans two lines.
 
 ### "should report an alias clash naming both plugins"
 
-- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **File:** `packages/sous-plugin-cli/test/cli.test.ts`
 - **Before:** the error sentence was matched as one line.
 - **Now:** whitespace is collapsed before matching.
 - **Why:** the error is wrapped to the terminal width.
 
 ### "should filter messages by --log-level and --debug"
 
-- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **File:** `packages/sous-plugin-cli/test/cli.test.ts`
 - **Before:** standard output was exactly the two message lines.
 - **Now:** the same two lines, then the closing blank lines.
 - **Why:** the reporter ends a command's output with blank lines.
 
 ### "should fail a question it cannot ask, naming the flag"
 
-- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **File:** `packages/sous-plugin-cli/test/cli.test.ts`
 - **Before:** the regular expression required each sentence of the error on exact lines.
 - **Now:** it allows any whitespace between the sentences and before `USAGE`.
 - **Why:** the error is wrapped and the help follows with the reporter's spacing. The same words are shown.
 
 ### "should show warnings kept from building the config"
 
-- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **File:** `packages/sous-plugin-cli/test/cli.test.ts`
 - **Before:** standard error contained `Warning: p added a "not-a-kind" entity, ...` on one line.
 - **Now:** it contains the `WARNING:` banner and, with whitespace collapsed, the same sentence.
 - **Why:** a plain warning is drawn with the banner, and the sentence is wrapped.
@@ -1514,7 +1514,7 @@ with a capital letter, and warnings on standard error.
 ### "should print stack frames when SOUS_DEBUG is set" (`help-and-flags.test.ts`)
 
 - **Before / now:** the test is unchanged. The code changed: `reportError` in
-  `packages/plugin-cli/src/front-end.ts` passed the stack frames inside the problem's cause, so the
+  `packages/sous-plugin-cli/src/front-end.ts` passed the stack frames inside the problem's cause, so the
   reporter wrapped each frame and split `at name` from its `(file:line:column)`.
 - **Why:** a stack frame must stay on one line. The frames are now printed with `reporter.text`
   (shown exactly as given) after the problem.
@@ -1559,7 +1559,7 @@ with a capital letter, and warnings on standard error.
 
 Changes made when every message moved onto a level and a style (`BaseReporter`).
 
-### plugin-compiler
+### sous-plugin-compiler
 
 - **"should report a malformed include line with its file and line"** (`test/compilation.test.ts`)
   - **Before:** expected the text `Malformed include line: @docs/notes.txt\n  in file: <entry>, line 2`.
@@ -1574,7 +1574,7 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Now:** expects the error text `Include not found: @missing.md` and a problem entry with details `subject: "generated/x"`, `line: 1`.
   - **Why:** the target id is the problem's subject, not part of the text.
 
-### plugin-build
+### sous-plugin-build
 
 - **"reportUnanswered() should list each unanswered variable and say how to answer"** (`src/report.spec.ts`)
   - **Before:** the plain message ended at the last item.
@@ -1585,67 +1585,67 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Now:** expects a `list` style notice whose details items are `acme/jira moved from 1.0.0 to 1.2.0.`
   - **Why:** the indentation and bullet are the reporter's job.
 
-### core and plugin-confd (apply order)
+### core and sous-plugin-confd (apply order)
 
 - **"should order contributors by name, before and after"** (`core/test/order-and-stages.test.ts`)
   - **Before:** contributors without an `applyOrder` sat at 0, so `zz-early` (declared before `confd/500`) could not move and `confd/500` moved after it.
   - **Now:** the default is 2000, so `zz-early` moves to 1999 and runs before every contributor left at the default.
   - **Why:** the default `applyOrder` changed from 0 to 2000.
-- **"should settle when a file reads a variable a later file sets"** (`core/test/order-and-stages.test.ts`) and **"should apply a file with no leading number at 90500"** (`plugin-confd/test/confd-files.test.ts`)
+- **"should settle when a file reads a variable a later file sets"** (`core/test/order-and-stages.test.ts`) and **"should apply a file with no leading number at 90500"** (`sous-plugin-confd/test/confd-files.test.ts`)
   - **Before / now:** `sous.config.*` is at 89900 instead of 90000.
   - **Why:** `sous.config.*` and its patch files apply at 89900.
-- **"should apply the user's files after a plugin at apply order 89999"** (`plugin-confd/test/confd-files.test.ts`)
+- **"should apply the user's files after a plugin at apply order 89999"** (`sous-plugin-confd/test/confd-files.test.ts`)
   - **Before / now:** the plugin sits at 89899 (the test is renamed to match), the highest number below `sous.config.*`.
   - **Why:** 89899 is now the highest plugin number that still applies before the user's files.
 
-### plugin-inspect
+### sous-plugin-inspect
 
 - **"should give each layer its apply orders"** (`src/inspect.spec.ts`)
   - **Before:** expected declared and actual apply orders `[0, 0]` and `[0, 1]`.
   - **Now:** `[2000, 2000]` and `[2000, 2001]`.
   - **Why:** the default `applyOrder` is 2000.
 
-### plugin-config-files
+### sous-plugin-config-files
 
 - **"should warn when a .sous directory holds several main config files"** (`test/main-config.test.ts`)
   - **Before:** the first file was read and sous warned.
   - **Now:** renamed "should fail when ..."; the build fails with a `ConfigError` naming both files.
   - **Why:** two files in one directory with the same base name are an error.
 
-### plugin-recipes
+### sous-plugin-recipes
 
 - **"recipe.update and subscription.update should plan an update without writing"** (`src/part-a/intents/intents.spec.ts`)
   - **Before / now:** test unchanged; its fake `refs.format` (`test/part-a/helpers.ts`, `shortRefs`) gained `recipeRef`.
   - **Why:** `plannedQuestionsOf` builds a recipe ref through `refs.format.recipeRef`, which the fake lacked.
 
-### plugin-update
+### sous-plugin-update
 
 - **"update.scan contributor should skip other managers and report a failing one"** (`test/scan.test.ts`)
   - **Before:** the fake config recorded `log(level, message)`.
   - **Now:** it records `warn(message)`.
   - **Why:** a `ConfigBuilder` is a reporter; the contributor calls `config.warn`.
 
-### plugin-cli (build view)
+### sous-plugin-cli (build view)
 
 - **"should print nothing for a build.prepare that changed nothing"**, **"should show new and moved pins, restored recipes and newer versions"** and **"should warn about unanswered variables and list skipped recipes"** (`src/views/domains/build.spec.ts`)
   - **Before:** the view for `build.prepare` printed the lockfile, restore, newer-version, unanswered-variable and skipped-recipe facts.
-  - **Now:** removed. The view no longer exists; `build.prepare` is internal and plugin-build's `reportPrepared` (`src/report.ts`, covered by `src/report.spec.ts`) is the only reporter of those facts.
+  - **Now:** removed. The view no longer exists; `build.prepare` is internal and sous-plugin-build's `reportPrepared` (`src/report.ts`, covered by `src/report.spec.ts`) is the only reporter of those facts.
   - **Why:** the view was a second copy of that reporting. `BuildPrepareResult` lost `skippedLines` and `unansweredWarning` with it.
 
-### plugin-init and `sous init`: the `--format` option is gone
+### sous-plugin-init and `sous init`: the `--format` option is gone
 
 - **"should write a JSON config bound to the shipped schema when asked"** (`packages/sous/test/integration/init-command.test.ts`)
   - **Before:** `sous init --format json --no-build` wrote `.sous/sous.config.jsonc` bound to the schema.
   - **Now:** removed. `sous init` always writes `.sous/sous.config.js`.
   - **Why:** ruling by the user, 2026-10-30: "remove the format option entirely, all `init` commands should produce `sous.config.js`; I will add it back later, if it seems useful."
-- **"should bind the JSONC config to the schema for this version"**, **"should write sous.config.jsonc for --format %s"** and **"should refuse an unknown format"** (`packages/plugin-init/test/init.test.ts`)
+- **"should bind the JSONC config to the schema for this version"**, **"should write sous.config.jsonc for --format %s"** and **"should refuse an unknown format"** (`packages/sous-plugin-init/test/init.test.ts`)
   - **Before / now:** removed with the option.
   - **Why:** same ruling.
-- **"should write every file a new project needs"**, **"should write a config without projectRoot or a skills directory"** and **"should write a JavaScript config"** (`packages/plugin-init/test/init.test.ts`)
+- **"should write every file a new project needs"**, **"should write a config without projectRoot or a skills directory"** and **"should write a JavaScript config"** (`packages/sous-plugin-init/test/init.test.ts`)
   - **Before:** the first two passed `format: "json"` and expected `sous.config.jsonc`; the third passed `format: "js"`.
   - **Now:** none passes a format; they expect `sous.config.js` (the second reads the config through the loader as a module).
   - **Why:** same ruling.
-- **"should register the init intent with every old flag"** (`packages/plugin-init/test/index.test.ts`)
+- **"should register the init intent with every old flag"** (`packages/sous-plugin-init/test/index.test.ts`)
   - **Before:** expected the input properties to include `format` with `["js", "jsonc", "json"]`.
   - **Now:** `format` is not expected.
   - **Why:** same ruling.
@@ -1654,12 +1654,12 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
 
 - **The whole "the command inventory" suite** (`packages/sous/test/command-inventory.test.ts`; it ran only with `SOUS_CHECK_INVENTORY=1`)
   - **Before:** compared the new command tree with `fixtures/command-inventory.json`.
-  - **Now:** deleted. The fixture stays because `packages/plugin-authoring/test/plugin.test.ts` still reads it.
+  - **Now:** deleted. The fixture stays because `packages/sous-plugin-authoring/test/plugin.test.ts` still reads it.
   - **Why:** ruling by the user, 2026-10-30: "this is not a valid long-term test".
 
 ## intents return outputs (core)
 
-All in `packages/core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
+All in `packages/sous-lib-core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
 
 - **Every test whose handler, wrapper or `.after` / `.error` listener returned a bare value** (`chains.test.ts`, `engine-fixes.test.ts`, `engine-handle.test.ts`, `events.test.ts`, `plugins.test.ts`, `services-and-entities.test.ts`, `timing.test.ts`, `types.test.ts`)
   - **Before:** handlers returned strings, numbers, arrays, objects or nothing, and tests compared what `engine.submit` and `ctx.run` resolved with, for example `toBe("ok")` or `toEqual(["built", "first", "second"])`.
@@ -1671,22 +1671,22 @@ All in `packages/core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handl
   - **Why:** the event's `result` is what the handler returned.
 - **New:** "should refuse a handler or wrapper that returns something other than IntentOutputs" (`chains.test.ts`).
 
-## intents return outputs (plugin-mcp)
+## intents return outputs (sous-plugin-mcp)
 
-- **"returns a string result as it is"** (`packages/plugin-mcp/test/server.test.ts`)
+- **"returns a string result as it is"** (`packages/sous-plugin-mcp/test/server.test.ts`)
   - **Before:** the handler returned a string, and the tool's text was that string.
   - **Now:** renamed "returns the outputs' text, and their plain object as structured content"; the handler returns outputs with a `summary`, and the test also expects `structuredContent` to be the plain object.
   - **Why:** a tool call returns `outputs.toText()` and `outputs.toPlain()`.
 - **"submits each call as a new chain and returns its result as text and structured content"** and **"asks a chain's questions through MCP elicitation"** (same file)
   - **Before / now:** same expectations; the fixture handlers return `IntentOutputs.of(...)`, and `namespace.list` adds a `DataValue` result so the text is still the JSON.
   - **Why:** same ruling.
-- **New** in `packages/plugin-mcp/src/reporter.spec.ts`: an error sends its cause chain as text and `errors`; a payload sends its text and `toPlain()` fields; a `Result` entry is not sent.
+- **New** in `packages/sous-plugin-mcp/src/reporter.spec.ts`: an error sends its cause chain as text and `errors`; a payload sends its text and `toPlain()` fields; a `Result` entry is not sent.
 - **`test/helpers.ts`** reads `mcp.serve`'s outputs with `toPlain()`.
 
 
-## intents return outputs (plugin-cli)
+## intents return outputs (sous-plugin-cli)
 
-All in `packages/plugin-cli/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`, there are no views, results go to standard output and everything else to standard error.
+All in `packages/sous-plugin-cli/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`, there are no views, results go to standard output and everything else to standard error.
 
 - **Every fixture and test handler that returned a bare value** (`test/fixtures.ts`, `test/cli.test.ts`, `test/engine-fixes.test.ts`, `src/command-tree.spec.ts`, `src/parse.spec.ts`)
   - **Before:** handlers returned strings, objects, numbers or nothing, and the CLI printed them (text as it was, anything else as JSON).
@@ -1726,51 +1726,51 @@ All in `packages/plugin-cli/`. Ruling by the user, 2026-10-30 (ADR 0022): a hand
   - **Kept, with their intents returning outputs:** "should draw the banner on a terminal only", "should accept -y, -f, --yes and --force for clear", "should list the other spellings in help", the two watch mode tests (the rebuild notice and the key hint are now on standard error).
 - **`src/views/domains/*.spec.ts`** are not touched here; the main session deletes them with the view code, and each plugin carries over the assertions about its own intents.
 
-## intents return outputs (plugin-authoring, plugin-build, plugin-compiler)
+## intents return outputs (sous-plugin-authoring, sous-plugin-build, sous-plugin-compiler)
 
-- **"should print the plan and change nothing on a dry run"**, **"should pass --check and report the drift a merge will rewrite"** and **"should cut no tags on a branch unless --tag says so"** (`plugin-authoring/src/release/release.spec.ts`)
+- **"should print the plan and change nothing on a dry run"**, **"should pass --check and report the drift a merge will rewrite"** and **"should cut no tags on a branch unless --tag says so"** (`sous-plugin-authoring/src/release/release.spec.ts`)
   - **Before:** read the plan sentences, the drift list and the no-tags note from `reporter.at("notice")`.
   - **Now:** read them from the outputs the release returns (`tools.results`); the first also checks the output titles and the plan list.
   - **Why:** the release plan is the command's result now, so it is returned, not reported.
-- **"should report a heading, a list per section and the breaking warning"** (`plugin-authoring/src/submit/changelog.spec.ts`)
+- **"should report a heading, a list per section and the breaking warning"** (`sous-plugin-authoring/src/submit/changelog.spec.ts`)
   - **Before:** `reportChangelog` reported the heading and lists.
   - **Now:** renamed "should return a heading, a list per section and report the breaking warning"; it tests `changelogOutputs` and `reportChangelogWarnings`.
   - **Why:** the changelog is a result; only its warnings are progress.
-- **contribute, plugin and real-plugins tests** (`plugin-authoring`)
+- **contribute, plugin and real-plugins tests** (`sous-plugin-authoring`)
   - **Before:** step runners and `engine.handle.submit` returned plain results.
   - **Now:** runners return `IntentOutputs.of(...)`; the engine tests call `.toPlain()`.
   - **Why:** intents return outputs.
-- **`report.spec.ts`, `build.test.ts`, `watch.test.ts`** (`plugin-build`)
+- **`report.spec.ts`, `build.test.ts`, `watch.test.ts`** (`sous-plugin-build`)
   - **Before:** read `details` and `message` strings of reported lists, and "Aborted." from the reporter.
   - **Now:** read payloads with `messageText`; "Aborted." is the summary of the returned output; the failed-build test also checks the exit code 1, the Command Variables output and `watching`.
   - **Why:** the reporter keeps payloads; `clear` returns "Aborted." as its result.
-- **Test helpers** (`plugin-build/test/helpers.ts`, `plugin-compiler/test/helpers.ts`)
+- **Test helpers** (`sous-plugin-build/test/helpers.ts`, `sous-plugin-compiler/test/helpers.ts`)
   - **Now:** stand-in intents return `IntentOutputs.of(...)`, and `run`/`compile`/`prune` return `toPlain()`.
 
-## intents return outputs (plugin-recipe-answers, plugin-init, plugin-update, plugin-inspect, plugin-harnesses, plugin-config-files)
+## intents return outputs (sous-plugin-recipe-answers, sous-plugin-init, sous-plugin-update, sous-plugin-inspect, sous-plugin-harnesses, sous-plugin-config-files)
 
-- **Every test that submits or calls a converted intent** (`plugin-recipe-answers/test/plugin.test.ts`, `plugin-init/test/init.test.ts`, `plugin-update/test/update.test.ts` and `plugin-update/test/plugins-install.test.ts`, `plugin-inspect/src/inspect.spec.ts`, `plugin-harnesses/test/plugin.test.ts`, `plugin-config-files/test/config-set.test.ts`)
+- **Every test that submits or calls a converted intent** (`sous-plugin-recipe-answers/test/plugin.test.ts`, `sous-plugin-init/test/init.test.ts`, `sous-plugin-update/test/update.test.ts` and `sous-plugin-update/test/plugins-install.test.ts`, `sous-plugin-inspect/src/inspect.spec.ts`, `sous-plugin-harnesses/test/plugin.test.ts`, `sous-plugin-config-files/test/config-set.test.ts`)
   - **Before:** read the intent's result directly.
   - **Now:** read `.toPlain()` of the returned outputs; the assertions are unchanged.
   - **Why:** intents return outputs.
-- **"should list variables with their answers"** (`plugin-recipe-answers/test/plugin.test.ts`): reads `variables` of the result, since the declared result of `vars.list` is `{ variables: [...] }` and no longer an array.
-- **"should list plugins and filter by name"** and **"should list and filter timings"** (`plugin-inspect/src/inspect.spec.ts`): read `plugins` and `timings`, since `plugins.show` and `timings.show` declare `{ plugins }` and `{ timings }`.
-- **"should get a value and report a missing one"** (`plugin-inspect/src/inspect.spec.ts`)
+- **"should list variables with their answers"** (`sous-plugin-recipe-answers/test/plugin.test.ts`): reads `variables` of the result, since the declared result of `vars.list` is `{ variables: [...] }` and no longer an array.
+- **"should list plugins and filter by name"** and **"should list and filter timings"** (`sous-plugin-inspect/src/inspect.spec.ts`): read `plugins` and `timings`, since `plugins.show` and `timings.show` declare `{ plugins }` and `{ timings }`.
+- **"should get a value and report a missing one"** (`sous-plugin-inspect/src/inspect.spec.ts`)
   - **Before:** a missing path gave `exists: false` in the result.
   - **Now:** renamed "should get a value and fail on a missing one"; the intent throws the `ConfigError` the view used to throw.
   - **Why:** there is no view to throw it any more.
-- **Ask report assertion** ("should ask through the prompter and store each answer", `plugin-recipe-answers/src/ask.spec.ts`): reads the `VariableSet` message instead of `details`, because the reporter keeps payloads.
-- **Test stand-ins** (`plugin-init/test/helpers.ts`, `plugin-harnesses/test/stand-ins.ts`): the stand-in `build` intent returns `IntentOutputs.of(...)`.
+- **Ask report assertion** ("should ask through the prompter and store each answer", `sous-plugin-recipe-answers/src/ask.spec.ts`): reads the `VariableSet` message instead of `details`, because the reporter keeps payloads.
+- **Test stand-ins** (`sous-plugin-init/test/helpers.ts`, `sous-plugin-harnesses/test/stand-ins.ts`): the stand-in `build` intent returns `IntentOutputs.of(...)`.
 - **New**
-  - `plugin-recipe-answers/test/plugin.test.ts`: "should show the listing as command variables and a table", "should show one variable as a block, its facts and its ladder", "should report the answers stored under their titles", "should say what vars map changed" (carry over the assertions of the deleted `vars.spec.ts` view).
-  - `plugin-init/test/init.test.ts`: "should end with the dry-run sentence, or with what was set up", "should include the build's outputs before what was set up".
-  - `plugin-update/test/update.test.ts`: "should show a dry run as a plan", "should end a real update with a summary".
-  - `plugin-inspect/src/inspect.spec.ts`: "should show a scalar verbatim, an object as data and layers as a table", and the `outputs` group (config show as data and as a tree, `config validate` ending with exit code 1, plugins and timings outputs).
-  - `plugin-config-files/test/config-set.test.ts`: the dry run test also checks the returned summary.
+  - `sous-plugin-recipe-answers/test/plugin.test.ts`: "should show the listing as command variables and a table", "should show one variable as a block, its facts and its ladder", "should report the answers stored under their titles", "should say what vars map changed" (carry over the assertions of the deleted `vars.spec.ts` view).
+  - `sous-plugin-init/test/init.test.ts`: "should end with the dry-run sentence, or with what was set up", "should include the build's outputs before what was set up".
+  - `sous-plugin-update/test/update.test.ts`: "should show a dry run as a plan", "should end a real update with a summary".
+  - `sous-plugin-inspect/src/inspect.spec.ts`: "should show a scalar verbatim, an object as data and layers as a table", and the `outputs` group (config show as data and as a tree, `config validate` ending with exit code 1, plugins and timings outputs).
+  - `sous-plugin-config-files/test/config-set.test.ts`: the dry run test also checks the returned summary.
 
-## intents return outputs (plugin-recipes)
+## intents return outputs (sous-plugin-recipes)
 
-All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
+All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
 
 - **Every test that read a result from `engine.handle.submit(...)`** (`test/part-b/intents.test.ts`: `lock.rebuild`, `lock.show`, `repo.gc`, `repo.link`, `repo.unlink`)
   - **Before:** `submit` resolved with the result object.
@@ -1788,23 +1788,23 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
   - **Before:** the build follow-up was `{ intent: "build", result: { ran: "build" } }`.
   - **Now:** it also carries `outputs`, which the intent shows after its own and strips from the machine data.
   - **Why:** the build's outputs are appended to the subscription's.
-- **New** in `src/part-a/intents/outputs.spec.ts`, carrying over the assertions of the removed plugin-cli views (`catalog`, `repos`, `updates`): the Command Variables output and titled tables of the browsing intents; `--installed` and `--latest` wording; the linked-recipe note; `repo.add`, `repo.gc` and `lock.show` outputs; follow-up outputs after the intent's own with `vars.ask` under "Variables"; exit code 1 and the error when the build failed; the update plan's order; lockfile diff wording; headings; and the closing data output.
+- **New** in `src/part-a/intents/outputs.spec.ts`, carrying over the assertions of the removed sous-plugin-cli views (`catalog`, `repos`, `updates`): the Command Variables output and titled tables of the browsing intents; `--installed` and `--latest` wording; the linked-recipe note; `repo.add`, `repo.gc` and `lock.show` outputs; follow-up outputs after the intent's own with `vars.ask` under "Variables"; exit code 1 and the error when the build failed; the update plan's order; lockfile diff wording; headings; and the closing data output.
 
-## intents return outputs (results, not progress: plugin-recipes, plugin-build)
+## intents return outputs (results, not progress: sous-plugin-recipes, sous-plugin-build)
 
-- **"should show the follow-ups' outputs after its own, with vars.ask under 'Variables', and end with the data"** and **"should put the data on the last output, follow-ups included"** (`plugin-recipes/src/part-a/intents/outputs.spec.ts`)
+- **"should show the follow-ups' outputs after its own, with vars.ask under 'Variables', and end with the data"** and **"should put the data on the last output, follow-ups included"** (`sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`)
   - **Before:** a data-only output closed the follow-ups' outputs (3 outputs, last one with no summary).
   - **Now:** `finish` uses `IntentOutputs.withData`, so the data sits on the follow-ups' last output (2 outputs, last one "Two.").
   - **Why:** one implementation of "data on the last output"; `toPlain()` is unchanged.
-- **"should clear without asking when forced, and name --force when it cannot ask"** (`plugin-build/test/build.test.ts`)
+- **"should clear without asking when forced, and name --force when it cannot ask"** (`sous-plugin-build/test/build.test.ts`)
   - **Before:** `compiler.prune` was called with `{ all: true }`.
   - **Now:** `{ all: true, report: false }`.
   - **Why:** `clear` returns the removed files as its result, so the compiler no longer reports them one by one.
-- **New:** "should return the removed files as lists, not as progress" (`plugin-build/test/build.test.ts`), and a check in the first `lock.rebuild` test (`plugin-recipes/test/part-b/intents.test.ts`) that the diff list and closing sentence are returned outputs.
+- **New:** "should return the removed files as lists, not as progress" (`sous-plugin-build/test/build.test.ts`), and a check in the first `lock.rebuild` test (`sous-plugin-recipes/test/part-b/intents.test.ts`) that the diff list and closing sentence are returned outputs.
 
-## intents return outputs (plugin-cli front end, sous, plugin-claude-code)
+## intents return outputs (sous-plugin-cli front end, sous, sous-plugin-claude-code)
 
-- **"should run the claude command with the tools.claude args, then the user's"** (`plugin-claude-code/test/plugin.test.ts`)
+- **"should run the claude command with the tools.claude args, then the user's"** (`sous-plugin-claude-code/test/plugin.test.ts`)
   - **Before:** the stub `build` intent returned `{ ok: true }`.
   - **Now:** it returns `IntentOutputs.of({ ok: true })`.
   - **Why:** every handler returns `IntentOutputs`; the engine rejects anything else.
@@ -1820,10 +1820,10 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
   - **Before:** `Running: ...` on stdout; `Would run: ...` with no padding.
   - **Now:** `Running: ...` is checked on stderr (progress); `Would run : ...` is the aligned key and value row.
   - **Why:** commands are reported while they run; result blocks go through the shared aligner.
-- **Removed** "should cut one-line JSON with an ellipsis" (`plugin-cli/src/terminal/layout.spec.ts`): `truncateJson` was deleted because nothing in plugin-cli used it.
-- **New** "should not close a result on a pipe with blank lines" (`plugin-cli/src/terminal-reporter.spec.ts`).
+- **Removed** "should cut one-line JSON with an ellipsis" (`sous-plugin-cli/src/terminal/layout.spec.ts`): `truncateJson` was deleted because nothing in sous-plugin-cli used it.
+- **New** "should not close a result on a pipe with blank lines" (`sous-plugin-cli/src/terminal-reporter.spec.ts`).
 
-### "should draw the outputs on standard output" (plugin-cli, `test/outputs.test.ts`)
+### "should draw the outputs on standard output" (sous-plugin-cli, `test/outputs.test.ts`)
 
 - **Before:** standard output ended with the two closing blank lines.
 - **Now:** it ends with the last line of the result.
@@ -1834,14 +1834,14 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **New** "should load an ES module sous.config.js without Node's typeless package warning" and "should still load a CommonJS sous.config.js".
   - **Why:** a `.js` ES module config in a project whose package.json has no `"type"` made Node print MODULE_TYPELESS_PACKAGE_JSON on every run; the loader now marks such a file as an ES module itself.
 
-### Recipe contents moved into `recipes.contents` (plugin-skills, plugin-memories, plugin-recipes)
+### Recipe contents moved into `recipes.contents` (sous-plugin-skills, sous-plugin-memories, sous-plugin-recipes)
 
-- **Removed** the `staticBase()` tests in `plugin-skills/src/sources.spec.ts`: the function is gone; `host.globs` owns `staticBase`, and `recipes.contents` applies it.
-- **Changed** the `findSkills()` calls in that file and `selectMemories()` calls in `plugin-memories/src/listing.spec.ts`: they now pass `contents` (the real `RecipeContents`, over a stand-in `host.globs`).
-  - **Why:** both plugins used to glob a recipe's manifest themselves; the one implementation is in plugin-recipes.
-- **Changed** `plugin-recipes/src/part-a/active.spec.ts`: `contents()` files now carry `base`, and `contents()` goes through `recipes.contents`.
-- **New** `plugin-recipes/src/part-a/contents.spec.ts` and "should read an index upstream without caching it" in `index-cache.spec.ts`.
-- **Changed** the fake index cache in `plugin-recipes/src/part-a/intents/intents.spec.ts`: it now has `fetchUpstream` and `ensureInStore`, which callers use instead of reaching into the cache's `core`.
+- **Removed** the `staticBase()` tests in `sous-plugin-skills/src/sources.spec.ts`: the function is gone; `host.globs` owns `staticBase`, and `recipes.contents` applies it.
+- **Changed** the `findSkills()` calls in that file and `selectMemories()` calls in `sous-plugin-memories/src/listing.spec.ts`: they now pass `contents` (the real `RecipeContents`, over a stand-in `host.globs`).
+  - **Why:** both plugins used to glob a recipe's manifest themselves; the one implementation is in sous-plugin-recipes.
+- **Changed** `sous-plugin-recipes/src/part-a/active.spec.ts`: `contents()` files now carry `base`, and `contents()` goes through `recipes.contents`.
+- **New** `sous-plugin-recipes/src/part-a/contents.spec.ts` and "should read an index upstream without caching it" in `index-cache.spec.ts`.
+- **Changed** the fake index cache in `sous-plugin-recipes/src/part-a/intents/intents.spec.ts`: it now has `fetchUpstream` and `ensureInStore`, which callers use instead of reaching into the cache's `core`.
 
 ### New tests in `sous/test/bin.test.ts` (token counting)
 
@@ -1854,87 +1854,87 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Now:** "should ship tiktoken_bg.wasm next to the bundle" checks that the bundle the tests build has the wasm file beside it, and that package.json's `files` lists it.
 - **Why:** `npm pack` only lists a `dist/` that is already built, and the release job runs the tests before it builds, so the 1.0.5 release failed on an empty list.
 
-### Config loading fixes (plugin-config-files)
+### Config loading fixes (sous-plugin-config-files)
 
-- **Changed** "should refuse to edit a JavaScript config" in `plugin-config-files/test/config-set.test.ts`: it now expects the message to name the main config as code and to give `--file 600-settings.jsonc` as the example.
+- **Changed** "should refuse to edit a JavaScript config" in `sous-plugin-config-files/test/config-set.test.ts`: it now expects the message to name the main config as code and to give `--file 600-settings.jsonc` as the example.
   - **Why:** `sous init` writes `sous.config.js`, so `sous config set` without `--file` hit the old generic message; it now says exactly what to pass.
-- **New** `plugin-config-files/src/module-format.spec.ts`: an ES module `.js` config loads whether package.json has no `"type"` or `"type": "commonjs"`, and a `module.exports` config still loads as CommonJS.
+- **New** `sous-plugin-config-files/src/module-format.spec.ts`: an ES module `.js` config loads whether package.json has no `"type"` or `"type": "commonjs"`, and a `module.exports` config still loads as CommonJS.
 
-### Output fixes found by the end-to-end harness (plugin-recipes, plugin-cli)
+### Output fixes found by the end-to-end harness (sous-plugin-recipes, sous-plugin-cli)
 
-- **Changed** "should group the questions by recipe, with answer hints" in `plugin-recipes/src/part-a/intents/outputs.spec.ts`: the expected title is now `workflow/a asks 1 question` without a colon.
+- **Changed** "should group the questions by recipe, with answer hints" in `sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`: the expected title is now `workflow/a asks 1 question` without a colon.
   - **Why:** the terminal heading adds the colon itself, so `recipe show` printed `asks 9 questions::`.
-- **New** "describeSource" tests in `plugin-recipes/src/part-a/questions.spec.ts` and a heading case in `plugin-cli/src/terminal/layout.spec.ts`.
-- **New** "should keep the search Kind column wide enough for every kind" in `plugin-recipes/src/part-a/intents/outputs.spec.ts`, and "should say plainly that the directory is not in a git repository" in `plugin-authoring/src/release/release.spec.ts`.
+- **New** "describeSource" tests in `sous-plugin-recipes/src/part-a/questions.spec.ts` and a heading case in `sous-plugin-cli/src/terminal/layout.spec.ts`.
+- **New** "should keep the search Kind column wide enough for every kind" in `sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`, and "should say plainly that the directory is not in a git repository" in `sous-plugin-authoring/src/release/release.spec.ts`.
 
 ### The index records ranges, and subscriptions resolve together (gh-220, ADR 0023)
 
-- **Changed** in `plugin-authoring`: "should record a sibling dependency at the version it is released with" (`src/release/index-builder.spec.ts`) is now "should record a sibling with no range as the same major as its release", and every expected dependency entry in that file, `src/release/release.spec.ts` ("should tag dependency-first and record the dependency's range") and `test/real-plugins.test.ts` records `range` (`^<version>` for a sibling named with no range, the declared range otherwise) instead of `version`. The expected disagreement message in "should report a recorded kind that disagrees with the manifest" says "the range '^0.1.0'" instead of "version 0.1.0".
+- **Changed** in `sous-plugin-authoring`: "should record a sibling dependency at the version it is released with" (`src/release/index-builder.spec.ts`) is now "should record a sibling with no range as the same major as its release", and every expected dependency entry in that file, `src/release/release.spec.ts` ("should tag dependency-first and record the dependency's range") and `test/real-plugins.test.ts` records `range` (`^<version>` for a sibling named with no range, the declared range otherwise) instead of `version`. The expected disagreement message in "should report a recorded kind that disagrees with the manifest" says "the range '^0.1.0'" instead of "version 0.1.0".
   - **Why:** a release records a range per dependency and no exact version; the consuming project's lockfile is the only lock.
-- **Changed** in `plugin-recipes`: "should ask for the version the index recorded a dependency was released against" (`src/part-b/resolver/resolve.spec.ts`) is now "should ask for the range the index recorded for a dependency"; a recorded exact version is read as `^<version>`, limited by the declared range. "should combine every holder's range" (`src/part-b/index-cache/freshness.spec.ts`) expects `>=1.0.0 <2.0.0-0 >=1.1.0` instead of `^1 >=1.1.0`, because ranges are now combined by one function that also handles `||`.
+- **Changed** in `sous-plugin-recipes`: "should ask for the version the index recorded a dependency was released against" (`src/part-b/resolver/resolve.spec.ts`) is now "should ask for the range the index recorded for a dependency"; a recorded exact version is read as `^<version>`, limited by the declared range. "should combine every holder's range" (`src/part-b/index-cache/freshness.spec.ts`) expects `>=1.0.0 <2.0.0-0 >=1.1.0` instead of `^1 >=1.1.0`, because ranges are now combined by one function that also handles `||`.
 - **Removed** "should union holders" (`src/part-a/lock-holds.spec.ts`): `mergeHolders` is gone, because `sous subscription update` now resolves every subscription in one pass instead of merging separate resolutions.
 - **Changed** in `sous`: "should tag dependency-first and record the resolved dependency" (`test/integration/repo-release.test.ts`, now "...record the dependency's range") and "should record declarations and questions in the released index" (`test/integration/recipe-sets.test.ts`) expect `range: "^<version>"` instead of `version`, for the same reason.
 
 ### A depends-only recipe is pinned once per holder (gh-220, ADR 0023, decisions 4 and 5)
 
-- **Changed** in `plugin-recipes`: "should satisfy every range asked of a recipe at once" and "should give two subscriptions one shared version every recorded dependency allows" (`src/part-b/resolver/resolve.spec.ts`) expect each holder's range to carry `kind` (`subscribes` or `depends`).
+- **Changed** in `sous-plugin-recipes`: "should satisfy every range asked of a recipe at once" and "should give two subscriptions one shared version every recorded dependency allows" (`src/part-b/resolver/resolve.spec.ts`) expect each holder's range to carry `kind` (`subscribes` or `depends`).
   - **Why:** the resolver tells holders apart by how they hold a recipe, to decide who shares its version and who gets a pin of their own.
-- **Changed** in `plugin-build`: "should lock a new subscription and mark the config changed" (`test/prepare.test.ts`) expects the resolve to hold `{ keep: {}, keepPins: {} }`, and the stand-in services in `test/helpers.ts` gain `recipes.lock.held` and `recipes.resolver.subscriptionRequest`.
+- **Changed** in `sous-plugin-build`: "should lock a new subscription and mark the config changed" (`test/prepare.test.ts`) expects the resolve to hold `{ keep: {}, keepPins: {} }`, and the stand-in services in `test/helpers.ts` gain `recipes.lock.held` and `recipes.resolver.subscriptionRequest`.
   - **Why:** the build now asks `recipes.lock.held` for what to hold, which includes each holder's own pin.
-- **Changed** the stand-in resolver in `plugin-recipes/src/part-a/intents/intents.spec.ts` and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts`: they gain `subscriptionRequest` and `held`.
+- **Changed** the stand-in resolver in `sous-plugin-recipes/src/part-a/intents/intents.spec.ts` and the in-memory lock in `sous-plugin-recipes/test/part-a/helpers.ts`: they gain `subscriptionRequest` and `held`.
   - **Why:** `subscription update` and `subscription add` read a subscription's request from `recipes.resolver.subscriptionRequest`, its one owner, and hold the lock through `recipes.lock.held`.
 
 ### Newer versions of a holder's own pin are reported (gh-220, ADR 0023, decision 4)
 
-- **Changed** in `plugin-build`: "should list newer versions and say nothing moved" (`src/report.spec.ts`) also checks that a newer version of a version pinned for one holder alone is listed with the detail "this project pins 1.0.0 for lib/two alone". The stand-in resolver in `test/helpers.ts` reads optional `requestedBy` and `pins` from `world.published`, and holds `keepPins` the way it holds `keep`.
+- **Changed** in `sous-plugin-build`: "should list newer versions and say nothing moved" (`src/report.spec.ts`) also checks that a newer version of a version pinned for one holder alone is listed with the detail "this project pins 1.0.0 for lib/two alone". The stand-in resolver in `test/helpers.ts` reads optional `requestedBy` and `pins` from `world.published`, and holds `keepPins` the way it holds `keep`.
   - **Why:** the build's upstream check now compares each holder's own pin with the version the newest resolve gives that holder, and names the holder in what it reports.
 
 ### Two versions of one recipe that cannot share an answer (gh-220, ADR 0023, decisions 4 and 6)
 
-- **Changed** in `plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
+- **Changed** in `sous-plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
   - **Why:** `RecipeAnswers` and `BuildPrepareResult` now list the variables a version of a recipe gets no answer for, because another version of the same recipe is asked instead, so the build can warn about them.
 
-### Time-budget reports at debug level (core, plugin-cli; gh-204 bug 15, gh-206 item 1)
+### Time-budget reports at debug level (core, sous-plugin-cli; gh-204 bug 15, gh-206 item 1)
 
 - **Changed** "should report a build over budget at debug level, naming the slowest contributor" (was "should warn when building the config goes over budget…"), "should keep the over-budget warning back…" and "should take budgets from the config…" in `core/test/timing.test.ts`: they read the report at `debug`, not `warning`.
   - **Why:** a step over its budget is for whoever works on sous or a plugin, so it is shown only with `--debug`.
-- **New** "should leave time spent waiting for an answer out of an intent's timing" in `core/test/timing.test.ts`, and "should show messages kept from building the config under the run's --log-level" in `plugin-cli/test/cli.test.ts`.
+- **New** "should leave time spent waiting for an answer out of an intent's timing" in `core/test/timing.test.ts`, and "should show messages kept from building the config under the run's --log-level" in `sous-plugin-cli/test/cli.test.ts`.
 
-### A question that cannot be asked no longer prints the command's help (plugin-cli; gh-204 bug 45)
+### A question that cannot be asked no longer prints the command's help (sous-plugin-cli; gh-204 bug 45)
 
-- **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
+- **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `sous-plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
   - **Why:** the error already names the flag that answers the question, and about 50 lines of help pushed it off the screen. Input the command could not take (`InputError`) still prints the help.
 - **Changed** "should accept --non-interactive and refuse to publish, naming --yes" (`sous/test/integration/repo-release.test.ts`), "should fail on an ambiguous name and take the first with --accept-first" (`vars-commands.test.ts`) and "should fail on an ambiguous bare name with no terminal, naming --accept-first" (`repositories.test.ts`): they expect no `USAGE` under the error.
 - **Changed** "should refuse to add a repository with no terminal and no --trust" (`repositories.test.ts`): it expects the error to name `--yes`, the flag the error itself gives (`--trust` and `--force` spell the same answer).
   - **Why:** the test found `--trust` only in the command's help, which no longer follows the error.
 
-### Help leaves out topics whose commands are all hidden (plugin-cli; gh-204 bug 46)
+### Help leaves out topics whose commands are all hidden (sous-plugin-cli; gh-204 bug 46)
 
-- **New** "should leave out a topic whose commands are all hidden, and list them when asked by name" in `plugin-cli/test/cli.test.ts`.
+- **New** "should leave out a topic whose commands are all hidden, and list them when asked by name" in `sous-plugin-cli/test/cli.test.ts`.
   - **Why:** `sous --help` listed `harness  1 command` although its only command is hidden, and `sous harness --help` printed an empty `USAGE`. The `plugins` and `timings` topics now have summaries instead of "N commands".
 
 ### `repo release --check` says when a merge leaves the index alone (gh-204, bug 30)
 
-- **Changed** "should pass --check and report the drift a merge will rewrite" (`plugin-authoring/src/release/release.spec.ts` and `sous/test/integration/repo-release.test.ts`), now "should pass --check and report drift that waits for the next release": it expects "The committed sous.index.json is out of date" and no "Merging rewrites".
+- **Changed** "should pass --check and report the drift a merge will rewrite" (`sous-plugin-authoring/src/release/release.spec.ts` and `sous/test/integration/repo-release.test.ts`), now "should pass --check and report drift that waits for the next release": it expects "The committed sous.index.json is out of date" and no "Merging rewrites".
   - **Why:** that drift (an older generator, an outdated description) publishes no version, and a release rewrites the index only when it publishes one, so the merge leaves the index as it is. The old wording promised a rewrite that never happened.
 - **New** in `release.spec.ts`: "should say a merge rewrites the index when it publishes a version" and "should say a removed recipe leaves the index at the next release that publishes".
 
-### Generated branch names go to the second (plugin-recipes; gh-229 defect 5)
+### Generated branch names go to the second (sous-plugin-recipes; gh-229 defect 5)
 
-- **Changed** "should generate a branch name from the local date and time" (`plugin-recipes` `checkout.spec.ts`): it expects `sous/edit-20260105-090703`, with seconds. "should create a branch with a generated name from the --from base" (`sous/test/integration/repo-link-branches.test.ts`) and "should link the repository on a generated branch" (`repo-contribute.test.ts`) match `\d{8}-\d{6}`.
+- **Changed** "should generate a branch name from the local date and time" (`sous-plugin-recipes` `checkout.spec.ts`): it expects `sous/edit-20260105-090703`, with seconds. "should create a branch with a generated name from the --from base" (`sous/test/integration/repo-link-branches.test.ts`) and "should link the repository on a generated branch" (`repo-contribute.test.ts`) match `\d{8}-\d{6}`.
   - **Why:** a name to the minute collided when a repository was linked twice in one minute. A name that is still taken gets `-2`, `-3`, and so on.
 
-### Stand-ins learn new service methods (plugin-build, plugin-recipes; gh-204 bugs 24 and 36)
+### Stand-ins learn new service methods (sous-plugin-build, sous-plugin-recipes; gh-204 bugs 24 and 36)
 
-- **Changed** the stand-in services in `plugin-build/test/helpers.ts` (the lock service gains `withIndexHashes` and `world.indexHashes`; the active-recipes service gains `switchedOffButBuilt`; the git runner gains `run`) and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts` (a pass-through `withIndexHashes`).
+- **Changed** the stand-in services in `sous-plugin-build/test/helpers.ts` (the lock service gains `withIndexHashes` and `world.indexHashes`; the active-recipes service gains `switchedOffButBuilt`; the git runner gains `run`) and the in-memory lock in `sous-plugin-recipes/test/part-a/helpers.ts` (a pass-through `withIndexHashes`).
   - **Why:** a build now fills in a repository's missing `indexHash` from the cache, and says when a switched-off recipe is still built for the recipes that need it.
 
-### The state file stores paths relative to its project (plugin-compiler, plugin-build; gh-229 defect 2)
+### The state file stores paths relative to its project (sous-plugin-compiler, sous-plugin-build; gh-229 defect 2)
 
-- **Changed** `plugin-compiler/test/prune.test.ts` and `compilation.test.ts`: they read the state file with `loadState(file, project.root)` instead of as raw JSON with absolute paths. The gh-127 test in `compilation.test.ts` also checks the entry it compares is defined.
+- **Changed** `sous-plugin-compiler/test/prune.test.ts` and `compilation.test.ts`: they read the state file with `loadState(file, project.root)` instead of as raw JSON with absolute paths. The gh-127 test in `compilation.test.ts` also checks the entry it compares is defined.
   - **Why:** the state file records its project root and stores paths inside it relative to it, so a copied project never prunes the original's outputs. Without the added check, the gh-127 comparison matched `undefined` to `undefined`.
 - **Changed** "should remove a file that is no longer in the config" (`prune.test.ts`): it also checks that removed files are listed under a heading before `Done.`.
-- **Changed** four tests in `plugin-build/test/build.test.ts` and two in `watch.test.ts`: the expected `compiler.compile` input includes `reportEnd: false`.
+- **Changed** four tests in `sous-plugin-build/test/build.test.ts` and two in `watch.test.ts`: the expected `compiler.compile` input includes `reportEnd: false`.
   - **Why:** the build now prints `Done.` itself, after the outputs it removed.
 
 ### Removing the built-in core subscription keeps its pin (gh-204 bug 26)
@@ -1942,43 +1942,58 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** "should record an opt-out when the built-in core subscription is removed" (`sous/test/integration/core-namespace.test.ts`): after `remove core` the lockfile still pins core, and after `add core` the core entry is gone from `510-subscriptions.jsonc` rather than replaced by a user entry.
   - **Why:** the test asserted the bug. Switched off means skipped with its pins kept, the same as `disable core`, and adding core back only clears the opt-out.
 
-### Variables using their default (plugin-recipe-answers; gh-229, gh-204 bugs 34 and 35)
+### Variables using their default (sous-plugin-recipe-answers; gh-229, gh-204 bugs 34 and 35)
 
 - **Changed** "should skip variables answered up front" (`ask.spec.ts`): the report includes `wouldAsk: []`. "should summarize a run in plain lines" (`ask.spec.ts`) ends with the hint naming `sous vars ask <name>` and `--all`.
-- **Changed** "should list variables with their answers" and "should show the listing as command variables and a table" (`plugin-recipe-answers/test/plugin.test.ts`): `taskRoot` shows its default, `.sous/tasks`, not `undefined` or `(unanswered)`. "should show one variable as a block, its facts and its ladder" no longer expects a `storage-path` fact.
+- **Changed** "should list variables with their answers" and "should show the listing as command variables and a table" (`sous-plugin-recipe-answers/test/plugin.test.ts`): `taskRoot` shows its default, `.sous/tasks`, not `undefined` or `(unanswered)`. "should show one variable as a block, its facts and its ladder" no longer expects a `storage-path` fact.
   - **Why:** the build uses a default, so the listing shows it as the value in use. `vars show` now says where the value is stored and, on a separate "Saved to" line, where new answers go.
 
-### Help and table layout (plugin-cli; gh-204 bug 48, gh-229 formatting)
+### Help and table layout (sous-plugin-cli; gh-204 bug 48, gh-229 formatting)
 
-- **Changed** "Whether to trust it. One of" and "Tags to give it. Default" (`plugin-cli/test/cli.test.ts`) and "How much to scale each diagram. Default: 1." (`sous/test/bin.test.ts`): a period now ends the description before the sentence the help adds.
-- **Changed** "should draw a result's outputs in order" (`plugin-cli/src/terminal-reporter.spec.ts`) and "should draw the outputs on standard output" (`plugin-cli/test/outputs.test.ts`): a blank line follows a table.
-- **Changed** the `lock show` test in `plugin-recipes/src/part-a/intents/outputs.spec.ts`: the footer is a `Lockfile` label line, so the path stays beside its label.
+- **Changed** "Whether to trust it. One of" and "Tags to give it. Default" (`sous-plugin-cli/test/cli.test.ts`) and "How much to scale each diagram. Default: 1." (`sous/test/bin.test.ts`): a period now ends the description before the sentence the help adds.
+- **Changed** "should draw a result's outputs in order" (`sous-plugin-cli/src/terminal-reporter.spec.ts`) and "should draw the outputs on standard output" (`sous-plugin-cli/test/outputs.test.ts`): a blank line follows a table.
+- **Changed** the `lock show` test in `sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`: the footer is a `Lockfile` label line, so the path stays beside its label.
   - **Why:** help read "…as <name>=<value> May be given more than once.", and a table ran straight into the line after it.
 
-### Backups before overwriting or removing (plugin-compiler)
+### Backups before overwriting or removing (sous-plugin-compiler)
 
-- **Changed** the `writer()` helper in `plugin-compiler/src/writer.spec.ts`: it takes an optional `backups` setting, so a test can fix the backup folder's clock. The existing tests pass it nothing and are otherwise unchanged.
+- **Changed** the `writer()` helper in `sous-plugin-compiler/src/writer.spec.ts`: it takes an optional `backups` setting, so a test can fix the backup folder's clock. The existing tests pass it nothing and are otherwise unchanged.
   - **Why:** the writer now copies content sous did not produce to `<sousDir>/backups/<YYYY-MM-DD>/<HHMM-SS>/` before it overwrites or removes it, and a test needs a known timestamp to name the backup.
-- **New** `plugin-compiler/src/backups.spec.ts`: the timestamp folder layout, the path of a file inside and outside the project, one folder per run, and never overwriting an earlier backup.
+- **New** `sous-plugin-compiler/src/backups.spec.ts`: the timestamp folder layout, the path of a file inside and outside the project, one folder per run, and never overwriting an earlier backup.
 - **New** in `writer.spec.ts` ("WriterService backups"): an untracked file is backed up before it is overwritten; a hand-edited tracked output is backed up before it is overwritten or removed; its own unchanged output and identical content are not backed up; a dry run plans the backup and writes nothing; a file skipped with `overwriteUntracked: false` is not backed up; the default folder sits beside the state file.
-- **New** `plugin-compiler/test/backups.test.ts`: the same through `compiler.compile` and `compiler.prune`, checking the reported `backed-up:` and `would-back-up:` lines, that a hand-edited output whose source did not change is compiled again and backed up, that clearing (`report: false`) still reports backups, and that one run uses one timestamp folder.
-- **New** in `plugin-cli/src/terminal-reporter.spec.ts`: "should draw a backup with where the file went", for the new `backed-up` and `would-back-up` operation actions.
+- **New** `sous-plugin-compiler/test/backups.test.ts`: the same through `compiler.compile` and `compiler.prune`, checking the reported `backed-up:` and `would-back-up:` lines, that a hand-edited output whose source did not change is compiled again and backed up, that clearing (`report: false`) still reports backups, and that one run uses one timestamp folder.
+- **New** in `sous-plugin-cli/src/terminal-reporter.spec.ts`: "should draw a backup with where the file went", for the new `backed-up` and `would-back-up` operation actions.
 
-### Init imports a project's agent files, and repo init runs init (plugin-init, plugin-authoring, plugin-compiler, sous)
+### Init imports a project's agent files, and repo init runs init (sous-plugin-init, sous-plugin-authoring, sous-plugin-compiler, sous)
 
-- **Changed** "should register the init intent with every old flag" (`plugin-init/test/index.test.ts`): the input also lists `moveIncludes`, `copyIncludes` and `leaveIncludes`.
-- **Changed** "should write every file a new project needs", "should write a config without projectRoot or a skills directory" and "should write nothing on a dry run" (`plugin-init/test/init.test.ts`): init now also writes the project-root `.gitignore` and the starter memory `.sous/memories/project/overview.tpl.md`, and the starter target compiles into both `CLAUDE.md` and `AGENTS.md`.
+- **Changed** "should register the init intent with every old flag" (`sous-plugin-init/test/index.test.ts`): the input also lists `moveIncludes`, `copyIncludes` and `leaveIncludes`.
+- **Changed** "should write every file a new project needs", "should write a config without projectRoot or a skills directory" and "should write nothing on a dry run" (`sous-plugin-init/test/init.test.ts`): init now also writes the project-root `.gitignore` and the starter memory `.sous/memories/project/overview.tpl.md`, and the starter target compiles into both `CLAUDE.md` and `AGENTS.md`.
   - **Why:** sous owns every agent file in a project, so both root files are build output, gitignored, compiled from `.sous/memories/instructions.tpl.md`.
-- **New** in `plugin-init/test/init.test.ts` ("init importing a project's agent files"): an existing `CLAUDE.md` is imported and git stops tracking it; with no terminal the error names the three include switches and `--yes`, and two switches are refused; a terminal answer, `--leave-includes` and `--yes` each decide what happens to an included file; existing skills move to `.sous/skills/` and the config compiles them back; a recipe repository gets the Sous Repo starter memory.
-- **New** `plugin-init/src/import.spec.ts`: finding references outside code, skipping a pointer, link or copy of the other instruction file, following includes recursively and pinning a README and files outside the project, copying instead of moving a file a left file includes, rewriting every reference from the new place, and applying an import with backups.
-- **Changed** "leaves recipe targets and plugin targets with no clash alone" (`plugin-compiler/src/targets.spec.ts`) is now "leaves targets with no clash alone": its recipe unit writes a different file. **New** "should drop a recipe's clashing output with a warning".
+- **New** in `sous-plugin-init/test/init.test.ts` ("init importing a project's agent files"): an existing `CLAUDE.md` is imported and git stops tracking it; with no terminal the error names the three include switches and `--yes`, and two switches are refused; a terminal answer, `--leave-includes` and `--yes` each decide what happens to an included file; existing skills move to `.sous/skills/` and the config compiles them back; a recipe repository gets the Sous Repo starter memory.
+- **New** `sous-plugin-init/src/import.spec.ts`: finding references outside code, skipping a pointer, link or copy of the other instruction file, following includes recursively and pinning a README and files outside the project, copying instead of moving a file a left file includes, rewriting every reference from the new place, and applying an import with backups.
+- **Changed** "leaves recipe targets and plugin targets with no clash alone" (`sous-plugin-compiler/src/targets.spec.ts`) is now "leaves targets with no clash alone": its recipe unit writes a different file. **New** "should drop a recipe's clashing output with a warning".
   - **Why:** a project skill with a recipe skill's name now wins, with a warning, instead of both writing the same file in turn.
-- **Changed** "should write every file a new repository needs" (`plugin-authoring/src/scaffold/scaffold.spec.ts`): the scaffold writes no `CLAUDE.md` or `AGENTS.md`. **Removed** "should write a CLAUDE.md that points an agent at the core skills"; its content is now init's Sous Repo starter memory, tested in plugin-init. **Changed** "should write a CONTRIBUTING.md that points at CLAUDE.md" is now "should write a CONTRIBUTING.md that says to run sous build".
-- **Changed** `plugin-authoring/test/plugin.test.ts` and `test/real-plugins.test.ts`: the engines add stand-ins for plugin-init and plugin-config-files, which plugin-authoring now depends on, and "should scaffold a repository through the engine" expects `init` to run in the new repository.
+- **Changed** "should write every file a new repository needs" (`sous-plugin-authoring/src/scaffold/scaffold.spec.ts`): the scaffold writes no `CLAUDE.md` or `AGENTS.md`. **Removed** "should write a CLAUDE.md that points an agent at the core skills"; its content is now init's Sous Repo starter memory, tested in sous-plugin-init. **Changed** "should write a CONTRIBUTING.md that points at CLAUDE.md" is now "should write a CONTRIBUTING.md that says to run sous build".
+- **Changed** `sous-plugin-authoring/test/plugin.test.ts` and `test/real-plugins.test.ts`: the engines add stand-ins for sous-plugin-init and sous-plugin-config-files, which sous-plugin-authoring now depends on, and "should scaffold a repository through the engine" expects `init` to run in the new repository.
 - **Changed** "should set the project up so that the next build succeeds" and the starter-note test (`sous/test/integration/init-command.test.ts`): the source is `.sous/memories/instructions.tpl.md`, and both `CLAUDE.md` and `AGENTS.md` are compiled without the sources' notes.
 - **Changed** `e2e/scenarios/01-basics.mjs` and `05-authoring.mjs`: init's new files and root `.gitignore` block, and `repo init` setting the repository up for sous.
-- **Changed** "should treat a warning as an error in strict mode and carry on" and "should leave a warning a warning without strict mode" (`plugin-compiler/test/compilation.test.ts`): each creates the empty `nothing/` folder first. **New** "should not warn about a glob whose folder does not exist yet".
+- **Changed** "should treat a warning as an error in strict mode and carry on" and "should leave a warning a warning without strict mode" (`sous-plugin-compiler/test/compilation.test.ts`): each creates the empty `nothing/` folder first. **New** "should not warn about a glob whose folder does not exist yet".
   - **Why:** a glob target whose folder does not exist yet (the project-skills target `sous init` always writes, before the project has a skill) compiles nothing without a warning; a folder that exists but matches nothing still warns.
-- **Changed** "should write a config without projectRoot or a skills directory" (`plugin-init/test/init.test.ts`): the config names `.claude/skills` once, as the project-skills target's destination, and lists that target.
+- **Changed** "should write a config without projectRoot or a skills directory" (`sous-plugin-init/test/init.test.ts`): the config names `.claude/skills` once, as the project-skills target's destination, and lists that target.
 - **Changed** "should give a second generated branch a name of its own" (`sous/test/integration/repo-link-branches.test.ts`): it expects any numeric suffix, not exactly `-2`.
   - **Why:** the test before it can generate a name in the same second, which makes the first free suffix `-3`; the contract is that the second name gets a suffix of its own.
+
+### Includes follow Claude Code's imports; the glob order; empty globs (sous-plugin-compiler, sous-plugin-memories, sous)
+
+- **Changed** "should return every glob match in include order, case ignored" (was "...in bytewise order") and "should expand a glob under an alias base" (`sous-plugin-compiler/src/includes.spec.ts`): `a.md, B.md, c.md` instead of `B.md, a.md, c.md`, and the base's own `one.md` before `deep/two.md`.
+  - **Why:** a glob's files now come folder by folder, case ignored (S10, rule 8).
+- **Changed** "should fail the build when a glob matches nothing" and "...a recipe glob matches nothing" (`sous-plugin-compiler/test/includes.test.ts`) are now "should remove the line of a glob that matches nothing" and "...a recipe glob...": the build passes, the line is gone, nothing is reported.
+  - **Why:** a glob that matches nothing does nothing (S10, rule 4).
+- **Changed** "should fail the build on a malformed include line" (`includes.test.ts`) is now "should leave a plain path that names no file as text"; **changed** "should name the included file of a malformed include line" to "...of a broken include line", which uses `@#nope/x.md`.
+  - **Why:** `@docs/notes.txt` and `@broken/` are plain paths now, and a plain path that names no file is text with no message; only Sous's own forms can be broken.
+- **Changed** "should report a malformed include line with its file and line" (`sous-plugin-compiler/test/compilation.test.ts`) to "should report a broken include line with its file and line", with `@#nope/notes.md` and the new hint (backticks or a backslash).
+- **Changed** "should keep the previous output and state entry when an include is missing", "should compile every target and list every error" (`compilation.test.ts`), "should name a content target by its id in errors" (`sous-plugin-compiler/test/targets.test.ts`) and "should exit non-zero and keep the last good output" (`sous/test/integration/whole-build.test.ts`): the missing include is `@#project/missing.md` instead of `@missing.md`.
+  - **Why:** a missing plain path is no longer an error, so these tests use a Sous form, which still is.
+- **Changed** "should compile only the targets that read a changed file" (`targets.test.ts`): the target naming the missing `@later.md` is compiled and its output holds `@later.md`, instead of reporting "Include not found".
+- **Replaced** the `looksLikeIncludeLine` and `isIncludeLine` cases in `sous-plugin-compiler/src/paths.spec.ts` with cases for `importPath`, `isIncludableFile`, `isSousIncludeForm` and the new `isIncludeLine`; `looksLikeIncludeLine` and `INCLUDE_LINE_PATTERN` are gone.
+- **New** `sous-plugin-compiler/src/markdown.spec.ts` (the rows of the comparison with Claude Code), `sous-plugin-compiler/src/globs.spec.ts` (the 21-row order table), "includes anywhere in Markdown text" and "should leave a glob's binary matches out" in `includes.test.ts`, and "should order a recipe's memories like a glob include" in `sous-plugin-memories/src/listing.spec.ts`.

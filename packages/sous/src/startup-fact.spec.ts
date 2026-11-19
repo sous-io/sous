@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ProjectInfo } from "@sous-io/plugin-api";
+import type { ProjectInfo } from "@sous-io/sous-plugin-api";
 import { loadsOnlyBuiltIns, recordStartupFact, startupKey } from "./startup-fact.js";
 
 const made: string[] = [];

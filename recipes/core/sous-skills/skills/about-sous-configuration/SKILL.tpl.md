@@ -74,10 +74,10 @@ prefer the on-disk copies.
   `recipes.memories.first` and `recipes.memories.exclude` (globs over `namespace/recipe`, or
   `/regex/` strings) order and filter the recipe memories.
 - A target in `compilation.targets` wins over a plugin's or a recipe's target that would write
-  the same file. That is why the config `sous init` writes, which compiles
-  `.sous/memories/instructions.tpl.md` into both `CLAUDE.md` and `AGENTS.md`, replaces the
-  Claude Code plugin's own `CLAUDE.md`, and why a project skill compiled from `.sous/skills/`
-  replaces a recipe skill of the same name (the build warns about the recipe's copy).
+  the same file. A project that compiles its own memories file replaces the one the Claude Code
+  plugin builds (`.claude/rules/SOUS-MEMORIES.md`, from `.sous/MEMORIES.tpl.md`; the config
+  `sous init` writes compiles none), and a project skill compiled from `.sous/skills/` replaces a
+  recipe skill of the same name (the build warns about the recipe's copy).
 - The `plugins` key decides which Sous plugins (packages that extend sous itself) load, beyond
   the built-ins and those listed in the project's `package.json`, and holds each plugin's own
   options. `configuration.md` above documents its fields. Run `sous plugins show` to see which

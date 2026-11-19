@@ -5,7 +5,7 @@ needs, cutting a release, editing a published repository in place, and proposing
 [Repository file formats](repositories-file-formats.md) holds the schemas; this page is the workflow.
 
 ?> A recipe repository is also a sous project: `sous repo init` sets one up with a `.sous/` directory of its
-own, so its `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output, and anyone who clones it runs
+own, so its memories file and `.claude/skills/` are build output, and anyone who clones it runs
 `sous build`. `sous repo init` and `sous repo release` find the repository by its `sous.repo.yaml`, not through
 that config. Run them from inside the repository itself. `sous repo submit` runs there too, and may also be run
 from a project that links the repository.
@@ -37,12 +37,12 @@ is files only: run `git init`, commit it, and add the remote you publish from be
 After the scaffold, the command runs [`sous init`](commands.md#sous-init-directory) in the same directory, so the
 repository is also a sous project. Init imports a `CLAUDE.md`, an `AGENTS.md` or skills in `.claude/skills/` that
 the directory already holds, and with nothing to import it writes a starter memory,
-`.sous/memories/project/sous-repo.tpl.md`, which says this is a sous recipe repository and names the core skills
-an agent loads before changing anything. It then runs the first build, which compiles `CLAUDE.md` and
-`AGENTS.md` and installs the core skills. The only question init can ask is what happens to files an existing
-`CLAUDE.md` or `AGENTS.md` includes; `--yes`, `--move-includes`, `--copy-includes` and `--leave-includes` answer it
-and are passed through, as are `--no-build` and `--dry-run`. A directory that already holds a sous config keeps
-it, and init is skipped with a note.
+`.sous/memories/project.tpl.md`, which says this is a sous recipe repository and names the core skills an agent
+loads before changing anything. It then runs the first build, which compiles the memories file and installs the
+core skills. Init asks what happens to files an existing `CLAUDE.md` or `AGENTS.md` includes, and, in a directory
+with a `.git` folder, whether to install the git hooks; `--yes`, `--move-includes`, `--copy-includes` and
+`--leave-includes` are passed through, as are `--no-build` and `--dry-run`, and `--yes` installs the hooks. A
+directory that already holds a sous config keeps it, and init is skipped with a note.
 
 ?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the confirmation flag other
 commands spell `--yes`, `-y`, `--force` or `--trust`.
@@ -78,11 +78,50 @@ contents:
 ```
 
 `contents` groups are what a subscribing project receives, one group per kind, each with `include` glob patterns
-relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
-`prompts` and `config`; the kind decides what happens to them in the subscriber's project, which the subscriber shapes with
+relative to the recipe folder (and optional `exclude` patterns). Sous registers four kinds, `skills`, `memories`,
+`prompts` and `config`, and a sous plugin may register more; the kind decides what happens to them in the subscriber's project, which the subscriber shapes with
 [`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does). Field tables are in the
 [recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
 metadata is the source of truth for the version: never edit `sous.index.json` by hand.
+
+### Conditional contents, inline content and edits
+
+`contents` is added to the subscriber's config, so any of its values may be a
+[config expression](configuration.md#config-expressions), evaluated in the subscriber's project with the
+recipe's own answers. An optional part of a recipe is a variable the subscriber answers, and a condition on it:
+
+```yaml
+variables:
+  - name: jiraEnabled
+    type: boolean
+    prompt: Should the Jira capability be installed?
+    description: Installs the Jira skills. The default leaves them out.
+    example: "true"
+    default: false
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*
+    exclude:
+      - $if:
+          expr: "harness.id != 'claude-code'"
+          then: skills/session-harness/**/*
+      - $if:
+          expr: "jiraEnabled != true"
+          then: skills/jira-*/**/*
+```
+
+An `include` item may also be content written in place, with the path it is treated as having
+(`{ $inline: "...", path: skills/hello/SKILL.md }`), and a value anywhere may come from a file with
+`{ $file: documents/rules.json }`, relative to the recipe folder. A recipe can also change files it does
+not own, such as a setting in `.claude/settings.json`, with a top-level `edits` list. The forms are in
+[Contents are config](repositories-file-formats.md#contents-are-config) and
+[Edits](repositories-file-formats.md#edits).
+
+A kind that no plugin registers fails a subscriber's build. `sous repo release` refuses it when nothing the
+recipe names could register it (no `requires.plugins`, no `subscribes`, no plugin of its own), and warns
+otherwise, so a typo such as `claude-code-plugn` is caught before it is published.
 
 ### Shipping memories
 
@@ -136,7 +175,10 @@ requires:
         sous-plugin-claude-code: "^1.0.0"
 ```
 
-A subscriber is offered the missing plugin when they subscribe; see
+A subscriber is offered the missing plugin when they subscribe. When npm cannot install it, sous adds
+"Perhaps the required plugin ships as part of a recipe?": a plugin shipped inside a recipe has no npm
+name, and a recipe that needs one lists that recipe under `subscribes` (never `depends`, whose plugins are
+never loaded). See
 [Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe). How a plugin is written is in
 [the engine specification](architecture/specifications/S1-engine.md), under "Plugins".
 
@@ -392,10 +434,10 @@ Once your change is released, one of these moves the project onto it:
 
 ```bash
 sous repo unlink my-recipes --update       # unlink, move this repository's pins, then rebuild
-sous subscription update my-recipes        # the same move, when nothing is linked any more
+sous update my-recipes                     # the same move, when nothing is linked any more
 ```
 
-`--update` runs exactly the code `sous subscription update my-recipes` runs: every pin the repository supplies
+`--update` runs exactly the code `sous update my-recipes` runs: every pin the repository supplies
 moves to the newest version its range allows, after one plan and one question. See
 [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 

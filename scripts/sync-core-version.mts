@@ -4,11 +4,11 @@
  *
  * The version comes from `packages/sous/package.json`, the package published
  * as `@sous-io/sous`. Every other `packages/<name>/package.json` shares that
- * one version, because they are released together: `@sous-io/plugin-api` is
+ * one version, because they are released together: `@sous-io/sous-plugin-api` is
  * published beside `@sous-io/sous`, and `pnpm publish` turns the `workspace:*`
- * range `@sous-io/sous` depends on it with into the version plugin-api's own
- * package.json declares at that moment. A plugin-api left behind would make
- * the published sous ask for an older plugin-api. So the script writes the
+ * range `@sous-io/sous` depends on it with into the version sous-plugin-api's own
+ * package.json declares at that moment. A sous-plugin-api left behind would make
+ * the published sous ask for an older sous-plugin-api. So the script writes the
  * version into each of them.
  *
  * VERSION PARITY is a hard rule of the repositories design: every project's
@@ -126,7 +126,7 @@ function readSousVersion(repoRoot: string): string {
  * file keeps its layout.
  */
 async function syncPackageVersions(repoRoot: string, version: string): Promise<PackageSyncResult[]> {
-  const { parseDocument } = await import("../packages/documents/src/index.js");
+  const { parseDocument } = await import("../packages/sous-lib-documents/src/index.js");
   const packagesDir = path.join(repoRoot, "packages");
   if (!fs.existsSync(packagesDir)) return [];
 
@@ -165,7 +165,7 @@ async function syncLockedCore(
   version: string,
   hash: string
 ): Promise<LockSyncResult | undefined> {
-  const { lockfileFormat } = await import("../packages/plugin-formats/src/index.js");
+  const { lockfileFormat } = await import("../packages/sous-plugin-formats/src/index.js");
   const lockfilePath = path.join(repoRoot, LOCKFILE_PATH);
   if (!fs.existsSync(lockfilePath)) return undefined;
 
@@ -199,9 +199,9 @@ async function syncLockedCore(
  * @param repoRoot - The root of the sous repository to work on.
  */
 export async function syncCoreVersion(repoRoot: string): Promise<SyncResult> {
-  const { hashDirectory } = await import("../packages/plugin-formats/src/index.js");
-  const { findRecipeManifest } = await import("../packages/plugin-formats/src/manifests.js");
-  const { setRecipeVersion } = await import("../packages/plugin-authoring/src/release/bump.js");
+  const { hashDirectory } = await import("../packages/sous-plugin-formats/src/index.js");
+  const { findRecipeManifest } = await import("../packages/sous-plugin-formats/src/manifests.js");
+  const { setRecipeVersion } = await import("../packages/sous-plugin-authoring/src/release/bump.js");
 
   const version = readSousVersion(repoRoot);
 

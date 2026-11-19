@@ -50,6 +50,14 @@ when stdout is a TTY.
   ([Patches](config-layers.md#patches) explains both). It ends with the result and the number of passes the config took to
   settle.
 - `--raw` prints each config file as written, in order.
+- `--harness <id>` prints that harness's own config build instead of the merged config (see
+  [Conditions on the harness](configuration.md#conditions-on-the-harness)). A harness with no build
+  is an error that names the harnesses built.
+
+Once any change came from a harness's build, `--layers` names the build of every change
+(`no harness`, `harness codex`). Changes a harness's build made to a list the merge takes from it
+(compilation outputs, `editor.edits`, `recipes.contents`) are listed after the others, with the
+indices of that harness's own build.
 
 ```text
 confd/620-no-diagrams.js
@@ -82,8 +90,16 @@ conf.d/610-mac.jsonc             { "$if": { "expr": "host.platform == 'darwin'",
 result                           false     (settled after 1 pass)
 ```
 
+`--harness <id>` reads the value from that harness's own config build:
+
+```bash
+sous config get compilation.includeSourceComments --harness codex
+```
+
 `sous plugins show` lists every plugin and what it adds or replaces, and `--timings` on any command
-prints how long each step took, each config file included.
+prints how long each step took, each config file included. Each harness's build shows as
+`config.harness:<id>`, its stages and passes as `config.stage:<id>/0` and `config.pass:<id>/0.1`, and
+the merge as `config.merge:config`.
 
 ## sous config validate
 
@@ -99,11 +115,17 @@ All three commands honor the same config-locating flags and env vars as every ot
 
 `sous config set <path> <value>` writes one value into a config file, changing only that key, so
 comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as
-text. Without `--file` it writes the main config (`sous.config.json`, `.jsonc` or `.yaml`). Sous
-cannot edit code, and `sous init` writes the main config as `sous.config.js`; for such a project
-pass `--file` with a JSON, JSONC or YAML file, which is created in `.sous/conf.d/` when it does not
-exist:
+text. Without `--file` it writes the main config (`sous.config.json`, `.jsonc` or `.yaml`), which
+is `sous.config.jsonc` in a project `sous init` set up. Sous cannot edit code; for a project whose
+main config is a `sous.config.js` written by hand, pass `--file` with a JSON, JSONC or YAML file,
+which is created in `.sous/conf.d/` when it does not exist:
 
 ```bash
 sous config set compilation.includeSourceComments false --file 600-settings.jsonc
 ```
+
+Every other line of the file stays byte for byte, in YAML as in JSON. Two YAML cases are the
+exception. A key written with `?` cannot be edited line by line, so the whole file is written again;
+its comments are kept, but its spacing may change. A value shared through a YAML anchor (`&name`) and
+its aliases (`*name`) is not set at all, since setting it would change every copy: the command stops
+with an error naming the key.

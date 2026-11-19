@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { SOUS_VERSION } from "../utils/package-info.js";
-import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "../../../plugin-host/src/gitignore.js";
+import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "../../../sous-plugin-host/src/gitignore.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
@@ -120,8 +120,9 @@ describe("sous init in a directory that has never seen sous", () => {
   /**
    * `sous init` should write the `.sous/` directory, run the first build, and
    * leave the project in a state where `sous build` succeeds immediately: the
-   * starter prompt compiled, the core skills compiled, and `core/sous-skills`
-   * pinned in the lockfile at the running sous version.
+   * core skills compiled, `core/sous-skills` pinned in the lockfile at the
+   * running sous version, and no root CLAUDE.md or AGENTS.md (the plugin for
+   * each coding tool compiles `.sous/MEMORIES.tpl.md` instead).
    */
   it(
     "should set the project up so that the next build succeeds",
@@ -132,23 +133,30 @@ describe("sous init in a directory that has never seen sous", () => {
       expect(init.status, init.stdout + init.stderr).toBe(0);
 
       for (const relative of [
-        ".sous/sous.config.js",
-        ".sous/memories/instructions.tpl.md",
-        ".sous/memories/project/overview.tpl.md",
+        ".sous/sous.config.jsonc",
+        ".sous/MEMORIES.tpl.md",
+        ".sous/memories/project.tpl.md",
         ".sous/.env",
         ".sous/.env.local.example",
         ".sous/.gitignore",
         ".sous/sous.lock.json",
-        "AGENTS.md",
-        "CLAUDE.md",
+        ".sous/sous.state.json",
+        ".gitignore",
         ".claude/skills/about-sous/SKILL.md",
       ]) {
         expect(fs.existsSync(path.join(project, relative)), relative).toBe(true);
       }
 
+      for (const relative of ["AGENTS.md", "CLAUDE.md", ".sous/sous.config.js"]) {
+        expect(fs.existsSync(path.join(project, relative)), relative).toBe(false);
+      }
+
+      // Every ${...} in a path was resolved: nothing was written under a folder named for one.
+      expect(fs.readdirSync(project).filter((name) => name.includes("${"))).toEqual([]);
+
       // The result block names the config; the file list is progress, on stderr.
-      expect(init.stdout).toContain(`Config        : ${path.join(project, ".sous", "sous.config.js")}`);
-      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.js")}`);
+      expect(flatten(init.stdout)).toContain(`Config : ${path.join(project, ".sous", "sous.config.jsonc")}`);
+      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.jsonc")}`);
       expect(init.stdout).not.toContain("package.json");
       // The first build reports its progress (the lockfile pins among it) on stderr.
       expect(init.stdout + init.stderr).toContain(`pinned: core/sous-skills at version ${SOUS_VERSION}`);
@@ -158,51 +166,46 @@ describe("sous init in a directory that has never seen sous", () => {
       ) as { recipes: Record<string, { version: string }> };
       expect(lock.recipes["core/sous-skills"]?.version).toBe(SOUS_VERSION);
 
-      // The starter holds the `#memories` view line. The core recipe publishes
-      // no memories, so the view is empty: the line includes nothing, is not an
-      // error, and is not left in the output as text.
-      const source = fs.readFileSync(
-        path.join(project, ".sous", "memories", "instructions.tpl.md"),
-        "utf8"
-      );
-      expect(source).toContain("@#memories/**/*.md");
-      const agents = fs.readFileSync(path.join(project, "AGENTS.md"), "utf8");
-      expect(agents).not.toContain("@#memories");
+      // The memories source holds both default lines, each on its own line.
+      const source = fs.readFileSync(path.join(project, ".sous", "MEMORIES.tpl.md"), "utf8");
+      expect(source.split("\n")).toContain("@#memories/**/*.md");
+      expect(source.split("\n")).toContain("@memories/**/*.md");
       expect(init.stdout + init.stderr).not.toContain("Error:");
 
       const build = sous(project, ["build"]);
       expect(build.status, build.stdout + build.stderr).toBe(0);
       expect(build.stdout + build.stderr).not.toContain("not included in any output");
+      // The first build recorded what it wrote, so the second found its own files and backed none up.
+      expect(fs.existsSync(path.join(project, ".sous", "backups"))).toBe(false);
     },
     CLI_TIMEOUT
   );
 
   /**
-   * The sources' notes that they are sources ("Never edit the compiled
-   * copies", "Written by `sous init`") should stay in the sources only.
-   * Carried into the compiled CLAUDE.md and AGENTS.md, they tell the reader of
-   * a compiled copy that it is the source (gh-229).
+   * The sources' notes that they are sources should stay in the sources only:
+   * carried into a compiled copy, they tell its reader that it is the source
+   * (gh-229). Each note sits inside a Liquid comment, which compiling drops.
    *
-   * .sous/memories/AGENTS.tpl.md -> holds "never edit the compiled copy"
-   * AGENTS.md                    -> does not
+   * .sous/memories/project.tpl.md -> "{% comment %} Sous compiles this file ... {% endcomment -%}"
    */
   it(
-    "should keep the sources' edit-this-source notes out of the compiled CLAUDE.md and AGENTS.md",
+    "should keep the sources' edit-this-source notes inside Liquid comments",
     () => {
       const project = freshProject("source-note");
 
-      const init = sous(project, ["init"]);
+      const init = sous(project, ["init", "--no-build"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
 
-      const source = fs.readFileSync(path.join(project, ".sous", "memories", "instructions.tpl.md"), "utf8");
-      expect(flatten(source)).toContain("Never edit the compiled copies");
+      for (const relative of [path.join("memories", "project.tpl.md"), "MEMORIES.tpl.md"]) {
+        const source = fs.readFileSync(path.join(project, ".sous", relative), "utf8");
+        const outsideComments = source.replace(/\{%-? comment -?%\}[\s\S]*?\{%-? endcomment -?%\}/g, "");
 
-      for (const name of ["CLAUDE.md", "AGENTS.md"]) {
-        const compiled = fs.readFileSync(path.join(project, name), "utf8");
-        expect(compiled).not.toContain("Never edit the compiled copies");
-        expect(compiled).not.toContain("Written by `sous init`");
-        expect(compiled.startsWith("# source-note\n\nThis project uses sous")).toBe(true);
+        expect(source, relative).toContain("Sous compiles this file");
+        expect(outsideComments, relative).not.toContain("Sous compiles this file");
       }
+
+      const starter = fs.readFileSync(path.join(project, ".sous", "memories", "project.tpl.md"), "utf8");
+      expect(starter.startsWith("# source-note\n")).toBe(true);
     },
     CLI_TIMEOUT
   );
@@ -228,7 +231,7 @@ describe("sous init in a directory that has never seen sous", () => {
       const init = sous(project, ["init", "--no-build"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
 
-      expect(init.stdout).toContain(`Dependency    : @sous-io/sous ${SOUS_VERSION}`);
+      expect(flatten(init.stdout)).toContain(`Dependency : @sous-io/sous ${SOUS_VERSION}`);
       expect(init.stdout).toContain("added to devDependencies in package.json");
       expect(init.stderr).toContain(`added @sous-io/sous ${SOUS_VERSION} to devDependencies`);
       const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
@@ -276,7 +279,7 @@ describe("sous init in a directory that has never seen sous", () => {
       const init = sous(project, ["init", "--dry-run"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
       // The list of files is progress, so it is on stderr.
-      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.js")} (would write)`);
+      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.jsonc")} (would write)`);
       expect(init.stdout).toContain("Nothing was written.");
       expect(listTree(project)).toEqual([]);
     },
@@ -337,7 +340,7 @@ describe("sous init where sous is already set up", () => {
 
       const allowed = sous(inner, ["init", "--no-build", "--yes"], { CI: "1" });
       expect(allowed.status, allowed.stdout + allowed.stderr).toBe(0);
-      expect(fs.existsSync(path.join(inner, ".sous", "sous.config.js"))).toBe(true);
+      expect(fs.existsSync(path.join(inner, ".sous", "sous.config.jsonc"))).toBe(true);
     },
     CLI_TIMEOUT
   );

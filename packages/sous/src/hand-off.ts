@@ -20,9 +20,10 @@
  * - Anything unreadable or ambiguous means "run the copy that was invoked". A hand-off is a
  *   convenience; a refusal to run is not.
  * - `SOUS_NO_DELEGATE` (anything but 0/false/no/off) runs the invoked copy.
- * - `sous update` runs the invoked copy: updating the copy that was invoked is its job, and a
+ * - `sous upgrade` runs the invoked copy: upgrading the copy that was invoked is its job, and a
  *   project copy may be too old to have the command. The command word is the first entry on the
- *   command line that is not a flag, so `sous subscription update` still hands off.
+ *   command line that is not a flag, so `sous build upgrade` still hands off, and so does
+ *   `sous update`, which updates the project's recipes.
  * - The notice goes to stderr, so piped stdout stays clean. It prints when the two versions differ,
  *   and on every hand-off under `SOUS_DEBUG` or with `--verbose` anywhere on the command line.
  */
@@ -41,7 +42,7 @@ export const NO_DELEGATE_ENV = "SOUS_NO_DELEGATE";
 export const DEBUG_ENV = "SOUS_DEBUG";
 
 /** The command that always runs in the copy that was invoked. */
-export const SELF_UPDATE_COMMAND = "update";
+export const SELF_UPDATE_COMMAND = "upgrade";
 
 /** A project copy found by {@link findProjectInstall}. */
 export type ProjectInstall = { same: true; root: string } | { same: false; root: string; version: string; bin: string };

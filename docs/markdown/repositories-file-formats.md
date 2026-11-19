@@ -77,10 +77,12 @@ contents:                           # what a subscriber actually receives
 | `version` | yes | An exact semantic version; the manifest is the source of truth and the git tag follows it |
 | `description` | no | Copied into the index at release time; shown by `sous recipe list` and `sous repo search` |
 | `depends`, `subscribes` | no | Build dependencies and co-subscriptions; within either list, no entry may repeat |
-| `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
+| `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error. Any value in `contents` may be an expression; see [Contents are config](#contents-are-config) |
+| `edits` | no | Changes to document files the recipe does not own; see [Edits](#edits) |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 | `plugin` | no | A sous plugin the recipe ships: `bundle`, the path of one self-contained bundled file, and optionally `types`, its `.d.ts` file; see [Recipes that ship sous plugins](repositories-authoring.md#recipes-that-ship-sous-plugins) |
 | `requires` | no | `requires.plugins` maps npm sous plugin names to version ranges the recipe needs |
+| `handlers` | no | For each purpose (`check`, `configure`, `beforeBuild`, `afterBuild`, `uninstall`, `migrate`), a list of `{ file, handler }`: a self-contained JavaScript file in the recipe and the function it exports, run in the order listed; see [Handlers](handlers.md) |
 
 ```yaml
 plugin:
@@ -89,14 +91,117 @@ plugin:
 requires:
     plugins:
         sous-plugin-claude-code: "^1.0.0"
+handlers:
+    check:
+        - file: handlers/prerequisites.js
+          handler: checkCommands
 ```
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`; a sous plugin is not a content kind but the
-`plugin` field above. `skills` are
+`contents[].kind` names a content kind. Sous registers `skills`, `memories`, `prompts` and `config`, and its
+Claude Code plugin registers `claude-code-plugin` and `claude-code-agent` (see
+[Kinds for Claude Code](#kinds-for-claude-code)); a sous plugin can register more (a `content-kind` entity), so
+any lowercase, hyphenated name is accepted here. A sous plugin is
+not a content kind but the `plugin` field above. `skills` are
 written to the destinations named by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included
-into your instruction files by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
+into each coding tool's memories file by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
 each `config` file joins the subscriber's config, under the project's own files so the project wins; nothing takes `prompts` yet, and the build warns about a recipe that
 publishes them. `include` needs at least one glob, and both lists are recipe-relative.
+
+A kind no plugin registers stops a subscriber's build, naming the kind and the recipe. `sous repo release`
+refuses one when nothing the recipe names could register it (no `requires.plugins`, no `subscribes`, no
+`plugin` of its own), and warns otherwise.
+
+### Kinds for Claude Code
+
+Two kinds carry files only Claude Code reads. Only Claude Code's part of Sous takes them, so a recipe needs no
+harness condition for them, and other coding tools never receive them.
+
+```yaml
+contents:
+  - kind: claude-code-plugin
+    include:
+      - plugins/**            # each folder directly under plugins/ is one plugin
+  - kind: claude-code-agent
+    include:
+      - agents/**/*.md
+```
+
+| Recipe file | Written to |
+|---|---|
+| `plugins/session-harness/.claude-plugin/plugin.json` | `.claude/skills/session-harness/.claude-plugin/plugin.json` |
+| `plugins/session-harness/scripts/start.tpl.sh` | `.claude/skills/session-harness/scripts/start.sh` (rendered) |
+| `agents/reviewer.tpl.md` | `.claude/agents/reviewer.md` (rendered) |
+| `agents/review/security.md` | `.claude/agents/review/security.md` |
+
+- `claude-code-plugin`: a Claude Code plugin folder, one holding `.claude-plugin/plugin.json`. Each folder directly
+  under an `include` pattern's fixed part is one plugin, written under Claude Code's skills directory with the
+  folder name the recipe gives it; Claude Code loads it from there as a plugin.
+- `claude-code-agent`: agent files (Markdown with frontmatter), written to `.claude/agents/` with their
+  sub-folders kept. An agent here keeps its plain name, where an agent inside a plugin is named `<plugin>:<name>`.
+- A file whose name holds `.tpl.` is rendered, so an agent's `model` can be a recipe variable each person answers
+  for themselves; any other file is written as it is.
+- When a build adds, changes or removes a file of a Claude Code plugin (any folder holding
+  `.claude-plugin/plugin.json`, however the recipe shipped it), the build ends with one line: run
+  `/reload-plugins` in any open Claude Code session, since Claude Code loads plugins only when a session starts or
+  on that command.
+
+A plugin folder may also be listed among a recipe's `skills`, with an `exclude` entry carrying
+`harness.id != 'claude-code'` so other tools do not receive it (see [Authoring](repositories-authoring.md)).
+
+### Contents are config
+
+A subscriber's build adds each group of `contents` to its config under `recipes.contents`, so any value in a
+group may be a [config expression](configuration.md#config-expressions) (`$if`, `$elseif`, `$else`, `$expr`) or a
+`$file`, evaluated in the subscriber's project. A condition can read the recipe's own answers, `host.platform`,
+`harness.id` and `env.<NAME>`. An `include` item may also be inline content, with the path it is treated as
+having:
+
+```yaml
+contents:
+  - $if:                                      # a whole group, only for Claude Code
+      expr: "harness.id == 'claude-code'"
+      then:
+        kind: skills
+        include: [claude/**]
+  - kind: skills
+    include:
+      - skills/**/*
+      - $inline: |                            # inline content needs a path
+          Say hello.
+        path: skills/hello/SKILL.md
+    exclude:
+      - $if:                                  # one item, gated by a yes-or-no question
+          expr: "jiraEnabled != true"
+          then: skills/jira-*/**/*
+```
+
+`sous config show recipes.contents` shows what the groups gave. Inline content is never interpolated; it is a
+Liquid template only when its path contains `.tpl.`.
+
+### Edits
+
+`edits` lists changes to document files the recipe does not own, such as a setting in `.claude/settings.json`.
+Each entry names `file` (relative to the project root) and one or more operations, each holding its own
+parameters, or a file-less operation such as `ensureDirectoryExists`. A subscriber's build appends each entry to
+the config key `editor.edits`, with the recipe that declared it, and the editor plugin applies them. An entry may
+be an expression, and a value may come from a `$file`:
+
+```yaml
+edits:
+  - file: .claude/settings.json
+    ensureIncludes:
+      path: permissions.allow
+      items: ["Bash(git-commit.sh:*)"]
+  - $if:
+      expr: "harness.id == 'claude-code'"
+      then:
+        file: .claude/settings.json
+        set:
+          path: permissions.deny
+          value: { $file: documents/deny-rules.json }
+```
+
+The manifest checks only that each entry is an object naming an operation; the editor checks the operations.
 
 ### The submissions block
 
@@ -421,6 +526,7 @@ varMappings:
 | `enabled: false` | either of the two above | The opt-out for the entries sous provides itself, the `sous-recipes` repository and the `core` subscription |
 | `store` | fixed fields | Plain numbers, all optional; the values sous ships are defaults, not assumptions |
 | `recipes` | content kind | What each kind does; see [recipes: what each content kind does](#recipes-what-each-content-kind-does) |
+| `recipes.handlers` | a list | Written by sous while the config is built: one `{ recipe, purpose, file, handler }` entry for each handler a subscribed recipe from a trusted repository lists; see [Handlers](handlers.md) |
 | `varMappings` | environment variable name | Binds one name to one recipe variable, written `namespace/recipe/variableName` with an optional `repo:` qualifier |
 
 A repository's `url` may be a URL or an absolute path to one on this machine, read by the `local` provider
@@ -446,6 +552,10 @@ includes, so it is dropped from a recipe's layer with a warning.
   build's unincluded-memory warning never lists. The same entry forms as `first`.
 
 There is no `prompts` block.
+
+`recipes.contents` is a list sous writes itself while it builds the config: one entry per `contents` group of
+each subscribed recipe (`recipe`, `dir`, `kind`, `include`, `exclude`), its expressions evaluated. Read it with
+`sous config show recipes.contents`; plugins that publish a kind read it too.
 
 ## Managed config layers
 

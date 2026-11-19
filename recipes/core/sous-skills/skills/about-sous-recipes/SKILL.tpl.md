@@ -212,10 +212,10 @@ group of `kind: memories`, for example `include: [memories/**/*.md]`. A plain `.
 as it is; name a file `*.tpl.md` when it needs the subscriber's answers. The recipe never says where
 a memory lands. A subscribing project can include the memories of every recipe it holds directly
 with one line, `@#memories/**/*.md`, at the virtual path `#memories/<namespace>/<recipe>/<path>`
-(the path being relative to the pattern's static base). The Sous plugin for a coding agent may
-also name the instruction file that agent reads (`CLAUDE.md` for Claude Code, for example), and
-sous then adds the active recipes' memories to that file itself, unless the subscriber's own config
-compiles that file (as one `sous init` set up does, through `@#memories/**/*.md`). A recipe held only through `depends` is a library and
+(the path being relative to the pattern's static base). The Sous plugin for a coding agent also
+compiles one memories file that agent reads in every session (`.claude/rules/SOUS-MEMORIES.md` for
+Claude Code, `AGENTS.override.md` for Codex), whose default source holds that line, so the active
+recipes' memories reach the agent without a line of the subscriber's own. A recipe held only through `depends` is a library and
 contributes none, and the subscriber's build warns about a published memory no output includes.
 
 ## Includes and Partials

@@ -12,7 +12,15 @@ pnpm e2e --version 1.0.2                  # an exact version, a dist-tag or a ra
 pnpm e2e --node 24                        # one Node version
 pnpm e2e --only basics,config             # some scenarios, by name or file prefix (01, 02, ...)
 pnpm e2e --verbose                        # also print the container's own output
+pnpm e2e --local                          # this checkout instead of a published version
 ```
+
+`--local` builds this checkout's `@sous-io/sous` and `@sous-io/sous-plugin-api`, packs them into
+`e2e/.local/` (git-ignored), and every install in the container takes those two files instead of a
+version from npm: the shared install, the plugin interface scenario 06 installs, and the npm, pnpm
+and Yarn projects of scenario 08 (each pointed at the packed plugin interface, which npm may not
+have at that version). Steps that need an older published release, such as `upgrade --version
+<older>`, still fetch it from npm.
 
 Needs Docker (the images are `node:22` and `node:24`, Debian based, so git, bash and Corepack for
 pnpm and Yarn exist). The runner builds `e2e/Dockerfile` for each Node version, then runs one

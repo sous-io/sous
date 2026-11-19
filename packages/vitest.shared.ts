@@ -9,22 +9,22 @@ const packagesDir = import.meta.dirname;
  * need a build step.
  */
 const sourceAliases: Record<string, string> = {
-    "@sous-io/core": path.join(packagesDir, "core/src/index.ts"),
-    "@sous-io/documents": path.join(packagesDir, "documents/src/index.ts"),
-    "@sous-io/repository-hosts/testing": path.join(packagesDir, "repository-hosts/src/testing.ts"),
-    "@sous-io/repository-hosts": path.join(packagesDir, "repository-hosts/src/index.ts"),
+    "@sous-io/sous-lib-core": path.join(packagesDir, "sous-lib-core/src/index.ts"),
+    "@sous-io/sous-lib-documents": path.join(packagesDir, "sous-lib-documents/src/index.ts"),
+    "@sous-io/sous-lib-repository-hosts/testing": path.join(packagesDir, "sous-lib-repository-hosts/src/testing.ts"),
+    "@sous-io/sous-lib-repository-hosts": path.join(packagesDir, "sous-lib-repository-hosts/src/index.ts"),
     ...pluginAliases(),
 };
 
 /**
- * Every `packages/plugin-*` package, by its `@sous-io/plugin-*` name: its root and its `types`
+ * Every `packages/sous-plugin-*` package (the plugin API and every built-in plugin), by its `@sous-io/...` name: its root and its `types`
  * entry, each resolved to source.
  */
 function pluginAliases(): Record<string, string> {
     const aliases: Record<string, string> = {};
 
     for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
-        if (entry.isDirectory() && entry.name.startsWith("plugin-")) {
+        if (entry.isDirectory() && entry.name.startsWith("sous-plugin-")) {
             aliases[`@sous-io/${entry.name}/types`] = path.join(packagesDir, entry.name, "src/types.ts");
             aliases[`@sous-io/${entry.name}`] = path.join(packagesDir, entry.name, "src/index.ts");
         }

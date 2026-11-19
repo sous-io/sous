@@ -18,7 +18,7 @@
  *
  *     runFromSource(import.meta.url);
  *
- *     const { hashDirectory } = await import("../packages/plugin-formats/src/index.js");
+ *     const { hashDirectory } = await import("../packages/sous-plugin-formats/src/index.js");
  */
 
 import { spawnSync } from "node:child_process";

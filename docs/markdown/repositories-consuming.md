@@ -197,8 +197,10 @@ like every other file sous writes, so `sous prune` removes what an unsubscribed 
 
 ## Recipe memories
 
-A memory is a recipe's fragment of an agent's instructions. Sous does not copy memories anywhere; your
-instruction source includes them. Put one line in the file your `AGENTS.md` or `CLAUDE.md` is built from:
+A memory is a recipe's fragment of an agent's instructions. Sous includes them into each coding tool's
+memories file (for Claude Code, `.claude/rules/SOUS-MEMORIES.md`; see
+[The memories file](configuration.md#the-memories-file)), through one line in that file's source,
+`.sous/MEMORIES.tpl.md`. The same line works in any file a target of yours compiles:
 
 ```text
 @#memories/**/*.md
@@ -207,8 +209,8 @@ instruction source includes them. Put one line in the file your `AGENTS.md` or `
 `#memories` is a view: it lists the memories of every recipe you hold directly (a subscription to it, to its
 namespace, or a co-subscription of a recipe you hold) at the virtual path
 `#memories/<namespace>/<recipe>/<path>`, and the line includes each one. A recipe held only through `depends`
-adds none. `sous init` writes this line into the source it compiles into `CLAUDE.md` and `AGENTS.md`,
-`.sous/memories/instructions.tpl.md`, after a line that includes the project's own memories.
+adds none. `sous init` writes this line into `.sous/MEMORIES.tpl.md`, the source of the memories file, after
+a line that includes the project's own memories.
 
 Memories come in dependency order (a recipe after the recipes it depends on, ties by recipe key). Two config
 lists under `recipes.memories` shape the rest, each entry a glob over `namespace/recipe` keys or a regular
@@ -228,12 +230,11 @@ When a build finds a memory an active recipe publishes that no include of any ou
 or the view) and `exclude` does not name, it warns, naming the memory and the line to add. Subscribing alone
 includes nothing, and the warning is how that is never silent.
 
-?> In sous 1.0 an agent's plugin can also name the instruction file that agent reads in every session
-(`CLAUDE.md` for the Claude Code plugin built into sous). Sous then writes that file with one `@` include
-line for each memory `recipes.memories` selects, so the memories reach the agent without a line of your own.
-When a target in your own config writes the same file, as the config `sous init` writes does for `CLAUDE.md`
-and `AGENTS.md`, your target wins and the plugin's steps aside; your source then includes the memories with the
-`@#memories/**/*.md` line above.
+?> Each coding tool's plugin built into sous also compiles one memories file, the file that tool reads in
+every session: `.claude/rules/SOUS-MEMORIES.md` for Claude Code, and `AGENTS.override.md` for Codex once a
+project turns Codex on. Its source, `.sous/MEMORIES.tpl.md`, holds the `@#memories/**/*.md` line above, so the
+memories reach the agent without a line of your own (see [The memories file](configuration.md#the-memories-file)).
+When a target in your own config writes the same file, your target wins and the plugin's steps aside.
 
 ## Answer the questions
 
@@ -297,10 +298,11 @@ indexes, fetching nothing.
 ## Moving to newer versions
 
 A build holds the versions the lockfile pins, so a newer release reaches the project only when
-something moves the pin. `sous subscription update` is that step:
+something moves the pin. `sous update` is that step (`sous subscription update` and `sous recipe update` are
+other spellings of it):
 
 ```term
-$ sous subscription update workflow/qa-variables
+$ sous update workflow/qa-variables
   Updating the recipe 'qa-recipes:workflow/qa-variables' changes the lockfile:
 
     • Adding workflow/qa-helper version 1.0.0
@@ -472,7 +474,7 @@ is missing from the cached index, sous asks upstream once more before reporting 
 released moments ago is found straight away. Always-pull changes what
 happens after that check, not how often it happens: a repository or subscription marked
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
-`--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a
+`--always-pull`, or on either entry in the config. Without it, `sous update` is how a
 pin moves; see [Moving to newer versions](#moving-to-newer-versions).
 
 Every other repository the lockfile pins from is checked on the same window, only to tell you what

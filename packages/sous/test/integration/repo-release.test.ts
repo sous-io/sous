@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { commitAll, git, initRepo, writeFile } from "../utils/git-repo.js";
-import { parseIndexFile } from "../../../plugin-formats/src/formats/index-file.js";
+import { parseIndexFile } from "../../../sous-plugin-formats/src/formats/index-file.js";
 
 import { binPath } from "../utils/sous-bin.js";
 

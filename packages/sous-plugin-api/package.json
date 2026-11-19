@@ -1,0 +1,36 @@
+{
+  "name": "@sous-io/sous-plugin-api",
+  "version": "1.1.0",
+  "description": "The plugin interface of sous: definePlugin, the shared type interfaces, Reporter, Prompter and the error classes",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sous-io/sous.git",
+    "directory": "packages/sous-plugin-api"
+  },
+  "private": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -11,14 +11,22 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Resolve a tag or range to one exact version first, so every install in the run (npm, pnpm,
 // Yarn) gets the same release even while the registry's caches catch up with a new publish.
 const requested = process.env.SOUS_VERSION || "latest";
-const resolved = spawnSync("npm", ["view", `@sous-io/sous@${requested}`, "version", "--json"], { encoding: "utf8" });
+// `--local`: the host packed this checkout into /e2e/.local; every install takes those two files.
+const local = process.env.E2E_LOCAL === "1";
+const localSous = path.join(here, ".local", "sous.tgz");
+const localApi = path.join(here, ".local", "sous-plugin-api.tgz");
 let version = requested;
-try {
-  const parsed = JSON.parse(resolved.stdout);
-  version = Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed;
-} catch {
-  /* fall back to the request as given; the install below reports the problem */
+if (!local) {
+  const resolved = spawnSync("npm", ["view", `@sous-io/sous@${requested}`, "version", "--json"], { encoding: "utf8" });
+  try {
+    const parsed = JSON.parse(resolved.stdout);
+    version = Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed;
+  } catch {
+    /* fall back to the request as given; the install below reports the problem */
+  }
 }
+/** What `npm i` installs to get sous: the published version, or the two packed files. */
+const sousSpecs = local ? [localApi, localSous] : [`@sous-io/sous@${version}`];
 const only = process.env.E2E_ONLY ? process.env.E2E_ONLY.split(",") : null;
 const emit = (obj) => process.stdout.write(`@@E2E ${JSON.stringify(obj)}\n`);
 
@@ -39,11 +47,11 @@ if (process.env.GITLAB_TOKEN) {
 // installing and updating make their own project installs.
 const prefix = "/opt/sous";
 fs.mkdirSync(prefix, { recursive: true });
-const install = spawnSync("npm", ["i", "--no-audit", "--no-fund", "--prefix", prefix, `@sous-io/sous@${version}`], {
+const install = spawnSync("npm", ["i", "--no-audit", "--no-fund", "--prefix", prefix, ...sousSpecs], {
   encoding: "utf8",
 });
 if (install.status !== 0) {
-  emit({ kind: "fatal", error: scrub(`npm i @sous-io/sous@${version} failed:\n${install.stderr}`) });
+  emit({ kind: "fatal", error: scrub(`npm i ${sousSpecs.join(" ")} failed:\n${install.stderr}`) });
   process.exit(2);
 }
 process.env.PATH = `${prefix}/node_modules/.bin:${process.env.PATH}`;
@@ -61,6 +69,8 @@ for (const file of files) {
   const t = createScenarioContext(mod.name);
   t.sousVersion = sousVersion;
   t.requestedVersion = version;
+  // Set with --local: the packed files of this checkout, for scenarios that install sous themselves.
+  t.local = local ? { sous: localSous, api: localApi } : undefined;
   try {
     await mod.run(t);
   } catch (error) {

@@ -102,8 +102,10 @@ The rules for the list:
   reading, each optional.
 - **C42.** A plugin can add a skill target, with an optional transform of each file's name or
   contents.
-- **C43.** A plugin can add a memory target, with an optional filter of which memories it takes and
-  an optional format for the file.
+- **C43.** A plugin can add a memory target: the file a harness reads into every session, written
+  from `.sous/MEMORIES.tpl.md` (or its two default lines) to the target's `outputPath`, optionally
+  after another file's content (`prependWith`), and backing up a file Sous did not write there.
+  (Reworded 2026-11-18; it had an optional filter and format.)
 - **C44.** A plugin can name pointer files, which sous writes once each, whichever plugins name them.
 
 ## Users
@@ -196,7 +198,65 @@ The rules for the list:
 - **C86.** A user can set a new recipe repository up as a sous project in one command
   (`sous repo init`, which runs `sous init`).
 
+## Added With the Work on Goal gh-146 (2026-11-18)
+
+- **C87.** A plugin can read the harness a config build is for (`config.harness.id`, `""` with
+  none), and every harness gets its own config build, merged into one, with each harness's own
+  build still reachable (`BuiltConfig.forHarness(id)`; S8).
+- **C88.** A user can write a config expression that reads `harness.id`, and a template for an
+  output marked with a harness can read `harness.id` (S5, S8).
+- **C89.** A user can see one harness's own config (`sous config show --harness <id>`,
+  `sous config get <path> --harness <id>`), and `--layers` names the build each change was made in.
+- **C90.** A plugin, a recipe or a user can declare an edit to a file Sous does not own, as an entry
+  of `editor.edits`, and Sous applies it surgically after the compiler, records it, and undoes it
+  when the entry goes away (S9).
+- **C91.** A plugin can edit files directly through the `editor` service, and record declared edits
+  through `editor(config).file(...).at(...)` (S9).
+- **C92.** A plugin, a recipe or a user can assert what must be true of an edited file (`assert` in
+  an entry, `expect(...)` in a plugin), at level error or warn, and silence the automatic
+  assertions on a key (S9).
+- **C93.** A user can build past failed assertions or failed `check` handlers
+  (`--ignore-failed-assertions`, `--ignore-failed-checks`, `--keep-going`), each failure printed as
+  a warning (S9, S13).
+- **C94.** A recipe or a plugin can provide handlers for the purposes `check`, `configure`,
+  `beforeBuild`, `afterBuild`, `uninstall` and `migrate`, run in a fixed order inside a build (S13).
+- **C95.** A recipe's manifest is added to the config (`recipes.contents`, `editor.edits`, handlers),
+  with config expressions in it, so any plugin can respond to what a manifest declares (S12).
+- **C96.** A plugin can add a content kind, and a recipe can publish files of that kind; a kind no
+  plugin adds stops the build with a message naming the kind and the recipe (S12).
+- **C97.** A user or a recipe can give a config value from a file (`$file`) or inline text
+  (`$inline`), and write a literal `${` as `$${` (S5, S12).
+- **C98.** A template sees a boolean recipe answer as a boolean (S12).
+- **C99.** A user can set variables by output path (`compilation.varOverrides`), and a template can
+  read `host.platform`, `sousOutputPath` and `sousOutputDir` (S6).
+- **C100.** Sous's includes follow Claude Code's imports: where a reference stands, what names
+  nothing, and the order of a glob's files (S10).
+- **C101.** A plugin can register a migration (`sous.migrations.add({ version, order, up })`), and
+  the project records the version it last migrated to; `sous doctor` and `sous upgrade` run the
+  pending ones, asking any questions, which `--answer` and `--yes` also answer (S11).
+- **C102.** A plugin can add a check to `sous doctor`, with an optional fix; `sous doctor` reports,
+  asks before each fix, and `--dry-run` changes nothing (S11).
+- **C103.** A user can upgrade sous itself (`sous upgrade`) and update the project's recipes
+  (`sous update`), and use the short command aliases (`ns`, `sub`, `rc`, `cfg`, `ls`, `rm`; S11).
+- **C104.** A user can install git hooks that build Sous's output in each new worktree
+  (`sous init hooks`, or `sous init --hooks`, `--pull-hooks`; S14).
+- **C105.** A user's project gets a commented JSONC config, a memories source and a starter memory
+  from `sous init`, and no build writes a root instruction file (S14).
+- **C106.** A user can move each harness's memories file (`memoriesOutputPath`) or switch it off,
+  and Sous never writes over the project's own `CLAUDE.md` or `AGENTS.md` (S15, S16).
+- **C107.** A recipe can publish Claude Code plugins and agents (the content kinds
+  `claude-code-plugin` and `claude-code-agent`; S15).
+- **C108.** A user can turn Codex on for a project: Sous then launches Codex, writes its skills to
+  `.agents/skills`, and writes `AGENTS.override.md` holding the project's `AGENTS.md` and then the
+  memories (S16).
+
 ## Changes
+
+### 2026-11-18: The work on goal gh-146
+
+C87 to C108 added, one for each capability S8 to S16 add; C43 reworded for the memory target's new
+shape (S15). Added by the agent in the finishing pass, from those specifications; not reviewed by
+Luke line by line.
 
 ### 2026-11-15: Importing a project's agent files
 

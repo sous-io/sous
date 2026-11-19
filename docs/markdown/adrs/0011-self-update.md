@@ -10,7 +10,7 @@ one plugin per package manager, and the `toleratesConfigErrors` setting goes awa
 
 This record builds on [ADR 0004](0004-project-install-handoff.md), whose hand-off from a global sous to a
 project's own install this command has to step around; everything ADR 0004 says still holds. The living answer
-is [Updating](../README.md#updating) and the [command reference](../commands.md#sous-update); the process
+is [Upgrading](../README.md#upgrading) and the [command reference](../commands.md#sous-upgrade); the process
 record is [gh-135](https://github.com/sous-io/sous/issues/135).
 
 ## Context

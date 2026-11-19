@@ -9,8 +9,8 @@
  * ```
  */
 
-import { createEngine } from "@sous-io/core";
-import { createReporter, type IntentOutputs, messageText, ReportEntryStyle, type Prompter, type Reporter } from "@sous-io/plugin-api";
+import { createEngine } from "@sous-io/sous-lib-core";
+import { createReporter, type IntentOutputs, messageText, ReportEntryStyle, type Prompter, type Reporter } from "@sous-io/sous-plugin-api";
 import { BUILT_IN_PLUGINS } from "../../src/built-ins.js";
 import { sousVersion } from "../../src/main.js";
 import { findProject } from "../../src/project.js";

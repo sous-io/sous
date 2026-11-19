@@ -77,8 +77,8 @@ sous.entities.add("config-key", {
 });
 ```
 
-Config files are contributors too. `plugin-config-files` finds `sous.config.*` and adds a
-contributor for it. `plugin-confd` finds the `conf.d` files and adds one contributor per file, named
+Config files are contributors too. `sous-plugin-config-files` finds `sous.config.*` and adds a
+contributor for it. `sous-plugin-confd` finds the `conf.d` files and adds one contributor per file, named
 after the file (`confd/610-mac.jsonc`). Recipe config files, the built-in entries and the environment
 come in the same way, from the plugins that own them (S6).
 
@@ -111,7 +111,7 @@ come in the same way, from the plugins that own them (S6).
    it reads may say so with `monitors`, which stays available, though no built-in plugin needs it.
 
     ```ts
-    // plugin-confd: one contributor per file
+    // sous-plugin-confd: one contributor per file
     contribute: (config) => config.root().merge(file.data),   // reads the root, so monitors everything
     ```
 
@@ -194,10 +194,10 @@ Rules:
 11. No events fire while the config is being built (S1).
 
 ```text
-pass 1:  contributors [config-files:sous.config.jsonc, plugin-recipes, skills]
+pass 1:  contributors [config-files:sous.config.jsonc, sous-plugin-recipes, skills]
          skills reads skill-target entities: [claude-code]
-         plugin-recipes loads sous-plugin-codex, which adds skill-target "codex"
-pass 2:  contributors [config-files:sous.config.jsonc, plugin-recipes, sous-plugin-codex, skills]
+         sous-plugin-recipes loads sous-plugin-codex, which adds skill-target "codex"
+pass 2:  contributors [config-files:sous.config.jsonc, sous-plugin-recipes, sous-plugin-codex, skills]
          skills re-runs: the skill-target list it read changed
 pass 3:  nothing anyone read changed → done
 ```
@@ -247,12 +247,12 @@ longer use `"*"`; it stays for any plugin that needs it.
 
 ```ts
 export default definePlugin({
-    name: "plugin-claude-code",
-    after: ["plugin-skills"],                    // default for every contributor this plugin adds
+    name: "sous-plugin-claude-code",
+    after: ["sous-plugin-skills"],                    // default for every contributor this plugin adds
 
     register(sous) {
         sous.config.contribute({
-            id: "claude-code/defaults",          // inherits: after plugin-skills
+            id: "claude-code/defaults",          // inherits: after sous-plugin-skills
             contribute(config) {
                 // ...
             },
@@ -269,9 +269,9 @@ export default definePlugin({
 });
 ```
 
-**The user's files apply last.** `plugin-config-files` adds a contributor for `sous.config.*`, with
+**The user's files apply last.** `sous-plugin-config-files` adds a contributor for `sous.config.*`, with
 apply order 89900, and one for each patch file beside it, with the same number (their ids,
-`config-files/<file name>`, sort after `config-files.main`). `plugin-confd` adds one contributor per
+`config-files/<file name>`, sort after `config-files.main`). `sous-plugin-confd` adds one contributor per
 `conf.d` file, with apply order 90000 plus the number the file's name starts with
 (`500-repos.jsonc` applies at 90500, `610-browser.jsonc` at 90610); a name that starts with no
 number gets 90500, and a number above 9999 counts as 9999 (apply order 99999), with a `debug` report
@@ -289,7 +289,7 @@ bytewise file-name order of today, and files with the same number apply in id or
 (`confd/<file name>`), bytewise.
 
 ```ts
-// plugin-confd
+// sous-plugin-confd
 for (const file of listConfdFiles(project)) {
     sous.config.contribute({
         id: `confd/${file.name}`,
@@ -328,10 +328,10 @@ result: false. In a project whose files don't set it: true.
 ```
 
 ```text
-pass 1:  plugin-skills        adds compilation targets for .claude/skills
+pass 1:  sous-plugin-skills        adds compilation targets for .claude/skills
          confd/610-mac        patch applied last
-         plugin-recipes       loads sous-plugin-codex, which adds skill-target "codex"
-pass 2:  plugin-skills        re-runs: the skill-target list changed; adds a target for .codex/skills
+         sous-plugin-recipes       loads sous-plugin-codex, which adds skill-target "codex"
+pass 2:  sous-plugin-skills        re-runs: the skill-target list changed; adds a target for .codex/skills
          confd/610-mac        re-runs: the config changed; it still applies last, so its patch still wins
 pass 3:  nothing changed → done
 ```
@@ -370,6 +370,10 @@ The user's ruling on what a later stage is for:
 >
 >   -- **Luke Chavers** in an agent session (2026-10-29)
 
+Sous's own use of a later stage: the compiler lists every file a build writes (`compilation.files`)
+and applies `compilation.varOverrides` in stage 1, because both must see every target that stage 0
+adds (S6, "Compiler"). A target added in a later stage is never listed, and a build says so.
+
 ### Plugins load inside the loop
 
 The plugins to load are an ordinary config key (`plugins`, S1). After each pass, the engine loads
@@ -384,7 +388,7 @@ longer run and their patches are dropped.
 >
 >   -- **Luke Chavers** in an agent session (2026-10-25)
 
-`plugin-recipes` is a contributor that downloads the subscribed recipes the config needs, so their
+`sous-plugin-recipes` is a contributor that downloads the subscribed recipes the config needs, so their
 config files, plugins and content can join the loop. Downloads are cached, so later passes find them
 already there. On a machine with no network and nothing downloaded yet, building the config fails
 and says what it could not download.
@@ -397,6 +401,13 @@ and says what it could not download.
 
 A config whose contributors read nothing that later changes settles in one pass. Re-running only
 the contributors whose reads changed keeps later passes short.
+
+### One build per harness
+
+The loop above is one build. The engine runs it once with no harness, then once more for every
+registered harness, and merges the results into the config intents read (S8, one config build per
+harness). Each build is complete and independent: its own passes, plugins and validation.
+Contributors read the build's harness as `config.harness.id` (`""` with none).
 
 ### "What if" builds
 
@@ -414,7 +425,7 @@ const preview = await ctx.engine.buildConfig({
 
 ### No child process
 
-`plugin-config-files` and `plugin-confd` load every file in-process. `config-kernel.mjs` goes away.
+`sous-plugin-config-files` and `sous-plugin-confd` load every file in-process. `config-kernel.mjs` goes away.
 
 - `.json`, `.jsonc` and `.yaml` files are parsed; `.js` and `.ts` files are imported in the main
   process.
@@ -504,6 +515,10 @@ root _vars
 An expression sees the `_vars` of every level that contains it, and no others. An expression under
 `subscriptions`, `repos` or any other top-level key sees only the root `_vars`. Recipe outputs also
 get a scope per recipe, holding that recipe's answers.
+
+When a file renders, the `_vars` of every `compilation.varOverrides` rule whose pattern matches its
+path are laid over the output's scope, so a rule wins over the output's own `_vars`. They are set on
+the file's entry in `compilation.files` in config stage 1, so no expression reads them.
 
 ### Recipe answers
 
@@ -601,6 +616,8 @@ its own `config-key` entities and reads the built config.
   expression as written, what it evaluated to and the values it read; then the result and the number
   of passes.
 - `--raw` prints each config file as written, in order.
+- `--harness <id>` prints that harness's own config build instead of the merged config (S8). Once
+  any change came from a harness's build, `--layers` names the build of every change.
 
 ```text
 $ sous config get subscriptions."tool-usage/automated-browser-tasks".enabled --layers
@@ -654,7 +671,7 @@ result                           false     (settled after 1 pass)
 
 ### Patch files
 
-`plugin-config-files` and `plugin-confd` also read files of raw patches, such as
+`sous-plugin-config-files` and `sous-plugin-confd` also read files of raw patches, such as
 `conf.d/720-my-special-thing.patch.json` and `conf.d/721-my-list-of-things.patch.jsonl`. Such a file
 is a contributor whose operations come from the file instead of being computed.
 
@@ -715,10 +732,13 @@ for files outside the config: sous plans to edit JSON and YAML files other tools
 Code's settings files, and already edits its own managed `conf.d` files key by key, keeping the
 user's comments and formatting (see "Sous's edits to the files it manages are surgical").
 
-So one package, `documents` (S6), edits a JSON, JSONC or YAML document surgically, keeping comments,
-key order and formatting. The config builder is that package plus read recording and patches. The
-managed `conf.d` edits, and any plugin editing another tool's file, use the package directly, through
-a service.
+So one package, `sous-lib-documents` (S6), edits a JSON, JSONC or YAML document, or the YAML frontmatter of a
+Markdown file, surgically: an edit changes only the values it was told to change, and leaves every
+other byte of the file as it was. It also edits a plain text file, such as `.gitignore`, as a list
+of lines, and keeps named blocks in it between marker lines. `formatForPath(path)` says which of
+these a file is. The config builder is that package plus read recording and patches. The managed
+`conf.d` edits, and any plugin editing another tool's file, use the package directly, through a
+service.
 
 The operations it needs, at least:
 
@@ -753,9 +773,62 @@ node.atIndex(0);
 node.move(from, to);
 node.dedupe();
 
+// Comparing structurally, adding only what is missing, ordering
+node.includes(item);           // also indexOf, equals, indexWhere, findAll
+node.insertAtIfMissing(0, item);   // also appendIfMissing, prependIfMissing
+node.removeValues([item]);
+node.sort();
+doc.root().moveKeyBefore("env", "permissions");   // also moveKeyAfter, moveKeyFirst, moveKeyLast, sortKeys
+
+// Putting a key in a given place, and a removed key or item back where it was
+doc.root().insertKey("mode", "loose", { after: "name" });   // or { before: "x" }, { index: 2 }
+const entry = doc.atPath("mode").entrySource();   // its exact text, comments included, and its place
+doc.atPath("mode").restoreEntrySource("loose", entry);   // after the key that was before it, byte for byte
+doc.atPath("single").valueSource();   // a value's exact text, to put back with restoreValueSource
+
 // The whole document
 doc.root().merge(data);
-doc.toString();                // the edited text, comments and formatting kept
+doc.toString();                // the edited text: every untouched byte as it was
+```
+
+The comment attached to a key or list item, in JSONC, YAML and Markdown frontmatter (plain JSON has
+none, and refuses): the comment lines directly above it, and the comment ending its line. A comment
+is not a value, so these edit the text directly and make no `Patch`:
+
+```ts
+doc.setComment("model", "before", "Chosen by the platform team");   // add or replace; several lines allowed
+doc.setComment("tools[1]", "after", "dangerous");                    // one line
+doc.comment("model", "before");                                      // "Chosen by the platform team"
+doc.removeComment("model", "after");
+doc.commentSource("model", "before");    // the exact bytes, to put back with restoreCommentSource
+```
+
+Those comments belong to their key or item. A key or item that starts its line is an entry block:
+its comment lines above, its own lines and the comment ending them. Removing, moving or reordering
+it carries the whole block; blank lines (and comments that belong to no entry) are in no block, so
+they stay between the same places. Inserting a key puts its lines between its neighbours' blocks,
+rewriting no other key.
+
+A YAML file holding several documents separated by `---` lines, which `parseDocument` refuses:
+
+```ts
+const stream = parseYamlStream(text);
+
+stream.count();
+stream.document(1).atPath("spec.replicas").set(3);   // a document like any other
+stream.toString();                                   // the other documents byte for byte
+```
+
+A plain text file, as lines:
+
+```ts
+const file = parseLines(text, { comment: commentStyleForPath(".gitignore") });
+
+file.includes("dist/");
+file.insert("dist/", { after: "# build output" });   // "start", "end", { before }, { line: n }
+file.remove("dist/");
+file.setBlock("session-files", ["docs/context/.kw-session-*"]);
+file.removeBlock("session-files");
 ```
 
 Inside a contributor, every read is recorded as a read, and every change ends up as primitive
@@ -767,6 +840,112 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-18: Keys and items carry their comment lines; a key can go back where it was
+
+"The Document-Editing Package" now knows which comment lines belong to which key, using the
+definition of the comment "before" a node: the comment lines directly above it at its indentation,
+with no blank line between. A key or list item that starts its line is removed, moved and reordered
+with those lines and the comment ending its line, in JSONC and YAML (and so in Markdown
+frontmatter); `sort`, `sortKeys` and the key moves swap whole entries in place. Blank lines are not
+part of any entry and stay between the same places, so sorting and sorting back restores the text
+byte for byte. New node methods: `insertKey(key, value, { before | after | index }, source?)` adds
+a key without rewriting the keys after it; `entrySource()` and `restoreEntrySource(value, entry)`
+record a key's or item's exact text and place (the key before it, its index, the blank lines
+between) and put it back there; `valueSource()` and `restoreValueSource(value, source)` do the same
+for a value's layout. A document with no text gets the same key order through primitives, and every
+change is still recorded as the primitives that make it. What changes for `sous config set` and
+the managed `conf.d` edits: removing a key now also removes the comment lines directly above it.
+Built for the editor's exact undo (S9), under Luke's ruling that every edit is surgical; the
+blank-line rule is the agent's choice, not yet reviewed by Luke.
+
+### 2026-11-18: Comments, and a YAML file holding several documents
+
+"The Document-Editing Package" gains the two things the editor's comment operations and
+`selectDocument` (S9) need, from the operation list Luke accepted, under his ruling that every edit
+is surgical:
+
+- Reading, setting and removing the comment before or after a key or list item, in JSONC (`//` and
+  `/* */`), YAML and Markdown frontmatter. Only the comment's bytes change, in the file's line
+  endings; new comment lines take the node's indentation; a replaced `/* */` stays a block. An edit
+  that would change a value, a value sharing its line with others, and plain JSON are refused.
+- `parseYamlStream`: one document of a YAML file holding several, by index, written back with the
+  others byte for byte. What `parseDocument` does with such a file is unchanged: it refuses it
+  ("Source contains multiple documents").
+
+The API shape is the agent's; not yet reviewed by Luke.
+
+### 2026-11-18: One build per harness
+
+"One build per harness" added, and `--layers` names the build of each change
+(`ConfigLayer.build`, `Contribution.build`); `sous config show` and `get` take `--harness <id>` to
+print one harness's own build. From Luke's accepted design (S8): "I accept your recommendations"
+(2026-11-16). A "what if" build runs the harness builds too.
+
+### 2026-11-18: Every document edit is surgical; Markdown frontmatter and plain text lines
+
+Rulings by Luke while deciding how Sous edits other tools' files (2026-11-17). On YAML, which was
+reprinted whole after any edit:
+
+> "yes, all document edits should be surgical."
+
+On the frontmatter of Markdown files, such as an agent file's `model`:
+
+> "Front matter in markdown files should be supported."
+
+On TOML: "add toml as its own issue, keep it out of this work." On a plugin adding a format: "Yes,
+but not now."
+
+**What changed.** "The Document-Editing Package". The agreed meaning of surgical: an edit changes
+only the values it was told to change, and leaves every other byte of the file as it was.
+
+- YAML is edited in its text, at the places the parse gives for each node, as JSONC already was.
+  Every line an edit does not touch stays byte for byte: comments, key order, indentation, quoting
+  style, blank lines, block and flow style, line endings. A new value is written like the one it
+  replaces; new keys and items take their neighbors' indentation; new strings are quoted the way
+  most strings in the file are.
+- Each YAML edit is read back and compared with the value asked for. When an edit cannot be made
+  in place (a key written with `?`, a list item whose value starts below its dash), the document is
+  reprinted whole, as before, keeping comments, and the document reports it. An edit to a value a
+  YAML anchor shares with its aliases is refused with an error, since it would change every copy;
+  before, it changed them silently.
+- A new format, `markdown`: the document is the YAML frontmatter at the top of a Markdown file. The
+  body is never changed. A file with no frontmatter gets one when a value is set, and an edit that
+  empties the frontmatter removes the block.
+- A new format, `lines`: a plain text file as a list of lines, with the operations to test for a
+  line, add one (at the end, the start, after or before a line, or at a line number), remove one,
+  and keep a named block between the marker lines `>>> sous managed: <name> (do not edit between
+  these markers)` and `<<< sous managed: <name>`, in the file type's comment style. A damaged block
+  is an error, never a guess.
+- `formatForPath(path)` chooses the format from a path; `commentStyleForPath(path)` the comment
+  style. TOML has no format yet.
+- New node operations for the declared edits to build on: structural comparison (`includes`,
+  `indexOf`, `equals`, `indexWhere`, `findAll`), adding a list item only when it is missing
+  (`appendIfMissing`, `prependIfMissing`, `insertAtIfMissing`), `removeValues`, `sort`, and moving
+  keys (`moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast`, `sortKeys`). They are made
+  of the six existing primitives; a key or item moved this way keeps its old text and comments.
+
+**Why.** Sous is to edit files that people and other programs also write (`.claude/settings.json`,
+CI files, agent files' frontmatter, `.gitignore`), and a committed file should show only the line
+that changed. The operations that state what must be true (`ensureIncludes`, `ensureLine` and the
+rest) belong to the editor plugin that composes them from these.
+
+### 2026-11-18: The compiler lists output files in stage 1; variables by output path
+
+Approved by Luke in agent sessions, 2026-11-16 to 2026-11-18:
+
+> "So issue 2 should include moving the glob expansion out to a contributor, with glob-based variable
+> overrides becoming a little added bonus."
+
+**What changed.** "Order and stages" names Sous's first use of a later stage: the compiler's
+`compiler.files` and `compiler.var-overrides` contributors run in stage 1, after every target is
+added (S6, "Compiler"). In stage 0 the listing ran on every pass in which a target changed, and its
+result made the user's config files, which watch the whole config, run again; in stage 1 it runs
+once. "Variable scopes" adds the level `compilation.varOverrides` sets, which wins over an output's
+own `_vars`. Config building now reads the disk for each glob target, which it did not before. Both
+contributors are timed as every contributor is (L5); on Sous's own repository the listing takes about
+30 ms of the 100 ms a contributor may take, and on a project with 1000 files under one glob about
+35 ms (G9).
 
 ### 2026-10-30: Walk of apply order; same base name fails in one directory
 

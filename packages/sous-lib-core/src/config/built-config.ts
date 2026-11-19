@@ -1,0 +1,219 @@
+import { getAtPath, isPatch, parsePath, pathsOverlap } from "@sous-io/sous-lib-documents";
+import type {
+    BuiltConfig,
+    ConfigLayer,
+    Contribution,
+    JsonObject,
+    JsonValue,
+    Patch,
+    PatchSet,
+    PathInput,
+    PathSegment,
+    ServiceReader,
+} from "@sous-io/sous-plugin-api";
+import type { EntitySnapshot } from "../entities/entity-registry.js";
+import { type Limits, resolveLimits } from "../limits.js";
+import { CORE_PLUGIN, currentPluginName } from "../util/names.js";
+import type { ActivePlugin, ContributorRecord } from "./build.js";
+import { primitiveTarget, WHAT_IF_PLUGIN } from "./build.js";
+import { type ListSegment, overlapsList } from "./harness-merge.js";
+
+/** What a built config is made of. */
+export interface BuiltConfigData {
+    readonly buildNumber: number;
+    readonly whatIf: boolean;
+    /** The checked config, deep-frozen. */
+    readonly config: Readonly<JsonObject>;
+    readonly entities: EntitySnapshot;
+    readonly records: readonly ContributorRecord[];
+    readonly active: ReadonlyMap<string, ActivePlugin>;
+    readonly passes: number;
+    readonly hash: string;
+    /** The harness this config was built for: `""` for the build with no harness and for the merged config. Default `""`. */
+    readonly harness?: string;
+    /** For the merged config: every build of the same run, so each can be reached. */
+    readonly family?: HarnessFamily;
+    /**
+     * Only on the merged config: the lists the merge takes from the harness builds, so `layers`
+     * also names the changes each harness build made to them.
+     */
+    readonly mergedLists?: readonly (readonly ListSegment[])[];
+}
+
+/** Every config build of one run: the one with no harness and one per harness. */
+export interface HarnessFamily {
+    /** The build with no harness, before the merge. */
+    readonly noHarness: BuiltConfig;
+    /** Each harness's build, by id. */
+    readonly byHarness: ReadonlyMap<string, BuiltConfig>;
+}
+
+/**
+ * A config the engine built: read-only values, with the entities and the `config`-lifetime
+ * services that belong to it, and the record of who changed what.
+ */
+export class BuiltConfigImpl implements BuiltConfig {
+    readonly buildNumber: number;
+    readonly whatIf: boolean;
+    readonly passes: number;
+    readonly hash: string;
+    readonly harness: string;
+    readonly entities: EntitySnapshot;
+    /** Set by the engine right after construction. */
+    services!: ServiceReader;
+    /** Every build of the same run; the engine sets it on each build once all have finished. */
+    family: HarnessFamily | undefined;
+
+    private readonly data: BuiltConfigData;
+    private limitsCache: Limits | undefined;
+
+    constructor(data: BuiltConfigData, private readonly baseLimits: Readonly<Limits>) {
+        this.data = data;
+        this.buildNumber = data.buildNumber;
+        this.whatIf = data.whatIf;
+        this.passes = data.passes;
+        this.hash = data.hash;
+        this.harness = data.harness ?? "";
+        this.entities = data.entities;
+        this.family = data.family;
+    }
+
+    /** Every contributor's latest run, in the order their patches apply. */
+    get records(): readonly ContributorRecord[] {
+        return this.data.records;
+    }
+
+    /** The ids of every harness that had its own build, sorted. */
+    get harnesses(): readonly string[] {
+        return [...(this.family?.byHarness.keys() ?? [])].sort();
+    }
+
+    /** One harness's full config; `""` gives the build with no harness, before the merge. */
+    forHarness(id: string): BuiltConfig | undefined {
+        if (id === "") {
+            return this.family?.noHarness ?? (this.harness === "" ? this : undefined);
+        }
+
+        return this.family?.byHarness.get(id);
+    }
+
+    /** Whether a plugin is active in this config. Core always is. */
+    readonly isActive = (plugin: string): boolean =>
+        plugin === CORE_PLUGIN || plugin === WHAT_IF_PLUGIN || this.data.active.has(plugin);
+
+    /** The active plugins, by name. */
+    get active(): ReadonlyMap<string, ActivePlugin> {
+        return this.data.active;
+    }
+
+    /** The loop-detection limits this config sets. */
+    get limits(): Limits {
+        this.limitsCache ??= resolveLimits(this.baseLimits, this.data.config.limits as JsonObject | undefined);
+
+        return this.limitsCache;
+    }
+
+    /** What `services.replace` picks. */
+    get servicePicks(): Readonly<Record<string, string>> {
+        return pickTable(this.data.config.services);
+    }
+
+    /** What `intents.replace` picks. */
+    get intentPicks(): Readonly<Record<string, string>> {
+        return pickTable(this.data.config.intents);
+    }
+
+    get<T = JsonValue>(path: PathInput): T | undefined {
+        return getAtPath(this.data.config, parsePath(path)) as T | undefined;
+    }
+
+    has(path: PathInput): boolean {
+        return this.get(path) !== undefined;
+    }
+
+    value(): Readonly<JsonObject> {
+        return this.data.config;
+    }
+
+    layers(path: PathInput): ConfigLayer[] {
+        const target = parsePath(path);
+        const layers: ConfigLayer[] = [];
+
+        for (const record of this.data.records) {
+            walk(record.patchSet, [], (patch, helpers) => {
+                if (pathsOverlap(primitiveTarget(patch), target)) {
+                    layers.push({
+                        contributor: record.entry.id,
+                        plugin: record.entry.plugin,
+                        patch,
+                        helpers,
+                        applyOrder: record.entry.applyOrder,
+                        actualApplyOrder: record.actualApplyOrder,
+                        build: this.harness,
+                    });
+                }
+            });
+        }
+
+        return [...layers, ...this.harnessLayers(target)];
+    }
+
+    /**
+     * On the merged config: the changes each harness build made to the lists the merge takes from
+     * it, at `target`, so `--layers` names the build an entry came from. Their indices are those of
+     * the harness's own build.
+     */
+    private harnessLayers(target: readonly PathSegment[]): ConfigLayer[] {
+        const lists = this.data.mergedLists;
+        const family = this.family;
+
+        if (!lists || !family || !lists.some((list) => overlapsList(target, list))) {
+            return [];
+        }
+
+        return this.harnesses.flatMap((id) =>
+            family.byHarness
+                .get(id)!
+                .layers(target)
+                .filter((layer) => lists.some((list) => overlapsList(primitiveTarget(layer.patch), list))),
+        );
+    }
+
+    contributions(): Contribution[] {
+        return this.data.records.map((record) => ({
+            contributor: record.entry.id,
+            plugin: record.entry.plugin,
+            stage: record.stage,
+            applyOrder: record.entry.applyOrder,
+            actualApplyOrder: record.actualApplyOrder,
+            patches: record.patchSet,
+            runs: record.runs,
+            build: this.harness,
+        }));
+    }
+}
+
+function walk(set: PatchSet, helpers: string[], visit: (patch: Patch, helpers: string[]) => void): void {
+    for (const item of set.patches) {
+        if (isPatch(item)) {
+            visit(item, helpers);
+        } else {
+            walk(item, [...helpers, item.name], visit);
+        }
+    }
+}
+
+function pickTable(section: JsonValue | undefined): Readonly<Record<string, string>> {
+    const replace = (section as JsonObject | undefined)?.replace;
+
+    if (replace === null || typeof replace !== "object" || Array.isArray(replace)) {
+        return {};
+    }
+
+    // A pick may still name a built-in plugin by its name from before 1.1.0.
+    return Object.fromEntries(
+        Object.entries(replace)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .map(([name, plugin]) => [name, currentPluginName(plugin)]),
+    );
+}

@@ -31,13 +31,13 @@ Your files are applied last, after every plugin and recipe. Whenever a plugin or
 file changes the config, sous applies your `sous.config.*` and `conf.d` files again after it. So
 when a plugin or a recipe sets a key that one of your files also sets, your value wins:
 
-```js
-// .sous/sous.config.js (excerpt)
-export const config = {
-  compilation: {
-    includeSourceComments: false,
-  },
-};
+```jsonc
+// .sous/sous.config.jsonc (excerpt)
+{
+  "compilation": {
+    "includeSourceComments": false
+  }
+}
 ```
 
 If a plugin sets `compilation.includeSourceComments` to `true`, the result is still `false`. In a
@@ -83,7 +83,7 @@ export function configure(config) {
 the same input. When a `.js` file changes on disk during watch mode, it is imported again.
 
 Some of the builder's operations (the full list, with each one's documentation, is the `DocumentNode`
-type in `packages/plugin-api/src/node.ts`):
+type in `packages/sous-plugin-api/src/node.ts`):
 
 ```js
 const node = config.atPath("compilation.targets");

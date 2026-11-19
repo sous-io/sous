@@ -75,6 +75,166 @@
             "type": "string"
           }
         },
+        "varOverrides": {
+          "default": [],
+          "description": "Variables for every output whose path matches a pattern, outputs a plugin or a recipe added included. A rule wins over the output's own _vars.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "match": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                ],
+                "description": "The output paths the rule applies to: a glob, or a regular expression written /.../, or a list of them."
+              },
+              "exclude": {
+                "description": "Output paths the rule leaves out, though match takes them.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                ]
+              },
+              "_vars": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The variables to set. They win over the output's own _vars; a later rule wins over an earlier one."
+              }
+            },
+            "required": [
+              "match",
+              "_vars"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "files": {
+          "description": "Every file a build writes, listed while the config is built. Set by sous; anything written here is replaced.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              },
+              "targetIndex": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "source": {
+                "type": "string"
+              },
+              "output": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "destination": {
+                "type": "string"
+              },
+              "harness": {
+                "type": "string"
+              },
+              "_vars": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "target",
+              "targetIndex",
+              "source",
+              "output",
+              "destination"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "listing": {
+          "description": "What listing compilation.files found. Set by sous.",
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "error",
+                      "warning"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "number"
+                  },
+                  "targetIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "level",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "targets",
+            "problems"
+          ],
+          "additionalProperties": false
+        },
         "includeSourceComments": {
           "default": false,
           "type": "boolean"
@@ -153,22 +313,7 @@
                   "type": "object",
                   "properties": {
                     "_if": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "object",
-                        "properties": {
-                          "eq": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "eq"
-                        ],
-                        "additionalProperties": false
-                      }
+                      "description": "Removed. Write the condition as a config expression on the output: { \"$if\": { \"expr\": \"...\", \"then\": { ...the output... } } }."
                     },
                     "_vars": {
                       "type": "object",
@@ -190,6 +335,15 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "harness": {
+                      "description": "The harness this output belongs to (claude-code, codex). Templates read it as harness.id.",
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "backupExisting": {
+                      "description": "When true, a file sous did not write at the destination is backed up, a warning is given, and it is overwritten, whatever compilation.overwriteUntracked says.",
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -201,6 +355,29 @@
             ],
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "editor": {
+      "description": "Edits to files Sous does not own (editor.edits), applied, recorded and undone by the editor.",
+      "type": "object",
+      "properties": {
+        "edits": {
+          "default": [],
+          "description": "The master list of edits to files Sous does not own: each entry names a file and one or more operations, an assertion or a silence. Sous applies them after the compiler, records them, and undoes the ones no longer declared.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "historyFile": {
+          "description": "Where Sous records the edits it applied, so it can undo them. Default: <sousDir>/sous.edits.json (git-ignored).",
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -271,7 +448,7 @@
       "type": "string"
     },
     "plugins": {
-      "description": "Which plugins load, which never load, and each plugin's own options (S1).",
+      "description": "Which plugins load, which never load, and each plugin's own options.",
       "type": "object",
       "properties": {
         "discover": {
@@ -335,7 +512,10 @@
             "type": "string"
           }
         },
-        "additionalProperties": true
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
       }
     },
     "runtimeContext": {
@@ -412,7 +592,7 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "False switches it off on this machine, keeping its pins."
+            "description": "False switches it off, keeping its pins, wherever the file that sets it applies: for everyone in a committed file, for one machine in a conf.d file kept out of git."
           },
           "range": {
             "type": "string",
@@ -431,7 +611,7 @@
             "type": "string"
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     },
     "tools": {
@@ -515,6 +695,74 @@
     "recipes": {
       "type": "object",
       "properties": {
+        "contents": {
+          "description": "What each active recipe's manifest publishes, one entry per contents group, added by sous-plugin-recipes (read-only in practice).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": [
+              "recipe",
+              "dir",
+              "kind",
+              "include"
+            ],
+            "properties": {
+              "recipe": {
+                "type": "string"
+              },
+              "dir": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "include": {
+                "type": "array"
+              },
+              "exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "handlers": {
+          "description": "The handlers the active recipes' manifests list, one entry each.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "recipe",
+              "purpose",
+              "file",
+              "handler"
+            ],
+            "properties": {
+              "recipe": {
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "check",
+                  "configure",
+                  "beforeBuild",
+                  "afterBuild",
+                  "uninstall",
+                  "migrate"
+                ]
+              },
+              "file": {
+                "type": "string"
+              },
+              "handler": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "memories": {
           "description": "Which recipe memories memory targets and the #memories view take, and in what order.",
           "type": "object",

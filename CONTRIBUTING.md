@@ -12,8 +12,8 @@ pnpm test
 ```
 
 Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. Sous is a pnpm workspace:
-a small engine (`packages/core`), the plugin interface (`packages/plugin-api`), one package per
-built-in plugin (`packages/plugin-*`), and `packages/sous`, the published `@sous-io/sous`, which
+a small engine (`packages/sous-lib-core`), the plugin interface (`packages/sous-plugin-api`), one package per
+built-in plugin (`packages/sous-plugin-*`), and `packages/sous`, the published `@sous-io/sous`, which
 esbuild bundles into one file. Read the [laws](docs/markdown/architecture/laws.md),
 [goals](docs/markdown/architecture/goals.md) and
 [specifications](docs/markdown/architecture/specifications/README.md) before changing how sous
@@ -22,17 +22,27 @@ is built; they rank above every other document.
 - `pnpm test` runs every package's tests, including the end-to-end tests in
   `packages/sous/test/integration/`, which run the bundled `sous` as a process.
 - `pnpm typecheck` type-checks every package (esbuild strips types without checking them).
-- `pnpm build` builds `@sous-io/plugin-api` and the bundle, `packages/sous/dist/bin.js`.
+- `pnpm build` builds `@sous-io/sous-plugin-api` and the bundle, `packages/sous/dist/bin.js`.
 
 Run the CLI from a clone with `./bin/sous <command>`: it rebuilds the bundle when a package's
 source changed, then runs it. To get `sous` on your PATH, link that script (for example
 `ln -s "$PWD/bin/sous" ~/.local/bin/sous`).
 
-This repo configures its own agent skills with sous, from `.sous/sous.config.js`. Running
-`./bin/sous build` compiles them into `.claude/skills/` (the skill target the built-in Claude
-Code plugin adds), which is gitignored build output.
+This repo configures its own agent files with sous, from `.sous/sous.config.jsonc`. Running
+`./bin/sous build` compiles the skills into `.claude/skills/`, the project's memories
+(`.sous/memories/`, gathered by `.sous/MEMORIES.tpl.md`) and the recipes' memories into
+`.claude/rules/SOUS-MEMORIES.md`, and the website's agent instructions into `docs/CLAUDE.md`. All
+of them are gitignored build output; there is no root `CLAUDE.md`, because Claude Code reads the
+rules file without one. To change what an agent is told, edit the sources under `.sous/` and
+rebuild.
 That is optional for contributing, but it is the fastest way to confirm a change to the
 compiler or the shared prompts does what you expect.
+
+A new git worktree lacks the gitignored files sous needs, its dependencies and its agent files.
+Run `scripts/init-new-worktree.sh` from inside the worktree (or point your IDE's
+"after a worktree is created" command at it): it copies the gitignored files listed at its top
+from the main checkout, runs `pnpm install`, then `pnpm sous:build`. It reads the paths from Orca's
+`ORCA_WORKTREE_PATH` and `ORCA_ROOT_PATH` when they are set, and from git otherwise.
 
 ## Before you open a PR
 

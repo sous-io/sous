@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 /** Writes a file, creating its parent directories. Returns the full path. */
 export function writeFixtureFile(filePath: string, contents: string): string {
@@ -53,6 +53,8 @@ export type RecipeFixture = {
   variables?: unknown[];
   /** The recipe's `contents` block; defaults to a single skills entry. */
   contents?: unknown[];
+  /** The recipe's `handlers` block: each purpose's `{ file, handler }` list. */
+  handlers?: Record<string, Array<{ file: string; handler: string }>>;
 };
 
 /**
@@ -90,6 +92,7 @@ export async function buildFixtureRepo(
           ...(recipe.subscribes === undefined ? {} : { subscribes: recipe.subscribes }),
           contents: recipe.contents ?? [{ kind: "skills", include: ["skills/**/*.md"] }],
           ...(recipe.variables === undefined ? {} : { variables: recipe.variables }),
+          ...(recipe.handlers === undefined ? {} : { handlers: recipe.handlers }),
         },
         null,
         2

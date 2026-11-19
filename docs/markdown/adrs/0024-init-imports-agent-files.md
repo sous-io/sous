@@ -131,7 +131,7 @@ memories for its own work.
 - Collaborators of a project set up this way, and of every recipe repository `sous repo init` creates,
   must run `sous build` after cloning before their agent sees any instructions.
 - A project skill now shadows a recipe skill of the same name everywhere, with a warning on each build.
-- `plugin-authoring` depends on `plugin-init`, and sits above it in the plugin dependency graph (S6,
+- `sous-plugin-authoring` depends on `sous-plugin-init`, and sits above it in the plugin dependency graph (S6,
   concerns and owners).
 - A repository scaffolded by an older sous keeps its hand-written `CLAUDE.md` and `AGENTS.md`; running
   `sous init` in it imports them.

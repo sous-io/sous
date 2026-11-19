@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo, gitIn, writeFixtureFile } from "../utils/fixture-repo.js";
-import { hashDirectory } from "@sous-io/plugin-formats";
+import { hashDirectory } from "@sous-io/sous-plugin-formats";
 
 import { binPath } from "../utils/sous-bin.js";
 

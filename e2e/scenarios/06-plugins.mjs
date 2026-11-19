@@ -1,8 +1,9 @@
 import path from "node:path";
 import { assert, expectExit, expectIncludes, parseJson } from "../lib/harness.mjs";
 
-const PLUGIN = `
-import { definePlugin, IntentOutput, IntentOutputs, VariableSet, jsonSchema } from "@sous-io/plugin-api";
+// The plugin, importing the plugin interface under the given package name.
+const plugin = (api) => `
+import { definePlugin, IntentOutput, IntentOutputs, VariableSet, jsonSchema } from "${api}";
 
 export default definePlugin({
   name: "e2e-hello-plugin",
@@ -37,12 +38,12 @@ export default {
     await t.step("plugins show lists the built-in plugins", () => {
       const r = expectExit(t.sous(["plugins", "show"]));
       const text = r.stdout + r.stderr;
-      for (const name of ["@sous-io/plugin-recipes", "@sous-io/plugin-compiler", "@sous-io/plugin-cli"]) expectIncludes(text, name, "plugins show");
+      for (const name of ["@sous-io/sous-plugin-recipes", "@sous-io/sous-plugin-compiler", "@sous-io/sous-plugin-cli"]) expectIncludes(text, name, "plugins show");
     });
 
     await t.step("plugins show <name> shows one plugin at the running version", () => {
-      const r = expectExit(t.sous(["plugins", "show", "@sous-io/plugin-git"]));
-      expectIncludes(r.stdout + r.stderr, "@sous-io/plugin-git", "plugins show");
+      const r = expectExit(t.sous(["plugins", "show", "@sous-io/sous-plugin-git"]));
+      expectIncludes(r.stdout + r.stderr, "@sous-io/sous-plugin-git", "plugins show");
       expectIncludes(r.stdout + r.stderr, t.sousVersion.replace(/^v/, ""), "plugins show version");
     });
 
@@ -58,10 +59,15 @@ export default {
 
     const dir = path.join(t.root, "e2e-plugin");
     t.write("package.json", JSON.stringify({ name: "e2e-hello-plugin", version: "1.2.3", type: "module", main: "index.mjs" }), dir);
-    t.write("index.mjs", PLUGIN, dir);
-    await t.step("an outside plugin can be installed next to its plugin-api", () => {
-      const sousVersion = t.sousVersion.replace(/^v/, "");
-      expectExit(t.sh(`npm i --no-audit --no-fund @sous-io/plugin-api@${sousVersion}`, { cwd: dir, timeout: 240_000 }));
+    // The plugin interface is @sous-io/sous-plugin-api from 1.1.0; a release before that published it
+    // as @sous-io/plugin-api.
+    const sousVersion = t.sousVersion.replace(/^v/, "");
+    const renamed = t.local !== undefined || t.sh(`npm view @sous-io/sous-plugin-api@${sousVersion} version`).code === 0;
+    const api = renamed ? "@sous-io/sous-plugin-api" : "@sous-io/plugin-api";
+    t.write("index.mjs", plugin(api), dir);
+    await t.step("an outside plugin can be installed next to the plugin interface", () => {
+      const spec = t.local ? t.local.api : `${api}@${sousVersion}`;
+      expectExit(t.sh(`npm i --no-audit --no-fund ${spec}`, { cwd: dir, timeout: 240_000 }));
     });
 
     await t.step("plugins.load in a conf.d file loads the plugin", () => {
@@ -109,9 +115,9 @@ export default {
     });
 
     await t.step("a recipe that ships a sous plugin adds its command once the repository is trusted", () => {
-      const repo = path.join(t.root, "plugin-recipes");
+      const repo = path.join(t.root, "sous-plugin-recipes");
       t.sh(`git init -q ${repo}`);
-      expectExit(t.sous(["repo", "init", repo, "--name", "plugrepo", "--namespace", "plug"], { cwd: t.root }));
+      expectExit(t.sous(["repo", "init", repo, "--name", "plugrepo", "--namespace", "plug", "--no-hooks"], { cwd: t.root }));
       const manifestPath = "recipes/plug/example/sous.recipe.yaml";
       t.write(manifestPath, t.read(manifestPath, repo).replace(/^contents:/m, "plugin:\n  bundle: plugin/index.js\n\ncontents:"), repo);
       t.write(
