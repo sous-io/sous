@@ -13,7 +13,7 @@ import type { CompilationFile, CompilationTarget, StateFileEntry } from "@sous-i
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import { migrationsPlugin } from "@sous-io/sous-plugin-migrations";
 import type { MigrationsRunResult } from "@sous-io/sous-plugin-migrations/types";
-import { KEEP_LAYER, KEEP_SOURCE, MOVE_SOURCE, memoriesMigration, migrateMemories, OUTPUT_PATH_KEY } from "../src/migrations/memories.js";
+import { KEEP_LAYER, KEEP_SOURCE, MOVE_SOURCE, memoriesMigration, migrateMemories, OUTPUT_PATH_KEY, removeLines } from "../src/migrations/memories.js";
 import { mentionsOldKey, migrateToolsKey, renameInFile } from "../src/migrations/tools.js";
 
 const dirs: string[] = [];
@@ -151,7 +151,7 @@ describe("the memories migration", () => {
         const source = path.join(root, ".sous", "prompts", "CLAUDE.tpl.md");
         const result = await run({ answer: ["claude-code.memories=move", "claude-code.memories.remove-line=yes"] });
 
-        expect(read(source)).toBe("# Project\n\n\nMore.\n");
+        expect(read(source)).toBe("# Project\n\nMore.\n");
         expect(result.migrations[0]?.outcome?.details?.join("\n")).toContain("Removed the line @#memories/**/*.md from .sous/prompts/CLAUDE.tpl.md:3");
     });
 
@@ -224,9 +224,37 @@ describe("the memories migration", () => {
             { "claude-code.memories": "move", "claude-code.memories.remove-line": "yes" },
         );
 
-        expect(read(source)).toBe("# Project\n\n\nMore.\n");
+        expect(read(source)).toBe("# Project\n\nMore.\n");
         expect(read(memories)).toBe("@#memories/**/*.md\n");
         expect(again.summary).toContain("never wrote");
+    });
+});
+
+/** Removing the include line leaves the file's blank lines as they would be had it never been there. */
+describe("removeLines", () => {
+    function removed(text: string, line: number): string {
+        const file = path.join(tmp(), "CLAUDE.tpl.md");
+
+        fs.writeFileSync(file, text);
+        removeLines([{ file, line }]);
+
+        return read(file);
+    }
+
+    it("takes one of the blank lines around it along", () => {
+        expect(removed("# Project\n\n@#memories/**/*.md\n\nMore.\n", 3)).toBe("# Project\n\nMore.\n");
+    });
+
+    it("takes the blank line after it along at the start of the file", () => {
+        expect(removed("@#memories/**/*.md\n\nMore.\n", 1)).toBe("More.\n");
+    });
+
+    it("keeps the file's final newline at the end of the file", () => {
+        expect(removed("# Project\n\n@#memories/**/*.md\n", 3)).toBe("# Project\n\n");
+    });
+
+    it("leaves the blank lines alone when the line was not between two", () => {
+        expect(removed("# Project\n@#memories/**/*.md\n\nMore.\n", 2)).toBe("# Project\n\nMore.\n");
     });
 });
 

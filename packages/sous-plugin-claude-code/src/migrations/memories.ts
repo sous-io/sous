@@ -245,7 +245,11 @@ function writeSource(sousDir: string, text: string): string | undefined {
     return file;
 }
 
-/** Removes the given lines (1-based) from their files, each file read and written once. */
+/**
+ * Removes the given lines (1-based) from their files, each file read and written once. A line that
+ * stood alone between blank lines takes the blank line after it along, so no doubled blank line is
+ * left where it was.
+ */
 export function removeLines(lines: readonly IncludeLine[]): void {
     const byFile = new Map<string, Set<number>>();
 
@@ -254,8 +258,23 @@ export function removeLines(lines: readonly IncludeLine[]): void {
     }
 
     for (const [file, numbers] of byFile) {
-        const text = fs.readFileSync(file, "utf8");
-        const kept = text.split("\n").filter((line, index) => !(numbers.has(index + 1) && line.trim() === RECIPES_LINE));
+        const source = fs.readFileSync(file, "utf8").split("\n");
+        const kept: string[] = [];
+
+        for (let index = 0; index < source.length; index++) {
+            const line = source[index] ?? "";
+
+            if (!(numbers.has(index + 1) && line.trim() === RECIPES_LINE)) {
+                kept.push(line);
+                continue;
+            }
+
+            const blankBefore = kept.length === 0 || kept.at(-1)?.trim() === "";
+            // The last element is what follows the file's final newline; it is kept so the newline stays.
+            const blankAfter = index + 1 < source.length - 1 && source[index + 1]?.trim() === "";
+
+            if (blankBefore && blankAfter) index++;
+        }
 
         fs.writeFileSync(file, kept.join("\n"));
     }
