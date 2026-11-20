@@ -228,12 +228,12 @@ remote. Providers differ, and sous says so rather than pretending otherwise:
 | Provider | Tool | Push permission | Forking | Proposal | Following it up |
 |---|---|---|---|---|---|
 | `github` | `gh` | read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | pull request | `gh pr list`, `gh pr view` and `gh pr edit`, matching a fork's pull request by its owner |
-| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request | not done: every run opens a merge request, and `--status` is refused |
+| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request | `glab mr list`, `glab mr view` and `glab mr update`, matching a fork's merge request by its author |
 | `local` | none | not applicable | not applicable | not applicable | not applicable |
 
-**GitLab cannot follow a proposal up yet.** It does not declare `proposals`, so a submission cannot
-look for a merge request that is already open; it says so, pushes, and opens one. When the branch
-already has one, the push updates it and GitLab may refuse the second.
+**GitLab follows a merge request up as GitHub does a pull request.** It declares `proposals`, so a
+submission finds the merge request already open for the branch and updates it instead of opening a
+second, and `sous repo submit --status` reports its state, its pipeline and whether it can be merged.
 
 **GitLab reports "cannot tell" rather than guessing.** Sous has no cheap, reliable way to ask
 whether you may push, and a wrong guess would send you down a fork path this provider cannot

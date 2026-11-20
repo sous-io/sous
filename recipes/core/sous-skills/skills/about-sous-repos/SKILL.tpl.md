@@ -106,11 +106,13 @@ Two presets matter most:
 
 ## What Happens to a Change
 
-A repository made by `sous repo init` carries `.github/workflows/sous-release.yml`, which runs:
+A repository made by `sous repo init` carries `.github/workflows/sous-release.yml` on GitHub, or
+`.gitlab-ci.yml` on GitLab (whose release job pushes with a masked CI/CD variable named
+`SOUS_RELEASE_TOKEN`, and fails naming it when it is not set). Either one runs:
 
-- on every pull request, `sous repo release --check`;
-- on every push to `main`, `sous repo release --ci --push --yes`, which tags every version that has
-  no tag yet, commits the regenerated index when it changed, and pushes both.
+- on every pull or merge request, `sous repo release --check`;
+- on every push to the default branch, `sous repo release --ci --push --yes`, which tags every
+  version that has no tag yet, commits the regenerated index when it changed, and pushes both.
 
 So a change to a recipe MUST raise that recipe's version in the pull request itself, by editing
 `version` in its `sous.recipe.yaml`: after the merge, `--ci` refuses a recipe whose files changed

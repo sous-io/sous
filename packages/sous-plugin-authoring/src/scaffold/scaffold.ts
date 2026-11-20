@@ -71,16 +71,13 @@ export async function handleInit(input: RepoInitInput, ctx: Context): Promise<In
         ...(input.install === undefined ? {} : { install: input.install }),
     });
 
-    // init's outputs go before the scaffold's "What to do next", which stays at the end with the
-    // closing output that carries the result.
+    // init's outputs go before the closing output that carries the result.
     const outputs = scaffolded.toArray();
-    const next = outputs.findIndex((output) => output.title === "What to do next");
-    const split = next === -1 ? outputs.length - 1 : next;
 
     return new IntentOutputs<RepoInitResult>([
-        ...outputs.slice(0, split),
+        ...outputs.slice(0, -1),
         ...initialized.toArray().map((output) => new IntentOutput({ ...output, data: undefined })),
-        ...outputs.slice(split),
+        ...outputs.slice(-1),
     ]);
 }
 
@@ -112,6 +109,7 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
         generatedAt: (options.now ?? new Date()).toISOString(),
         ...(workflow === undefined ? {} : { workflow }),
         ...(host?.proposalNoun === undefined ? {} : { proposalNoun: host.proposalNoun }),
+        ...(host?.fileUrl === undefined ? {} : { contributeUrl: host.fileUrl(`https://<host>/<owner>/${name}`, "main", "CONTRIBUTING.md") }),
     };
     const files = [...planFiles(tools, context), ...hostFiles];
 
@@ -128,6 +126,12 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
         }
 
         await verifyScaffold(tools, directory, context);
+    }
+
+    for (const file of files) {
+        if (file.warning !== undefined) {
+            tools.reporter.warning(file.warning);
+        }
     }
 
     tools.results.push(
@@ -153,24 +157,6 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
             ),
         );
     }
-
-    tools.results.push(
-        new IntentOutput({
-            title: "What to do next",
-            result: new VariableSet({
-                Repository: name,
-                Namespace: namespace,
-                "Example recipe": path.join("recipes", namespace, EXAMPLE_RECIPE_NAME, RECIPE_MANIFEST_FILE),
-            }),
-            style: ReportEntryStyle.VariableList,
-        }),
-        textOutput(
-            "Edit the example recipe, or copy its folder to start another one. " +
-                `Every recipe folder must also be listed under 'recipes' in ${REPO_MANIFEST_FILE}. ` +
-                "Commit the repository and push it, then add it to a project with 'sous repo add <url>'. Adding a repository is what trusts it.",
-            ReportEntryStyle.Note,
-        ),
-    );
 
     return {
         directory,

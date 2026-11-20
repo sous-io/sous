@@ -8,9 +8,18 @@ import type { ScaffoldFile, ScaffoldOptions } from "@sous-io/sous-plugin-recipes
 /** Where the pipeline is written. */
 export const GITLAB_CI_PATH = ".gitlab-ci.yml";
 
-/** The files a GitLab scaffold adds: `.gitlab-ci.yml`. */
+/** The CI/CD variable the release job pushes with. */
+export const RELEASE_TOKEN_VARIABLE = "SOUS_RELEASE_TOKEN";
+
+/** What `repo init` warns about: the release job cannot push until the variable is set. */
+export const RELEASE_TOKEN_WARNING =
+    `The release job in ${GITLAB_CI_PATH} needs a masked CI/CD variable named ${RELEASE_TOKEN_VARIABLE}, holding a project access token ` +
+    "with the write_repository scope and the Maintainer role. Until it is set, every release job fails before it commits or tags. " +
+    "Set it in the GitLab project under Settings, CI/CD, Variables.";
+
+/** The files a GitLab scaffold adds: `.gitlab-ci.yml`, with the warning about its token. */
 export function gitlabCiFiles(_options: ScaffoldOptions): ScaffoldFile[] {
-    return [{ path: GITLAB_CI_PATH, content: buildGitlabPipeline() }];
+    return [{ path: GITLAB_CI_PATH, content: buildGitlabPipeline(), warning: RELEASE_TOKEN_WARNING }];
 }
 
 /** The pipeline's text. */
@@ -34,7 +43,8 @@ export function buildGitlabPipeline(): string {
 #
 # Pushing needs a token: CI_JOB_TOKEN cannot push. Create a project access
 # token with the 'write_repository' scope and the Maintainer role, and save it
-# as a masked CI/CD variable named SOUS_RELEASE_TOKEN.
+# as a masked CI/CD variable named SOUS_RELEASE_TOKEN (Settings, CI/CD,
+# Variables). The release job checks for it before it commits or tags.
 
 stages:
   - check
@@ -59,6 +69,13 @@ release:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
   script:
+    - |
+      if [ -z "$SOUS_RELEASE_TOKEN" ]; then
+        echo "Error: the CI/CD variable SOUS_RELEASE_TOKEN is not set, so this job cannot push a release." >&2
+        echo "Create a project access token with the write_repository scope and the Maintainer role, and save it" >&2
+        echo "as a masked CI/CD variable named SOUS_RELEASE_TOKEN in this project's Settings, CI/CD, Variables." >&2
+        exit 1
+      fi
     - git config user.name "sous release"
     - git config user.email "sous-release@noreply.$CI_SERVER_HOST"
     # GitLab checks out a detached commit; a release commit needs the branch.

@@ -143,6 +143,7 @@ export function createGithubHost(options: GithubPluginOptions = {}): GithubRepos
         authStatus: (ctx) => cliAuthStatus(GH, ctx),
         ...githubProposals(),
         scaffoldFiles: githubWorkflowFiles,
+        fileUrl: (repositoryUrl, branch, file) => `${repositoryUrl}/blob/${branch}/${file}`,
     };
 }
 

@@ -554,8 +554,10 @@ sous repo contribute workflow/task-files --finish --title "Clarify the resume st
 Creates a new recipe repository, then runs [`sous init`](#sous-init-directory) in the same directory, so the
 repository is also a sous project whose memories file and `.claude/skills/` are build output. It
 passes `--yes`, `--move-includes`, `--copy-includes`, `--leave-includes`, `--no-build` and `--dry-run` through to
-init. A directory that already holds a sous config keeps it, and init is skipped with a note. See
-[Authoring a repository](repositories-authoring.md).
+init. A directory that already holds a sous config keeps it, and init is skipped with a note. `--host github`
+writes `.github/workflows/sous-release.yml` and `--host gitlab` writes `.gitlab-ci.yml` (default: the host of
+the `origin` remote, else `github`); on GitLab it warns that the release job needs the masked CI/CD variable
+`SOUS_RELEASE_TOKEN`. See [Authoring a repository](repositories-authoring.md).
 
 ```bash
 sous repo init ./my-recipes --name team-recipes --namespace workflow

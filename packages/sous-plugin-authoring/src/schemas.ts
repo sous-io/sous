@@ -93,7 +93,7 @@ export const initInput = jsonSchema<RepoInitInput>({
         force: { type: "boolean", description: "Write the scaffold over a repository that already exists" },
         host: {
             type: "string",
-            description: "The repository host whose CI workflow and files to add, such as 'github' (default: from the git remote, else none)",
+            description: "The repository host whose CI workflow and files to add, such as 'github' or 'gitlab' (default: from the git remote, else 'github')",
         },
         yes: { type: "boolean", description: "Accept the default answer to every question sous init asks, which this command runs next" },
         moveIncludes: { type: "boolean", description: "Move the files an existing CLAUDE.md or AGENTS.md includes into .sous/includes/ (the default)" },

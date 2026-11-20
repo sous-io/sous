@@ -230,6 +230,11 @@ export interface ScaffoldFile {
     readonly content: string;
     /** Marks it executable. */
     readonly executable?: boolean;
+    /**
+     * What the person must do before the file works, as one or more sentences; `repo init` prints
+     * it as a warning (the GitLab pipeline's `SOUS_RELEASE_TOKEN`).
+     */
+    readonly warning?: string;
 }
 
 /** What a scaffold is for, as a host's CI workflow sees it. */
@@ -273,6 +278,12 @@ export interface RepositoryHostEntity extends RepositoryLocator {
     updateProposal?(repository: CanonicalRepository, id: string, update: { title?: string; body?: string }, ctx: RepositoryHostContext): Promise<ProposedChange>;
     /** The CI workflow and other host files a new recipe repository gets (`repo.init`). */
     scaffoldFiles?(options: ScaffoldOptions): ScaffoldFile[];
+    /**
+     * A file's address in the browser, on a branch:
+     * `fileUrl("https://gitlab.com/acme/recipes", "main", "CONTRIBUTING.md")` gives
+     * `https://gitlab.com/acme/recipes/-/blob/main/CONTRIBUTING.md`.
+     */
+    fileUrl?(repositoryUrl: string, branch: string, file: string): string;
 }
 
 // =============================================================================================

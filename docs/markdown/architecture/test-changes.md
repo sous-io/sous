@@ -2017,3 +2017,8 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** in `test/plugin.test.ts`: every expected report line now starts with who reported it (`sous-plugin-a (check: a/needs-jq): ran a/needs-jq`, `acme/tool (migrate: migrate): migrated from 1.0.0 to 2.0.0`), a thrown error reads `<who>: failed: <error>`, and a recipe handler's id includes its file (`z/last/afterBuild/h.js#two`). The `migrate` and `uninstall` tests filter lines with `includes` instead of `startsWith`.
   - **Why:** report lines name the recipe or plugin and the handler, and ids name the file, as #288 asked.
 - **New** in `test/plugin.test.ts`: "should refuse a plugin's uninstall handler..." and "...migrate handler...", "should name the file in the id of each of two same-named handlers", and "should name the recipe and the handler on every line it reports" (configure).
+
+### `repo init` on GitLab: the token warning, the contribute address, no "What to do next" (sous-plugin-authoring, sous-plugin-gitlab; gh-230 item 9, gh-159)
+
+- **New** "should warn with the host's file warning and suggest a contribute address in the host's shape" (`sous-plugin-authoring/src/scaffold/scaffold.spec.ts`).
+- **Changed** "should write a pipeline that checks merge requests and releases the default branch" (`sous-plugin-gitlab/src/proposals.spec.ts`): it also expects the file's `SOUS_RELEASE_TOKEN` warning and the host's `fileUrl` shape. **New** "should fail the release job naming SOUS_RELEASE_TOKEN before anything is committed", which runs the job's check with and without the variable.
