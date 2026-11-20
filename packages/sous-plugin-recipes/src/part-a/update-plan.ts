@@ -189,8 +189,11 @@ export async function resolveUpdateScope(ctx: Context, input: RecipeUpdateInput,
         : { kind: "recipe", repo: chosen.repo.name, key: chosen.key };
 }
 
-/** `recipe.plan-update`: what the lockfile would become, and everything worth knowing first. */
-export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promise<RecipeUpdatePlan> {
+/**
+ * `recipe.plan-update`: what the lockfile would become, and everything worth knowing first. With
+ * `download`, a version whose index does not record what it depends on is downloaded to read it.
+ */
+export async function planUpdate(input: RecipeUpdateInput, ctx: Context, options: { download?: boolean } = {}): Promise<RecipeUpdatePlan> {
     const lockService = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");
     const format = ctx.services.get("refs.format");
@@ -263,7 +266,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         }
     }
 
-    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, { ...held, indexes }));
+    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, { ...held, indexes, ...(options.download === true ? { download: true } : {}) }));
     const resolvedSubscriptions = together.resolved;
     const result = together.result;
     const merged = new Map<string, ResolvedRecipe>(result.resolved.map((recipe) => [recipe.key, recipe]));

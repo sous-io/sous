@@ -220,7 +220,7 @@ export function runOutputs(result: MigrationsRunResult): IntentOutputs<Migration
                 result: new ItemList(
                     result.unanswered.map((question) => `${question.message} Answer it with --answer ${question.question}=<${question.values.join("|")}> (--yes takes ${question.default}).`),
                     {
-                        title: "No migration ran: sous could not ask these questions without a terminal.",
+                        title: `No migration ran: sous could not ask ${result.unanswered.length === 1 ? "this question" : "these questions"} without a terminal, and none runs until every question is answered.`,
                         footer: "Run the same command again with the answers, or with --yes to take every default.",
                     },
                 ),

@@ -9,7 +9,7 @@
  */
 
 import { IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, Tree, type Context, type TreeNode } from "@sous-io/sous-plugin-api";
-import type { DoctorCheckEntity, DoctorCheckReport, DoctorCheckResult, DoctorInput, DoctorResult, DoctorRun } from "./types.js";
+import type { DoctorCheckEntity, DoctorCheckReport, DoctorCheckResult, DoctorDetail, DoctorInput, DoctorResult, DoctorRun } from "./types.js";
 
 /** The flag that answers every question `sous doctor` asks. */
 const YES_FLAG = "--yes (also -y)";
@@ -35,6 +35,16 @@ function messageOf(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+/** Details as plain lines: an item's own lines follow it, indented. */
+function detailLines(details: readonly DoctorDetail[]): string[] {
+    return details.flatMap((detail) => (typeof detail === "string" ? [detail] : [detail.text, ...detail.details.map((line) => `  ${line}`)]));
+}
+
+/** Details as tree nodes: an item's own lines sit under it. */
+function detailNodes(details: readonly DoctorDetail[]): TreeNode[] {
+    return details.map((detail) => (typeof detail === "string" ? { label: detail } : { label: detail.text, children: detail.details.map((line) => ({ label: line })) }));
+}
+
 /** Whether a finding is something to fix. */
 function needsFix(found: DoctorCheckResult): found is Extract<DoctorCheckResult, { status: "problem" | "warning" | "pending" }> {
     return found.status === "problem" || found.status === "warning" || found.status === "pending";
@@ -51,7 +61,7 @@ async function mayFix(check: DoctorCheckEntity, found: Extract<DoctorCheckResult
     }
 
     // The person sees what they are asked about first.
-    ctx.reporter.problem(found.summary, found.details === undefined || found.details.length === 0 ? {} : { cause: found.details.join("\n") });
+    ctx.reporter.problem(found.summary, found.details === undefined || found.details.length === 0 ? {} : { cause: detailLines(found.details).join("\n") });
 
     const answer = await ctx.prompter.confirm({ message: `${found.fix}?`, default: true, answeredBy: YES_FLAG });
 
@@ -166,7 +176,7 @@ export async function handle(input: DoctorInput, ctx: Context): Promise<IntentOu
         }
     }
 
-    const result: DoctorResult = { checks: reports, problems: reports.filter((report) => report.problem).length, dryRun: run.dryRun };
+    const result: DoctorResult = { checks: reports, problems: reports.filter((report) => report.problem).length, pending: waitingOf(reports).count, dryRun: run.dryRun };
 
     return doctorOutputs(result);
 }
@@ -190,8 +200,12 @@ function nodeOf(report: DoctorCheckReport): TreeNode {
     const final = report.after ?? report.found;
     const children: TreeNode[] = [];
 
+    for (const note of report.found.status === "skipped" ? [] : (report.found.notes ?? [])) {
+        children.push({ label: note });
+    }
+
     if (report.found.status !== "ok") {
-        children.push({ label: report.found.summary ?? "", children: (("details" in report.found ? report.found.details : undefined) ?? []).map((line) => ({ label: line })) });
+        children.push({ label: report.found.summary ?? "", children: detailNodes(("details" in report.found ? report.found.details : undefined) ?? []) });
     }
 
     switch (report.fix?.result) {
@@ -233,14 +247,61 @@ function nodeOf(report: DoctorCheckReport): TreeNode {
     return { label: report.description, detail: fixed ? "fixed" : statusOf(final), children };
 }
 
+/**
+ * What still waits on an answer at the end: the checks whose final finding is `pending`, each
+ * counted by its `waiting` (a pending finding without one counts as one check).
+ */
+function waitingOf(reports: readonly DoctorCheckReport[]): { count: number; labels: string[] } {
+    let count = 0;
+    const labels: string[] = [];
+
+    for (const report of reports) {
+        const final = report.after ?? report.found;
+
+        if (final.status !== "pending") {
+            continue;
+        }
+
+        const waiting = final.waiting ?? { count: 1, label: "1 check" };
+
+        count += waiting.count;
+        labels.push(waiting.label);
+    }
+
+    return { count, labels };
+}
+
+/**
+ * The closing sentence: what problems remain, and what waits on an answer, which is not a problem
+ * and does not change the exit code.
+ *
+ * ```text
+ * No problem remains.
+ * Nothing failed, but 3 migrations are waiting for an answer.
+ * 1 problem remains, and 3 migrations are waiting for an answer.
+ * ```
+ */
+function closingOf(result: DoctorResult): string {
+    const { labels } = waitingOf(result.checks);
+    const waiting = labels.length === 0 ? undefined : `${labels.join(" and ")} ${labels.length === 1 && result.pending === 1 ? "is" : "are"} waiting for an answer`;
+    const dryRun = result.dryRun ? " Nothing was changed (--dry-run)." : "";
+
+    if (result.problems === 0) {
+        if (waiting !== undefined) {
+            return `Nothing failed, but ${waiting}.${dryRun}`;
+        }
+
+        return result.dryRun ? "No problem was found. Nothing was changed (--dry-run)." : "No problem remains.";
+    }
+
+    const problems = result.problems === 1 ? "1 problem remains" : `${result.problems} problems remain`;
+
+    return `${problems}${waiting === undefined ? "" : `, and ${waiting}`}.${dryRun}`;
+}
+
 /** The outputs of `doctor`: every check and what became of it, then one sentence. */
 export function doctorOutputs(result: DoctorResult): IntentOutputs<DoctorResult> {
-    const closing =
-        result.problems === 0
-            ? result.dryRun
-                ? "No problem was found. Nothing was changed (--dry-run)."
-                : "No problem remains."
-            : `${result.problems === 1 ? "1 problem remains" : `${result.problems} problems remain`}.${result.dryRun ? " Nothing was changed (--dry-run)." : ""}`;
+    const closing = closingOf(result);
     const outputs = new IntentOutputs<DoctorResult>([
         new IntentOutput({ title: "Checks", result: new Tree(result.checks.map(nodeOf)), style: ReportEntryStyle.Tree }),
         new IntentOutput({ result: new TextBlock(closing), style: result.dryRun ? ReportEntryStyle.DryRun : ReportEntryStyle.Plain }),

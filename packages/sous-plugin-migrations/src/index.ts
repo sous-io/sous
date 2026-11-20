@@ -97,15 +97,24 @@ export const migrationsCheck: DoctorCheckEntity = {
         // run (spec 19, 7-e). That waits on a person rather than being a problem: it does not fail
         // the command, which scripts calling `sous doctor` rely on.
         const given = new Set(answersForMigrations(ctx, run.answers).map((entry) => entry.slice(0, entry.indexOf("=")).trim()));
-        const waiting = run.yes || ctx.prompter.interactive
-            ? []
-            : pending.flatMap((migration) => (migration.questions ?? []).filter((question) => question.answered?.(ctx, {}) === undefined && !given.has(question.id)));
+        const unanswered = (migration: MigrationEntity) => (migration.questions ?? []).filter((question) => question.answered?.(ctx, {}) === undefined && !given.has(question.id));
+        const waiting = run.yes || ctx.prompter.interactive ? 0 : pending.reduce((count, migration) => count + unanswered(migration).length, 0);
 
-        if (waiting.length > 0) {
+        if (waiting > 0) {
+            // Each migration by name, with the questions it asks under it; one that asks nothing
+            // waits too, because none runs until every question is answered (#265).
             return {
                 status: "pending",
-                summary: `${pending.length === 1 ? "1 migration is" : `${pending.length} migrations are`} waiting to run, and sous could not ask ${waiting.length === 1 ? "its question" : "their questions"} without a terminal.`,
-                details: waiting.map((question) => `${question.message} Answer it with --answer ${question.id}=<${valuesOf(question).join("|")}> (--yes takes ${question.default}).`),
+                summary: `${pending.length === 1 ? "1 migration is" : `${pending.length} migrations are`} waiting to run, because sous could not ask ${waiting === 1 ? "the question" : `the ${waiting} questions`} below without a terminal.`,
+                details: pending.map((migration) => {
+                    const questions = unanswered(migration);
+                    const name = `${migration.description} [sous ${migration.version}]`;
+
+                    return questions.length === 0
+                        ? `${name}: it asks nothing, and waits because migrations run in order and none runs until every question is answered.`
+                        : { text: `${name} asks:`, details: questions.map((question) => `${question.message} Answer it with --answer ${question.id}=<${valuesOf(question).join("|")}> (--yes takes ${question.default}).`) };
+                }),
+                waiting: { count: pending.length, label: pending.length === 1 ? "1 migration" : `${pending.length} migrations` },
             };
         }
 
@@ -122,7 +131,7 @@ export const migrationsCheck: DoctorCheckEntity = {
 
         if (result.unanswered.length > 0) {
             return {
-                summary: "No migration ran: sous could not ask their questions without a terminal.",
+                summary: `No migration ran: sous could not ask ${result.unanswered.length === 1 ? "this question" : "these questions"} without a terminal, and none runs until every question is answered.`,
                 details: result.unanswered.map((question) => `${question.message} Answer it with --answer ${question.question}=<${question.values.join("|")}> (--yes takes ${question.default}).`),
             };
         }

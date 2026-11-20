@@ -97,7 +97,7 @@ export interface RecipesState {
 
 /** An empty lock diff, with some fields set. */
 export function diff(changes: Partial<LockDiff>): LockDiff {
-    return { added: [], removed: [], updated: [], reposAdded: [], reposRemoved: [], unchanged: false, ...changes };
+    return { added: [], removed: [], updated: [], changed: [], reposAdded: [], reposRemoved: [], unchanged: false, ...changes };
 }
 
 /**

@@ -449,7 +449,9 @@ problem it finds, asking before each fix. Its checks, in order:
 
 1. The config loads.
 2. The lockfile agrees with the subscriptions (fix: write the lockfile the subscriptions make, keeping every pin
-   their ranges still allow).
+   their ranges still allow). To know what each recipe depends on, sous reads its files, downloading into this
+   machine's recipe store any it lacks, and says which it downloaded. A recipe it still cannot read is a
+   problem with no fix, naming it: a lockfile written then would drop the pins of what it depends on.
 3. Required recipe variables have answers (fix: ask them).
 4. Every migration for this version of sous has run (fix: run them). This check runs even when the config does
    not load, since a migration may be what makes it load again (an option a newer sous removed). When it does,
@@ -465,11 +467,14 @@ problem it finds, asking before each fix. Its checks, in order:
    error is a problem; one at level warn is a warning. No fix.
 8. The files sous wrote are present and unchanged (fix: build).
 
-Plugins add checks of their own. `--dry-run` reports and changes nothing; `--yes` applies every fix without
-asking and takes the default answer to each migration's question; `--answer <name>=<value>` answers one
-question, a migration's or a recipe variable's; `--only <check>` runs one check. It ends with exit code 1 when a
-problem remains. A migration waiting for an answer nobody could give (no terminal, no `--yes`, no `--answer`)
-is listed with the `--answer` that gives it, and does not change the exit code.
+Plugins add checks of their own. `--dry-run` reports and changes nothing in the project (it may download
+recipes into this machine's recipe store, and says so); `--yes` applies every fix without asking and takes the
+default answer to each migration's question; `--answer <name>=<value>` answers one question, a migration's or a
+recipe variable's; `--only <check>` runs one check. It ends with exit code 1 when a problem remains. Migrations
+waiting for an answer nobody could give (no terminal, no `--yes`, no `--answer`) are listed by name, each with
+its questions and the `--answer` that gives each one; a migration that asks nothing waits too, because
+migrations run in order and none runs until every question is answered. They do not change the exit code, and
+the last line says they wait: "Nothing failed, but 3 migrations are waiting for an answer."
 
 A migration brings a project's files in line with a newer version of sous. Each runs once for the project: the
 lockfile records the version of sous whose migrations the project last ran. While one is waiting, every other
@@ -631,7 +636,11 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 
 - `subscription add` (or `sous subscribe`) subscribes, then builds so the recipe's files are on disk. Answer a
   recipe's questions ahead of time with `--answer <name>=<value>` or `--answers-file <path>`, and let it install
-  the sous plugins it requires with `--install-plugins`.
+  the sous plugins it requires with `--install-plugins`. It checks everything before it writes anything: every
+  recipe it installs is downloaded first, and without a terminal a required question nothing answers fails it.
+  A failed subscription leaves the project as it was. Without `@<range>` the subscription accepts any version,
+  so an update may move it to a new major version; the plan shown before the question, and the result, name
+  the range recorded.
 - `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The
   built-in `core` subscription is switched off instead, keeping its pin.
 - `subscription update [REF]` is [`sous update`](#sous-update-ref).
@@ -663,11 +672,13 @@ sous recipe show omakase/house
 
 ## lock
 
-Inspects and repairs the project's lockfile, `.sous/sous.lock.json`, without fetching anything.
+Inspects and repairs the project's lockfile, `.sous/sous.lock.json`.
 
 - `lock show` prints what the lockfile pins, and why each recipe is there.
 - `lock rebuild` recomputes the lockfile from scratch from the subscriptions and the cached indexes: the repair
-  for a lockfile damaged by a hand edit or a bad merge.
+  for a lockfile damaged by a hand edit or a bad merge. A recipe whose index does not record what it depends on
+  is downloaded to read its manifest; when one cannot be, nothing is written and the command fails, naming it.
+  `--dry-run` downloads nothing.
 
 ```bash
 sous lock rebuild --dry-run

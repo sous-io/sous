@@ -13,7 +13,7 @@ function fakeContext(): Context & { reporter: BufferedReporter } {
     return { project: undefined, config: { get: () => undefined }, reporter: new BufferedReporter() } as unknown as Context & { reporter: BufferedReporter };
 }
 
-const unchanged: LockDiff = { added: [], removed: [], updated: [], reposAdded: [], reposRemoved: [], unchanged: true };
+const unchanged: LockDiff = { added: [], removed: [], updated: [], changed: [], reposAdded: [], reposRemoved: [], unchanged: true };
 
 describe("the browsing outputs", () => {
     /** Every browsing command opens with its Command Variables, then the listing as a titled table. */

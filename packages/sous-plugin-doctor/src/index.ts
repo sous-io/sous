@@ -58,6 +58,8 @@ export const doctorPlugin: PluginDefinition = definePlugin({
             input: doctorInput,
             // A config that does not load is the first thing it reports.
             toleratesConfigErrors: true,
+            // The lockfile check reads what each pinned recipe depends on, from its files (#291).
+            needsRecipeFiles: true,
             cli: {
                 examples: ["sous doctor", "sous doctor --dry-run", "sous doctor --yes", "sous doctor --only outputs", "sous doctor --answer memories.location=keep"],
                 flags: { yes: { short: "y", aliases: ["force"] } },

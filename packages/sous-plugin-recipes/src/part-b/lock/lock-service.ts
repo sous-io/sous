@@ -266,8 +266,9 @@ export class LockService implements RecipesLock {
             }
         }
 
-        // What the config build downloaded a moment ago was restored too, just earlier.
-        const fetched = options.keys === undefined ? this.runtime.takeFetched() : [];
+        // What the config build, or a resolve reading manifests, downloaded a moment ago was
+        // restored too, just earlier.
+        const fetched = this.runtime.takeFetched(alreadyPresent);
         const earlier = alreadyPresent.filter((key) => fetched.includes(key));
 
         return { restored: sortKeys([...restored, ...earlier]), alreadyPresent: alreadyPresent.filter((key) => !fetched.includes(key)), failed };

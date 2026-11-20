@@ -246,9 +246,12 @@ or remove the lockfile and subscribe again to have sous rebuild it.
 
 The repair for a lockfile that has drifted from the config, whether from a hand edit, a bad merge or
 a subscription removed by hand, is `sous lock rebuild`, with `--dry-run` first. It resolves every
-subscription against the cached indexes and replaces the lockfile outright, downloading nothing,
-asking nothing and granting no trust; a subscription whose repository is not added, or whose index is
-missing, is reported by name.
+subscription against the cached indexes and replaces the lockfile outright, asking nothing and
+granting no trust; a subscription whose repository is not added, or whose index is missing, is
+reported by name. It downloads only a recipe whose index does not record what it depends on, to read
+its manifest; when that download fails, nothing is written and the recipe is named, since a lockfile
+written without it would drop the pins of its dependencies. `sous doctor` and `sous build` hold to the
+same rule.
 
 ## Core skills missing after a sous upgrade
 

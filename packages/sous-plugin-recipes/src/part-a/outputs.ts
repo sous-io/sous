@@ -25,6 +25,11 @@ import { describeLockDiff } from "../part-b/lock/lockfile-ops.js";
 
 // --- Single outputs ---------------------------------------------------------------------------------
 
+/** A subscription's version range in words: absent means any version. */
+export function describeRange(range: string | undefined): string {
+    return range ?? "any version";
+}
+
 /** One sentence, optionally under a heading. */
 export function sentence(summary: string, title?: string): IntentOutput {
     return new IntentOutput({ ...(title === undefined ? {} : { title }), summary });

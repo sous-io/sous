@@ -524,9 +524,8 @@ describe("the repositories consumer surface", () => {
       expect(output).toContain("deployUrl");
       expect(output).toContain("SOUS_VAR_WORKFLOW_ANSWERS_DEPLOY_URL");
 
-      // The recipe was installed before its question was asked, so the project
-      // is put back the way it was before the next case runs.
-      expect(sous(projectRoot, "unsubscribe", "workflow/answers").status).toBe(0);
+      // Nothing was installed (#230 item 1): the project is as it was.
+      expect(output).toContain("Nothing was written.");
     },
     CLI_TIMEOUT
   );

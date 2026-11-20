@@ -154,6 +154,48 @@ describe("sous doctor", () => {
         ]);
         expect(result.checks[1]?.found).toMatchObject({ summary: "The check could not run: cannot read" });
     });
+
+    /**
+     * What waits on an answer is counted in the closing line, which never says that no problem
+     * was found while something waits; the exit code stays 0 for it (#265).
+     *
+     * a pending check; sous doctor           // -> "Nothing failed, but 1 check is waiting for an answer."
+     * a pending check and a problem          // -> "1 problem remains, and 1 check is waiting for an answer."
+     */
+    it("should count what waits for an answer in the closing line", async () => {
+        const pending: DoctorCheckEntity = { id: "waits", order: 450, description: "Waits", check: () => ({ status: "pending", summary: "Waiting on a person." }) };
+        const { doctor } = await engineWith((sous) => {
+            sous.entities.add("doctor-check", pending);
+            sous.entities.add("doctor-check", brokenUntilFixed("thing", 460, { fixed: false }));
+        });
+        const alone = await doctor({ only: ["waits"] });
+        const both = await doctor({ only: ["waits", "thing"], dryRun: true });
+
+        expect(alone.result).toMatchObject({ problems: 0, pending: 1 });
+        expect(alone.outputs.toText()).toContain("Nothing failed, but 1 check is waiting for an answer.");
+        expect(alone.outputs.toText()).not.toContain("No problem remains.");
+        expect(alone.outputs.exitCode).toBeUndefined();
+        expect(both.outputs.toText()).toContain("1 problem remains, and 1 check is waiting for an answer. Nothing was changed (--dry-run).");
+        expect(both.outputs.exitCode).toBe(1);
+    });
+
+    /** An item of a finding's details with lines of its own shows them under it; a note shows whatever the status. */
+    it("should show a detail's own lines under it, and a check's notes", async () => {
+        const { doctor } = await engineWith((sous) => {
+            sous.entities.add("doctor-check", {
+                id: "nested",
+                order: 450,
+                description: "Nested",
+                check: () => ({ status: "warning", summary: "Worth knowing.", details: ["plain", { text: "an item", details: ["its line"] }] }),
+            });
+            sous.entities.add("doctor-check", { id: "noted", order: 460, description: "Noted", check: () => ({ status: "ok", notes: ["Sous downloaded something to look."] }) });
+        });
+        const { outputs } = await doctor({ only: ["nested", "noted"] });
+        const text = outputs.toText();
+
+        expect(text).toContain("    an item\n      its line");
+        expect(text).toContain("Sous downloaded something to look.");
+    });
 });
 
 describe("a fix that makes the config load again", () => {
@@ -290,7 +332,7 @@ describe("the built-in checks", () => {
     it("should find a lockfile that does not match the subscriptions, and write the one they make", async () => {
         const written: unknown[] = [];
         const added = [{ key: "workflow/a", to: "1.0.0" }];
-        const diff = (unchanged: boolean) => ({ added: unchanged ? [] : added, removed: [], updated: [], reposAdded: [], reposRemoved: [], unchanged });
+        const diff = (unchanged: boolean) => ({ added: unchanged ? [] : added, removed: [], updated: [], changed: [], reposAdded: [], reposRemoved: [], unchanged });
         const { doctor } = await engineWith((sous) => {
             sous.services.add("recipes.lock" as never, (() => ({
                 path: () => "/project/.sous/sous.lock.json",
@@ -307,5 +349,83 @@ describe("the built-in checks", () => {
         expect(result.checks[0]?.found).toMatchObject({ status: "problem", details: ["workflow/a 1.0.0 is not pinned, and a subscription needs it"] });
         expect(written).toHaveLength(1);
         expect(result.checks[0]).toMatchObject({ after: { status: "ok" }, problem: false });
+    });
+
+    /**
+     * A recipe whose manifest could not be read leaves the lockfile the subscriptions make
+     * unknown: the check says so, naming it and why, offers no fix, and nothing is written
+     * (#291). It resolves with `download`, so the resolver first tried to download it.
+     *
+     * lib/one unreadable (its download failed); sous doctor --yes
+     * // -> problem "Sous cannot tell whether the lockfile matches the subscriptions: ...", no write, exit code 1
+     */
+    it("should report a recipe it could not read, and write nothing", async () => {
+        const written: unknown[] = [];
+        const asked: unknown[] = [];
+        const { doctor } = await engineWith((sous) => {
+            sous.services.add("recipes.lock" as never, (() => ({
+                path: () => "/project/.sous/sous.lock.json",
+                read: () => ({ formatVersion: 1, repos: {}, recipes: {} }),
+                held: () => ({ keep: {} }),
+                fromResolved: () => ({ formatVersion: 1, repos: {}, recipes: {} }),
+                diff: () => ({ added: [], removed: [{ key: "support/base", from: "1.0.0" }], updated: [], changed: [], reposAdded: [], reposRemoved: [], unchanged: false }),
+                write: async (lockfile: unknown) => void written.push(lockfile),
+            })) as never);
+            sous.services.add("recipes.resolver" as never, (() => ({
+                resolveSubscriptions: async (options: unknown) => {
+                    asked.push(options);
+
+                    return { resolved: [], missingRepos: [], unreadable: ["lib/one"], cycles: [], downloaded: [], downloadFailures: [{ key: "lib/one", reason: "the version is not published" }] };
+                },
+            })) as never);
+        });
+        const { result, outputs } = await doctor({ only: ["lockfile"], yes: true });
+
+        expect(asked[0]).toMatchObject({ download: true, quiet: true });
+        expect(result.checks[0]?.found).toMatchObject({
+            status: "problem",
+            summary: "Sous cannot tell whether the lockfile matches the subscriptions: it could not read what this recipe depends on.",
+            details: ["lib/one: the version is not published"],
+        });
+        expect(result.checks[0]?.found).not.toHaveProperty("fix");
+        expect(written).toEqual([]);
+        expect(outputs.exitCode).toBe(1);
+    });
+
+    /**
+     * The check says which recipes it downloaded to look, even on a dry run, and counts a pin
+     * whose holders changed as a difference.
+     *
+     * the store lacked lib/one; support/base now held by lib/one and lib/two
+     * // -> "Sous downloaded this recipe into this machine's recipe store to read it: lib/one."
+     */
+    it("should say what it downloaded, and report a pin whose holders changed", async () => {
+        const { doctor } = await engineWith((sous) => {
+            sous.services.add("recipes.lock" as never, (() => ({
+                path: () => "/project/.sous/sous.lock.json",
+                read: () => ({ formatVersion: 1, repos: {}, recipes: { "lib/one": {} } }),
+                held: () => ({ keep: {} }),
+                restore: async () => ({ restored: ["lib/one"], alreadyPresent: [], failed: [] }),
+                fromResolved: () => ({ formatVersion: 1, repos: {}, recipes: {} }),
+                diff: () => ({
+                    added: [],
+                    removed: [],
+                    updated: [],
+                    changed: [{ key: "support/base", version: "1.0.0", requestedBy: { from: ["lib/one"], to: ["lib/one", "lib/two"] } }],
+                    reposAdded: [],
+                    reposRemoved: [],
+                    unchanged: false,
+                }),
+            })) as never);
+            sous.services.add("recipes.resolver" as never, (() => ({ resolveSubscriptions: async () => ({ resolved: [], missingRepos: [], unreadable: [], cycles: [] }) })) as never);
+        });
+        const { result, outputs } = await doctor({ only: ["lockfile"], dryRun: true });
+
+        expect(result.checks[0]?.found).toMatchObject({
+            status: "problem",
+            details: ["support/base 1.0.0 is pinned for lib/one, and the subscriptions now need it for lib/one, lib/two"],
+            notes: ["Sous downloaded this recipe into this machine's recipe store to read it: lib/one."],
+        });
+        expect(outputs.toText()).toContain("Sous downloaded this recipe into this machine's recipe store to read it: lib/one.");
     });
 });

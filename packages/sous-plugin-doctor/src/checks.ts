@@ -57,6 +57,27 @@ export const configCheck: DoctorCheckEntity = {
     },
 };
 
+/** Who holds a pin, in words: `project` is this project itself. */
+function holdersInWords(holders: readonly string[]): string {
+    return holders.length === 0 ? "nothing" : holders.map((holder) => (holder === "project" ? "this project" : holder)).join(", ");
+}
+
+/** A pin whose version stayed while what holds it changed, as lines of the check's details. */
+function describeEntryChange(change: { key: string; version: string; requestedBy?: { from: readonly string[]; to: readonly string[] }; kind?: { from: string; to: string } }): string[] {
+    const lines: string[] = [];
+    const kindInWords = (kind: string): string => (kind === "depends" ? "a dependency" : "a subscription");
+
+    if (change.requestedBy !== undefined) {
+        lines.push(`${change.key} ${change.version} is pinned for ${holdersInWords(change.requestedBy.from)}, and the subscriptions now need it for ${holdersInWords(change.requestedBy.to)}`);
+    }
+
+    if (change.kind !== undefined) {
+        lines.push(`${change.key} ${change.version} is pinned as ${kindInWords(change.kind.from)}, and the subscriptions now need it as ${kindInWords(change.kind.to)}`);
+    }
+
+    return lines;
+}
+
 /** One lockfile change, as a line of the check's details. */
 function describeChange(change: { key: string; from?: string; to?: string; holder?: string }, kind: "added" | "removed" | "updated"): string {
     const forHolder = change.holder === undefined ? "" : ` for ${change.holder}`;
@@ -73,15 +94,32 @@ function describeChange(change: { key: string; from?: string; to?: string; holde
 
 /**
  * Works out the lockfile the subscriptions make, holding every pin while its range allows it, so
- * the only differences are ones the subscriptions call for.
+ * the only differences are ones the subscriptions call for. A recipe whose dependencies neither its
+ * index nor this machine's store records is downloaded first, so its dependencies count (#291).
  */
 async function lockfileTheSubscriptionsMake(ctx: Context) {
     const lock = ctx.services.get("recipes.lock");
     const before = lock.read();
-    const result = await ctx.services.get("recipes.resolver").resolveSubscriptions({ ...lock.held(before), quiet: true });
+    const result = await ctx.services.get("recipes.resolver").resolveSubscriptions({ ...lock.held(before), quiet: true, download: true });
     const after = lock.fromResolved(result.resolved, before);
 
     return { lock, before, after, result, diff: lock.diff(before, after) };
+}
+
+/**
+ * The recipes this run downloaded into the machine's recipe store to look: the pinned ones the
+ * store lacked (fetched before the command ran, or now), and any the resolver read the manifest
+ * of, which a restore reports. `failed` names the pinned ones that could not be downloaded.
+ */
+async function downloadedToLook(ctx: Context): Promise<{ notes: string[]; failed: string[] }> {
+    const lock = ctx.services.get("recipes.lock");
+    const restored = Object.keys(lock.read().recipes).length === 0 ? { restored: [], failed: [] } : await lock.restore();
+    const downloaded = [...restored.restored].sort();
+
+    return {
+        notes: downloaded.length === 0 ? [] : [`Sous downloaded ${downloaded.length === 1 ? "this recipe" : "these recipes"} into this machine's recipe store to read ${downloaded.length === 1 ? "it" : "them"}: ${downloaded.join(", ")}.`],
+        failed: restored.failed.map((failure) => `${failure.key}: ${failure.reason}`),
+    };
 }
 
 /** The lockfile agrees with the subscriptions: nothing to add, remove or move. */
@@ -103,6 +141,8 @@ export const lockfileCheck: DoctorCheckEntity = {
         }
 
         const { result, diff, lock } = await lockfileTheSubscriptionsMake(ctx);
+        const looked = await downloadedToLook(ctx);
+        const notes = looked.notes.length === 0 ? {} : { notes: looked.notes };
 
         if (result.missingRepos.length > 0) {
             return {
@@ -110,11 +150,26 @@ export const lockfileCheck: DoctorCheckEntity = {
                 summary: "The subscriptions need repositories this project does not trust.",
                 details: result.missingRepos.map((missing) => `${missing.name}${missing.url === undefined ? "" : ` (${missing.url})`}, needed by ${missing.requiredBy.map((entry) => entry.ref).join(", ")}`),
                 hint: "Trusting a repository is a decision for a person: add each with 'sous repo add <url>'.",
+                ...notes,
+            };
+        }
+
+        // Without a recipe's manifest its dependencies are unknown, so the lockfile the
+        // subscriptions make is unknown too: nothing is compared, and nothing is offered (#291).
+        if (result.unreadable.length > 0) {
+            const reasons = new Map((result.downloadFailures ?? []).map((failure) => [failure.key, failure.reason]));
+
+            return {
+                status: "problem",
+                summary: `Sous cannot tell whether the lockfile matches the subscriptions: it could not read what ${result.unreadable.length === 1 ? "this recipe depends" : "these recipes depend"} on.`,
+                details: [...result.unreadable.map((key) => (reasons.has(key) ? `${key}: ${reasons.get(key)}` : key)), ...looked.failed],
+                hint: "Their files could not be downloaded into this machine's recipe store, and their repository's index does not record what they depend on. Check the network and that the repositories are reachable, then run sous doctor again.",
+                ...notes,
             };
         }
 
         if (diff.unchanged) {
-            return { status: "ok" };
+            return { status: "ok", ...notes };
         }
 
         return {
@@ -124,19 +179,26 @@ export const lockfileCheck: DoctorCheckEntity = {
                 ...diff.added.map((change) => describeChange(change, "added")),
                 ...diff.removed.map((change) => describeChange(change, "removed")),
                 ...diff.updated.map((change) => describeChange(change, "updated")),
+                ...diff.changed.flatMap((change) => describeEntryChange(change)),
                 ...diff.reposAdded.map((name) => `The repository ${name} is not in the lockfile, and a subscription needs it`),
                 ...diff.reposRemoved.map((name) => `The repository ${name} is in the lockfile, and no subscription needs it`),
             ],
             fix: "Write the lockfile the subscriptions make, keeping every pin their ranges still allow",
+            ...notes,
         };
     },
     async fix(ctx) {
-        const { lock, after, diff } = await lockfileTheSubscriptionsMake(ctx);
+        const { lock, after, diff, result } = await lockfileTheSubscriptionsMake(ctx);
+
+        // Never a lockfile that leaves out what an unread recipe depends on.
+        if (result.unreadable.length > 0) {
+            throw new SousError(`The lockfile was not written: sous could not read what ${result.unreadable.join(", ")} ${result.unreadable.length === 1 ? "depends" : "depend"} on.`);
+        }
 
         await lock.write(after);
         ctx.configChanged();
 
-        const changes = diff.added.length + diff.removed.length + diff.updated.length;
+        const changes = diff.added.length + diff.removed.length + diff.updated.length + diff.changed.length;
 
         return { summary: `The lockfile was written again with ${changes === 1 ? "1 change" : `${changes} changes`}: ${lock.path()}.` };
     },
