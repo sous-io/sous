@@ -3,8 +3,8 @@ name: about-sous-repos
 description: >
   YOU MUST load this skill when working inside a sous recipe repository (one with a
   sous.repo.yaml at its root), adding a namespace or a recipe to one, running sous repo
-  release, sous repo submit, sous repo link, sous repo contribute or sous repo init, or
-  deciding what happens to a change when it is proposed, merged or released.
+  release, submit, link, contribute or init, or deciding what happens to a change when it is
+  proposed, merged or released.
 user-invocable: false
 license: Apache-2.0
 compatibility:

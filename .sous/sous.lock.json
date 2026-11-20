@@ -3,16 +3,16 @@
   "migratedVersion": "1.1.0",
   "recipes": {
     "cli/command-design": {
-      "hash": "sha256-2393f09e33fd7cde218887876d1ee0a3a24c72a63aa3f6fa254d2e0e8660ce26",
+      "hash": "sha256-3bccf689c7805cc6fc7d119b223280a21cb34e28bd84d6942c3b12f57ece071c",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.1"
+      "version": "1.1.0"
     },
     "communication/agent-conduct": {
-      "hash": "sha256-cd509610b6277b260c8ea6646bf3ac2cd1396702c3bff0db6488704c326f0905",
+      "hash": "sha256-4b886108cfa16a42dc0bc51230cf0c0b2a9ca018a946356791cf8b1ffb08aef1",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -24,7 +24,7 @@
         "workflow/sources-of-truth",
         "workflow/task-files"
       ],
-      "version": "1.2.1"
+      "version": "1.3.1"
     },
     "communication/control-flow": {
       "hash": "sha256-9c9053cb30a0f285ba1e0ef3ae36c0aad89e560b288c4d3bc30c8b0f52010550",
@@ -40,7 +40,7 @@
       "version": "1.2.1"
     },
     "communication/plain-speech": {
-      "hash": "sha256-6f4966daa90dc8ec1d153f7c7bdaede5d5300938d3dd7ca321ddde32edd07d1f",
+      "hash": "sha256-6f5a286762b4cb6070a6b2e0fb2ae84dd15fe8e92ded4ac8f46573dddef0e073",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -48,7 +48,7 @@
         "communication/control-flow",
         "omakase/house"
       ],
-      "version": "1.0.0"
+      "version": "1.0.3"
     },
     "core/sous-skills": {
       "hash": "sha256-15cfc9665dcd9513c80ea5efc63463b003fb71e4ed67f5a8748bf60dfba48be5",
@@ -69,7 +69,25 @@
       "version": "1.0.0"
     },
     "omakase/house": {
-      "hash": "sha256-857784637ee9e373dee57606d561a699f50e85793db69e8a5a5d55a2b8c48efd",
+      "hash": "sha256-44f018e9b0b4058e1030c0604bf7774907fb62cb1a33d6a23527f5ed1688d274",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.1.0"
+    },
+    "reasoning/evidence-and-verification": {
+      "hash": "sha256-f7598cbcff74ccc6824cb515274a97f04e9ae57a8ab512fcdcb7f31fb08b5562",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "omakase/house"
+      ],
+      "version": "1.0.1"
+    },
+    "tool-usage/claude-code": {
+      "hash": "sha256-b260699aac977a2ec17044023aef5e55ab12d28476074a25ca679202028973b6",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -77,62 +95,53 @@
       ],
       "version": "1.0.1"
     },
-    "reasoning/evidence-and-verification": {
-      "hash": "sha256-9634aedf36d0eb9a3e89e7041560320a95640bde48faa7e4d62a16082a1d2eac",
+    "tool-usage/cloudflare-tunnels": {
+      "hash": "sha256-4a66368ba6a14ca899ebda6dbe86c133eaa87d35fbabceaa783aec2a40696946",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "omakase/house"
       ],
-      "version": "1.0.0"
-    },
-    "tool-usage/claude-code": {
-      "hash": "sha256-3285c09de454ebd9266db47fec501c2452130b3f898c639fa93e8ab914517ce9",
-      "kind": "subscribes",
-      "repo": "sous-recipes",
-      "requestedBy": [
-        "project"
-      ],
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "workflow/agent-memory": {
-      "hash": "sha256-c07c702c5b6e67db2c9d7d84f3b78e347e4bda68f4a10440b33ad9c2c52d89be",
+      "hash": "sha256-7700a443ae0e202e416c7279a32f48d766f041a2d08a62c1134ffebc052ffbea",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "omakase/house"
       ],
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     "workflow/autonomous-work": {
-      "hash": "sha256-eccb8657a94da51d3992620e772060b67551c34561538ee174e5a8f1fc6747f9",
+      "hash": "sha256-189dfe9969c5a04d379444f23f0a2759172f1d84cd520c7faff257c937bfa084",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "omakase/house"
       ],
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     "workflow/github-projects": {
-      "hash": "sha256-6c71d5d392f411e4df9319a0ebc3d6b9e5c3e6c45c37520125710af12e45e505",
+      "hash": "sha256-dfda04cca130a66f2ab8359fd92e506613b5c3b5e511ab66d1800634f7a00332",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.1.3"
+      "version": "1.1.4"
     },
     "workflow/sources-of-truth": {
-      "hash": "sha256-c085d8e8f853d784b95826da6145a34d93d114ff881415b0d1ada5e75563bf52",
+      "hash": "sha256-fd114e9e36c553154815330d39a66dce2f35a224535d03519ccb751d9e36c355",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "omakase/house"
       ],
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
     "workflow/sub-agent-delegation": {
-      "hash": "sha256-c87a940f139510362f7fdb6a62504d1b9d536ffcd54830a4db6de0f0e2f34ccf",
+      "hash": "sha256-252bc7c9db1d55e0e5d98212fa8c2a27f2e27ad848348e505b5311e0dc229d58",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -144,7 +153,7 @@
         "workflow/sources-of-truth",
         "workflow/task-files"
       ],
-      "version": "1.1.2"
+      "version": "1.1.4"
     },
     "workflow/task-files": {
       "hash": "sha256-5fee65861429bc0d358730fff6f02278346eb5d48fb770b9779aba6e923bc26c",
