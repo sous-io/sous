@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/sous-lib-documents",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Surgical editing of JSON, JSONC, YAML, Markdown frontmatter and plain text files",
   "type": "module",
   "license": "Apache-2.0",
