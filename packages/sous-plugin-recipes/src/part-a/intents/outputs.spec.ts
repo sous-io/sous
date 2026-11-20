@@ -46,6 +46,20 @@ describe("the browsing outputs", () => {
         expect((table?.result as Table).empty).toBe("This project has installed no recipe from the repositories it trusts.");
     });
 
+    /**
+     * A recipe's description takes at most three lines in the listing; the renderer ends the third
+     * with "..." when more is hidden.
+     *
+     * recipeListOutputs(ctx, {}, []) -> the "What it is" column has maxLines 3
+     */
+    it("should keep a recipe's description to three lines", () => {
+        const [, table] = recipeListOutputs(fakeContext(), {}, []).toArray();
+        const description = (table?.result as Table).columns.find((column) => column.key === "description");
+
+        expect(description?.overflow).toBe("wrap");
+        expect(description?.maxLines).toBe(3);
+    });
+
     /** A linked recipe adds the note that explains the marker. */
     it("should add a note when a listed recipe is linked", () => {
         const outputs = recipeListOutputs(fakeContext(), {}, [

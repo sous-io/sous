@@ -162,6 +162,12 @@ function renderStyled(layout: Layout, state: RenderState, level: LogLevel, messa
         case ReportEntryStyle.Operation:
             return operation(layout, details as OperationDetails | undefined, message, body);
 
+        case ReportEntryStyle.OperationSummary:
+            // It closes the open step, so it sits under the operation's heading, not under a step.
+            state.step = false;
+
+            return { lines: layout.paragraphLines(message, { indent: BODY_INDENT }), gapBefore: 1, gapAfter: 1, footer: true };
+
         case ReportEntryStyle.OperationEnd: {
             const ok = (details as OperationEndDetails | undefined)?.ok !== false;
 
@@ -420,17 +426,21 @@ function operation(layout: Layout, details: OperationDetails | undefined, messag
 
     const colors = layout.style;
     const action = ACTIONS[details.action];
+    const tokens = details.tokens === undefined ? undefined : `~${details.tokens.toLocaleString()} tokens`;
     const parts: string[] = [];
 
-    if (details.tokens !== undefined) {
-        parts.push(`~${details.tokens.toLocaleString()} tokens`);
-    }
-
+    // The action's word, then the token count: `(unchanged, ~1,240 tokens)`; a note follows them.
     if (action.keepNote) {
+        if (tokens !== undefined) {
+            parts.push(tokens);
+        }
+
         parts.push(details.note ?? action.word);
     } else {
-        if (action.word !== "") {
-            parts.push(action.word);
+        const head = [action.word, tokens ?? ""].filter((part) => part !== "").join(", ");
+
+        if (head !== "") {
+            parts.push(head);
         }
 
         if (details.note !== undefined) {

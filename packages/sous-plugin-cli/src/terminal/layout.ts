@@ -50,11 +50,14 @@ export class Layout {
      * @param style - The colors.
      * @param columns - The columns the output has.
      * @param isTTY - Whether the output is a terminal (tables may hide columns only then).
+     * @param tableColumns - For output that is not a terminal, the width a table is laid out in
+     *   (from `COLUMNS`); undefined lays it out in the wide piped default.
      */
     constructor(
         readonly style: Style,
         readonly columns = 100,
         readonly isTTY = false,
+        readonly tableColumns?: number,
     ) {}
 
     /** The width paragraphs wrap to. */
@@ -199,7 +202,7 @@ export class Layout {
     tableLines<Row extends Record<string, unknown>>(columns: TableColumn[], rows: Row[], options: TableOptions<Row> = {}): string[] {
         const pad = " ".repeat(options.indent ?? 0);
 
-        return renderTable(columns, rows, { style: this.style, stream: { columns: this.columns, isTTY: this.isTTY }, ...options }).flatMap((line) =>
+        return renderTable(columns, rows, { style: this.style, stream: this.isTTY ? { columns: this.columns, isTTY: true } : { ...(this.tableColumns === undefined ? {} : { columns: this.tableColumns }), isTTY: false }, ...options }).flatMap((line) =>
             line.split("\n").map((part) => `${pad}${part}`),
         );
     }

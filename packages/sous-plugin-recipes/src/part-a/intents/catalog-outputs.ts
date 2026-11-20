@@ -34,7 +34,8 @@ export const RECIPE_COLUMNS: TableColumn[] = [
     { key: "latest", header: "Latest", overflow: "truncate", minWidth: 6 },
     { key: "pinned", header: "Pinned", overflow: "truncate", minWidth: 6 },
     { key: "subscribed", header: "Subscribed", priority: "medium" },
-    { key: "description", header: "What it is", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
+    // A description takes at most three lines; `recipe show` prints the whole of it.
+    { key: "description", header: "What it is", overflow: "wrap", maxLines: 3, flex: 1, priority: "low", minWidth: 16 },
 ];
 
 const NAMESPACE_COLUMNS: TableColumn[] = [

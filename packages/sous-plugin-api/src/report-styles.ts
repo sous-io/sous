@@ -24,6 +24,8 @@ export const ReportEntryStyle = {
     Detail: "detail",
     /** One action done (or to be done) to one target, such as a file written. {@link OperationDetails}. */
     Operation: "operation",
+    /** One line saying what an operation did in all, shown just before it ends, such as "Files: 2 written, 13 unchanged." No details. */
+    OperationSummary: "operation-summary",
     /** How an operation ended, such as "Done." {@link OperationEndDetails}. */
     OperationEnd: "operation-end",
     /** One label and its value. The message is a `VariableSet`. */
@@ -137,6 +139,11 @@ export interface TableColumn {
     header: string;
     /** Whether a long cell wraps onto more lines or is cut. Defaults to wrapping. */
     overflow?: ColumnOverflow;
+    /**
+     * The most lines a wrapped cell takes. A cell that needs more shows this many, the last ending
+     * in `...` to say text was left out. Defaults to no limit.
+     */
+    maxLines?: number;
     /** Which end a cut takes from. Defaults by kind: the middle of a path or a URL, the end of anything else. */
     truncate?: TruncateSide;
     /** What the column holds. Defaults to plain text. */

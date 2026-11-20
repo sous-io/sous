@@ -22,15 +22,9 @@ import {
 } from "@sous-io/sous-plugin-api";
 import type { ConfigGetResult, ConfigShowResult, ConfigValidateResult, LayerView, RawConfigFile } from "./types.js";
 
-/** A value as JSON on one line, cut to `max` characters with an ellipsis. */
-function truncateJson(value: unknown, max = 80): string {
-    const encoded = JSON.stringify(value);
-
-    if (encoded === undefined) {
-        return "undefined";
-    }
-
-    return encoded.length > max ? `${encoded.slice(0, max - 1)}…` : encoded;
+/** A value as pretty-printed JSON, never cut: `config get --layers` shows every value whole. */
+function prettyJson(value: unknown): string {
+    return JSON.stringify(value, null, 2) ?? "undefined";
 }
 
 /** Whether a value is a JSON scalar: a string, number, boolean or `null`. */
@@ -112,7 +106,7 @@ export function configGetOutputs(result: ConfigGetResult): IntentOutput[] {
 
         outputs.push(new IntentOutput({ result: layerTable(result) }));
 
-        const shown = result.exists && result.value !== undefined ? truncateJson(result.value) : "(not set)";
+        const shown = result.exists && result.value !== undefined ? prettyJson(result.value) : "(not set)";
 
         outputs.push(new IntentOutput({ result: new VariableSet([{ label: "result", value: shown, detail: `settled after ${plural(result.passes, "pass", "passes")}` }]) }));
 
@@ -341,9 +335,13 @@ function applyOrderText(layer: LayerView): string[] {
 
 /** The columns of `config get --layers`. */
 const LAYER_COLUMNS: TableColumn[] = [
-    { key: "source", header: "Config", overflow: "truncate", kind: "path" },
+    // A layer's name is shown whole, wrapped when it is long.
+    { key: "source", header: "Config", overflow: "wrap", kind: "path" },
     { key: "change", header: "Change", overflow: "wrap", flex: 1 },
 ];
+
+/** The widest the Config column insists on being for one word; a longer word wraps inside itself. */
+const MAX_SOURCE_WORD = 40;
 
 /**
  * `config get --layers`: each config file (or contributor) that changed the value on the left, what
@@ -364,12 +362,17 @@ function layerTable(result: ConfigGetResult): Table {
         }
     }
 
-    return new Table(LAYER_COLUMNS, rows);
+    // The Config column is never squeezed below its longest word (up to a limit), so a layer's name
+    // wraps between words rather than inside one.
+    const longestWord = Math.max(0, ...rows.flatMap((row) => row.source!.split(/\s+/).map((word) => word.length)));
+    const columns = LAYER_COLUMNS.map((column) => (column.key === "source" ? { ...column, minWidth: Math.min(Math.max(longestWord, column.header.length), MAX_SOURCE_WORD) } : column));
+
+    return new Table(columns, rows);
 }
 
-/** One side of a change: the value as short JSON, or `(unset)`. */
+/** One side of a change: the value as pretty-printed JSON, or `(unset)`. */
 function shownOrUnset(change: NonNullable<LayerView["change"]>, side: "from" | "to"): string {
-    return side in change && change[side] !== undefined ? truncateJson(change[side]) : "(unset)";
+    return side in change && change[side] !== undefined ? prettyJson(change[side]) : "(unset)";
 }
 
 /** What one change did, read from the value's own path: the value set, or the operation. */
@@ -381,7 +384,7 @@ function changeAt(patch: Patch, path: string): string {
             case "setKey":
             case "setIndex":
             case "insertAt":
-                return truncateJson(patch.value);
+                return prettyJson(patch.value);
             case "deleteKey":
             case "removeIndex":
                 return "(not set)";
@@ -401,7 +404,7 @@ function describePatch(patch: Patch): string {
         case "setKey":
         case "setIndex":
         case "insertAt":
-            return `${patch.op} ${target} = ${truncateJson(patch.value)}`;
+            return `${patch.op} ${target} = ${prettyJson(patch.value)}`;
         case "renameKey":
             return `${patch.op} ${target} → ${patch.to}`;
         default:
@@ -426,5 +429,5 @@ function targetOf(patch: Patch): string {
 
 /** What a plugin explained about a change (an expression and what it read), as `key: text` lines. */
 function annotationLines(layer: LayerView): string[] {
-    return Object.entries(layer.annotations ?? {}).map(([key, value]) => `${key}: ${typeof value === "string" ? value : truncateJson(value)}`);
+    return Object.entries(layer.annotations ?? {}).map(([key, value]) => `${key}: ${typeof value === "string" ? value : prettyJson(value)}`);
 }
