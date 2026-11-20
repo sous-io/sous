@@ -73,15 +73,7 @@ handler; keep them in sync, and keep the mechanism on every future page.
 Theme-paired images use `.logo-light`/`.logo-dark` classes (author both,
 CSS shows one per theme).
 
-## Writing rules (ALL site copy and this file)
-
-- **NEVER use em-dashes.** Semicolons to join clauses; commas or parentheses
-  for appositives.
-- **NEVER write overconfident predictions about other tools or vendors.**
-  State intent and posture ("Sous actively tries to..."), not prophecy.
-  Commitments about Sous's own behavior are fine. Decision rationale from
-  review conversations is input for crafting copy, never copy to paste
-  verbatim.
+Site copy follows the Writing Standards in `.claude/rules/SOUS-MEMORIES.md`.
 
 ## The presentation
 

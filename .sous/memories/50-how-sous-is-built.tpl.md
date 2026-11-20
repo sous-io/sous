@@ -41,12 +41,7 @@ Rules for working here:
 ## Build, Run and Test
 
 ```bash
-pnpm install
 ./bin/sous <command>      # runs sous from this checkout; rebuilds the bundle first when sources changed
-pnpm build                # build sous-plugin-api, then the sous bundle
-pnpm typecheck            # tsc --noEmit in every package
-pnpm test                 # every package's tests (vitest)
-pnpm --filter @sous-io/sous-plugin-<name> test            # one package
 pnpm --filter @sous-io/sous-plugin-<name> exec vitest run <file>   # one file
 pnpm sous:build           # sous builds this repository's own agent files (this file included)
 ```
@@ -62,8 +57,3 @@ in a package's `test/` directory. Requires Node 22 or later; TypeScript is stric
 - `docs/markdown/architecture/`: the architecture documents, for people changing sous.
 - Each package has a `README.md` saying what it does, how to use it from code, where things are
   and how to test it. Keep them short and point at the code for details, so they do not go stale.
-
-## Publishing
-
-Published as `@sous-io/sous` (npm org `sous-io`), public, Apache-2.0. `packages/sous/package.json`
-has the `files` list of what ships.
