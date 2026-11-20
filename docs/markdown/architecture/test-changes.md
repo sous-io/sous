@@ -2052,6 +2052,8 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
   - **Why:** the block printed to standard output after `Done.`; a build now reports it first, on standard error.
 - **Changed** "should compile without preparing or pruning" (`build.test.ts`): `compiler.compile` is called with `{ strict: true, reportEnd: false }` (was `{ strict: true }`).
   - **Why:** `sous compile` reports the files line and `Done.` itself, as `sous build` does.
+- **Changed** "a second build reports every output unchanged and rewrites nothing" (`e2e/scenarios/01-basics.mjs`): it expects the files line `Files: 0 written, N unchanged.` and no `(unchanged` block, instead of an `(unchanged)` line.
+  - **Why:** an unchanged file's block now prints only with `--debug`; the summary line counts it.
 - **New** "should report an unchanged unit's block only at the debug level" (`sous-plugin-compiler/test/compilation.test.ts`), the `filesSummaryLine()` cases (`sous-plugin-build/src/report.spec.ts`), "should draw an operation's summary under its heading, before Done." and the two piped-width cases (`sous-plugin-cli/src/terminal-reporter.spec.ts`), the `maxLines` cases (`sous-plugin-cli/src/views/table.spec.ts`), "should keep a recipe's description to three lines" (`sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`) and `sous-plugin-inspect/src/outputs.spec.ts`.
 
 ### Lockfiles are never written while a recipe is unread; doctor counts what waits; subscription add checks first (sous-plugin-recipes, sous-plugin-doctor, sous-plugin-build, sous-plugin-migrations, sous-plugin-handlers, sous; gh-291, gh-265, gh-230 items 1 and 3)
