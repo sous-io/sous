@@ -97,7 +97,7 @@ export class ResolverService implements RecipesResolver {
                 continue;
             }
 
-            const versions = [{ version: recipe }, ...(recipe.pins ?? []).map((pin) => ({ version: resolvedAtPin(recipe, pin), holder: pin.holder }))];
+            const versions: Array<{ version: ResolvedRecipe; holder?: string }> = [{ version: recipe }, ...(recipe.pins ?? []).map((pin) => ({ version: resolvedAtPin(recipe, pin), holder: pin.holder }))];
 
             for (const { version, holder } of versions) {
                 try {

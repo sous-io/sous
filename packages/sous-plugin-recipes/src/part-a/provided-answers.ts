@@ -10,7 +10,7 @@
 
 import { NonInteractiveError, SousError, type Context } from "@sous-io/sous-plugin-api";
 import type { AnswerFlags, ResolvedRecipe } from "../types.js";
-import { definedVariables, plannedQuestionsOf, type DefinedLike } from "./questions.js";
+import { definedVariables, plannedQuestionsOf, RUNG_LABELS, type DefinedLike } from "./questions.js";
 import { hasIntent } from "./util.js";
 
 /** The part of `recipe-answers.preanswers` read here, by shape. */
@@ -74,8 +74,9 @@ export async function checkProvidedAnswers(ctx: Context, resolved: readonly Reso
  *
  * ```text
  * Error: One variable still needs an answer, and there is no terminal to ask on.
- *   Nothing was written.
+ *   Nothing was written. Set one of the environment variables listed under each variable, ...
  *   region (acme/gadget): Which region does the agent deploy to?
+ *     SOUS_VAR_ACME_GADGET_REGION  (recipe scope)
  * ```
  */
 export async function checkAnswerable(ctx: Context, resolved: readonly ResolvedRecipe[], flags: AnswerFlags): Promise<void> {
@@ -121,7 +122,13 @@ export async function checkAnswerable(ctx: Context, resolved: readonly ResolvedR
         missing.length === 1 ? first.definition.prompt : `${missing.length} questions about recipe variables`,
         missing.length === 1 ? `--answer ${first.definition.name}=<value>` : "--answer <name>=<value>",
         {
-            details: ["Nothing was written.", ...missing.map((question) => `${question.definition.name} (${question.recipe}): ${question.definition.prompt}`)],
+            details: [
+                "Nothing was written. Set one of the environment variables listed under each variable, pass --answer <name>=<value>, or run the command from a terminal.",
+                ...missing.flatMap((question) => [
+                    `${question.definition.name} (${question.recipe}): ${question.definition.prompt}`,
+                    ...candidatesOf(ctx, defined, question.recipe, question.definition.name).map((candidate) => `  ${candidate.envName}  (${RUNG_LABELS[candidate.rung] ?? candidate.rung})`),
+                ]),
+            ],
             exitCode: 1,
         },
     );
@@ -129,4 +136,19 @@ export async function checkAnswerable(ctx: Context, resolved: readonly ResolvedR
     error.message = missing.length === 1 ? "One variable still needs an answer, and there is no terminal to ask on." : `${missing.length} variables still need answers, and there is no terminal to ask on.`;
 
     throw error;
+}
+
+/** The environment names that would answer a variable, most specific first, from `recipe-answers.ladder`. */
+function candidatesOf(ctx: Context, defined: readonly DefinedLike[], recipe: string, name: string): Array<{ rung: string; envName: string }> {
+    const variable = defined.find((entry) => `${entry.recipe.namespace}/${entry.recipe.name}` === recipe && entry.definition.name === name);
+
+    if (variable === undefined || !ctx.services.has("recipe-answers.ladder")) {
+        return [];
+    }
+
+    try {
+        return (ctx.services.get("recipe-answers.ladder" as never) as { candidates(variable: unknown): Array<{ rung: string; envName: string }> }).candidates(variable);
+    } catch {
+        return [];
+    }
 }

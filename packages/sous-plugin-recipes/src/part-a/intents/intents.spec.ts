@@ -577,7 +577,8 @@ describe("subscription.add", () => {
 
         expect(error).toBeInstanceOf(NonInteractiveError);
         expect((error as Error).message).toBe("One variable still needs an answer, and there is no terminal to ask on.");
-        expect((error as NonInteractiveError).details).toEqual(["Nothing was written.", "apiUrl (workflow/task-files): apiUrl"]);
+        expect((error as NonInteractiveError).details).toContain("apiUrl (workflow/task-files): apiUrl");
+        expect((error as NonInteractiveError).details[0]).toMatch(/^Nothing was written\./);
         expect(managed.files).toEqual({});
         expect(lock.current.recipes).toEqual({});
         expect(ctx.run).not.toHaveBeenCalled();
