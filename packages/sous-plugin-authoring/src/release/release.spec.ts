@@ -193,11 +193,11 @@ describe("runRelease()", () => {
     });
 
     /**
-     * After a recipe is removed and nothing else changes, --check says the index still lists it until
-     * the next release that publishes something, and the release itself leaves the index alone (#204
-     * bug 30).
+     * After a recipe is removed and nothing else changes, --check says the index does not record it
+     * as retired yet, and that this reaches the index with the next release that publishes something;
+     * the release itself leaves the index alone (#204 bug 30, ADR 0041).
      */
-    it("should say a removed recipe leaves the index at the next release that publishes", async () => {
+    it("should say a removed recipe is recorded as retired at the next release that publishes", async () => {
         writeRecipe("other", "0.1.0");
         listRecipe("other");
         commitAll(repo, "add another recipe");
@@ -210,7 +210,7 @@ describe("runRelease()", () => {
         const notes = resultText();
 
         expect(notes).not.toContain("Merging rewrites");
-        expect(notes).toContain("the index still publishes 'core/other', which this repository does not");
+        expect(notes).toContain("the recipe 'core/other' is retired, and the index does not record it as retired yet");
         expect(notes).toContain("reach the index with the next release that does");
 
         const released = await release({ yes: true });
