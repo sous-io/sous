@@ -60,8 +60,16 @@ Reading sous.index.json from a repository
 - For GitLab, HTTP requests use the API address, encoding the whole project path so a nested group's
   `/` becomes `%2F`:
   `https://<host>/api/v4/projects/<owner>%2F<name>/repository/files/sous.index.json/raw?ref=HEAD`.
-- ETag caching is kept. Two facts are checked while building it: whether the API address returns an
-  ETag, and whether it serves a public project without a token.
+- ETag caching is kept. The GitLab API address sends no ETag for a file; it sends
+  `X-Gitlab-Content-Sha256`, which sous keeps in the ETag's place and checks with one `HEAD` request
+  to the file's details address (`.../repository/files/<path>?ref=<ref>`), downloading the file only
+  when the hash changed.
+- A self-managed GitLab may use a port and a sub-path. The HTTPS port stays in the HTTPS and API
+  addresses; the SSH URL never carries it, and takes a port only from an SSH URL that names one. A
+  sub-path is settled by asking the server once (`<base>/api/v4/version`, root first), remembered per
+  host in `$SOUS_HOME/cache/gitlab-instances.json` and reported; a sub-path named in the GitLab
+  plugin's `hosts` option is used as given. The API address and the SSH URL leave the sub-path out of
+  the project path; the HTTPS clone URL and the identity keep it.
 - Each repository provider registers its read strategies, so a plugin can add one (for a host with
   its own authentication, for example).
 - Every attempt is timed (L5, everything timed).
@@ -79,6 +87,14 @@ A missing source is skipped, never required:
 A command's output is accepted as a token only when the command exits `0` and prints exactly one
 non-empty line holding no whitespace. This check applies to every provider's token command.
 
+A token the host refuses (`401` or `403`) sends the next source's token to the same strategy; a token
+already refused is passed over. When the read then succeeds any way, one warning per command names
+where the refused token came from and how to replace it. The token that read the index is also handed
+to git for an HTTPS recipe download, as an `http.<origin>/.extraHeader` set through `GIT_CONFIG_*`
+environment variables for that one clone, never in a URL; a token from `git credential fill` is not
+handed over, because git sends it itself. A clone that fails with the token is tried once more
+without it.
+
 ### Sous remembers what worked
 
 ```jsonc
@@ -88,15 +104,22 @@ non-empty line holding no whitespace. This check applies to every provider's tok
         "strategy": "git",
         "tokenSource": null,
         "lastSuccess": "2026-10-18T22:14:00Z",
-        "lastDurationMs": 840
+        "lastDurationMs": 840,
+        "since": "2026-10-15T09:02:00Z",
+        "download": { "url": "git@gitlab.com:acme/private-recipes.git", "lastSuccess": "2026-10-18T22:14:02Z", "since": "2026-10-15T09:02:05Z" }
     }
 }
 ```
 
 - Next time, sous tries the remembered strategy first, and walks the rest of the chain only if it
   fails.
+- A remembered strategy goes first for `store.strategyMemorySeconds` (seven days by default) from
+  `since`, when it became first, however often it works in between. After that the chain's own order
+  goes first again, so a better-ranked strategy that works again takes over.
+- The clone URL a recipe download worked with is remembered the same way, under `download`, and tried
+  first for the same time.
 - The remembered choice is per repository, kept in `$SOUS_HOME` (the user's own sous directory), and
-  dropped after a failure.
+  the read strategy is dropped after a read fails; a download that fails every URL drops `download`.
 
 ### When everything fails
 
@@ -166,4 +189,8 @@ sous skip a recipe by platform on its own.
 
 ## Changes
 
-None yet.
+- **2026-11-20:** by the user's rulings on #230 (items 7, 8 and 10), #212 and #213: a refused token
+  sends the next source's token and is warned about once; a remembered strategy or clone URL stays
+  first for `store.strategyMemorySeconds` (seven days by default); GitLab reads revalidate through
+  `X-Gitlab-Content-Sha256`; self-managed GitLab ports and sub-paths are supported; the token sous
+  found is handed to git for HTTPS recipe downloads.

@@ -111,7 +111,29 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
     const fetchDir = path.join(work, storeKey.name || "recipe");
 
     try {
-        await host.fetchRecipeTree(host.canonicalize(target.url), recipe.path, version.tag, fetchDir, deps.context);
+        const repository = host.canonicalize(target.url);
+        // The clone URL that worked last goes first, and the token sous found goes to an HTTPS clone (#213).
+        const first = deps.cache.downloadFirst(target.identity);
+        const token = host.tokenSources === undefined || host.tokenSources.length === 0 ? undefined : await deps.cache.downloadToken(target.identity, host, repository, deps.context);
+        let fetched;
+
+        try {
+            fetched = await host.fetchRecipeTree(repository, recipe.path, version.tag, fetchDir, deps.context, {
+                ...(first === undefined ? {} : { first }),
+                ...(token === undefined ? {} : { token }),
+            });
+        } catch (error) {
+            if (error instanceof Error && "attempts" in error) {
+                deps.cache.noteDownload(target.identity, undefined, first);
+            }
+
+            throw error;
+        }
+
+        if (fetched) {
+            deps.cache.noteDownload(target.identity, fetched.url, first);
+        }
+
         await dropSeededCoreCopy(storeKey, target.entry.hash, deps.store);
 
         return await deps.store.put(storeKey, fetchDir, target.entry.hash);

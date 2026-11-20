@@ -11,26 +11,27 @@
  */
 
 import { ConfigError } from "@sous-io/sous-plugin-api";
-import { buildCanonicalRepository, defaultLocator, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/sous-plugin-refs";
+import { buildCanonicalRepository, defaultLocator, hostWithoutPort, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/sous-plugin-refs";
 import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 
 // Taking a URL apart is sous-plugin-refs' (`refs.locations` owns locations); these are its helpers,
 // re-exported so a host plugin needs only this package.
-export { normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix };
+export { hostWithoutPort, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix };
 
 /** The parts of a repository URL every host needs: what {@link splitRepoUrl} gives. */
 export type RepositoryUrlParts = NonNullable<ReturnType<typeof splitRepoUrl>>;
 
 /**
- * The canonical form of a hosted repository: its HTTPS and SSH clone URLs.
+ * The canonical form of a hosted repository: its HTTPS and SSH clone URLs. `sshPort` comes only
+ * from an SSH URL that names one; `basePath` is the path a self-managed instance is installed under.
  *
  * ```ts
  * canonicalRepository("github.com", "sous-io", "sous-recipes").sshUrl;
  * // "git@github.com:sous-io/sous-recipes.git"
  * ```
  */
-export function canonicalRepository(host: string, owner: string, name: string): CanonicalRepository {
-    return buildCanonicalRepository(host, owner, name);
+export function canonicalRepository(host: string, owner: string, name: string, options: { sshPort?: number; basePath?: string } = {}): CanonicalRepository {
+    return buildCanonicalRepository(host, owner, name, options);
 }
 
 /**

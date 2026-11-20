@@ -112,7 +112,7 @@ export function createGithubHost(options: GithubPluginOptions = {}): GithubRepos
                 throw invalidRepoUrl("github", url, GITHUB_HOST);
             }
 
-            return canonicalRepository(parts.host, parts.owner, parts.name);
+            return canonicalRepository(parts.host, parts.owner, parts.name, parts.sshPort === undefined ? {} : { sshPort: parts.sshPort });
         },
 
         tokenSources: [
@@ -135,8 +135,9 @@ export function createGithubHost(options: GithubPluginOptions = {}): GithubRepos
             gitReadStrategy(),
         ],
 
-        fetchRecipeTree: (repository, recipePath, tag, destination, ctx) =>
-            fetchRecipeTree({ urls: [repository.httpsUrl, repository.sshUrl], tag, recipePath, destination }, ctx),
+        // A token goes to an HTTPS clone with the user name GitHub expects for it.
+        fetchRecipeTree: (repository, recipePath, tag, destination, ctx, options = {}) =>
+            fetchRecipeTree({ urls: [repository.httpsUrl, repository.sshUrl], tag, recipePath, destination, ...options, tokenUser: "x-access-token" }, ctx),
 
         proposalNoun: "pull request",
         cli: GH,

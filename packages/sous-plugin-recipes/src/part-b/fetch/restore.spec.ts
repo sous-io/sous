@@ -145,3 +145,53 @@ describe("ensureInStore() and retired recipes", () => {
         expect(stored).toEqual(["widget@0.1.2"]);
     });
 });
+
+describe("ensureInStore(): how a recipe is downloaded", () => {
+    /** A host that reads the seeded index over HTTP and records each download's options. */
+    function recordingHost(calls: Array<{ first?: string; token?: string }>, cloned: string): RepositoryHostEntity {
+        return {
+            ...offlineHost,
+            readStrategies: [{ id: "http-token", label: "HTTP with token", usesToken: true, read: async () => ({ ok: true, text: JSON.stringify(seeded), ref: "HEAD" }) }],
+            tokenSources: [{ id: "env", label: "GITHUB_TOKEN", token: async () => ({ value: "ghp-x", source: "GITHUB_TOKEN" }) }],
+            fetchRecipeTree: async (_repository: unknown, _path: string, _tag: string, destination: string, _ctx: unknown, options: { first?: string; token?: { value: string } } = {}) => {
+                calls.push({ ...(options.first === undefined ? {} : { first: options.first }), ...(options.token === undefined ? {} : { token: options.token.value }) });
+                fs.mkdirSync(destination, { recursive: true });
+
+                return { url: cloned };
+            },
+        } as unknown as RepositoryHostEntity;
+    }
+
+    /** A store that accepts every download. */
+    function acceptingStore(root: string): RecipesStore {
+        return { root, entryDir: () => path.join(root, "entry"), get: async () => undefined, put: async () => ({ version: "1.0.16", hash: HASH }) } as unknown as RecipesStore;
+    }
+
+    const target: RestoreTarget = {
+        key: "core/sous",
+        entry: { repo: "sous-recipes", version: "1.0.16", hash: HASH, requestedBy: ["project"], kind: "subscribes" },
+        repo: "sous-recipes",
+        url: URL,
+        identity: IDENTITY,
+    };
+
+    /**
+     * The token sous found is handed to the download (#213), and the clone URL that worked is
+     * remembered and tried first by the next download (#230 item 10).
+     *
+     * // first download: token "ghp-x", no first URL; it cloned over SSH
+     * // second download: first "git@github.com:sous-io/sous-recipes.git"
+     */
+    it("should hand the token to the download and try the clone URL that worked first next time", async () => {
+        const calls: Array<{ first?: string; token?: string }> = [];
+        const ssh = "git@github.com:sous-io/sous-recipes.git";
+        const host = recordingHost(calls, ssh);
+        const deps = { store: acceptingStore(path.join(dir, "store")), cache: core, hosts: [host], context: { reporter: nullReporter } as unknown as RepositoryHostContext };
+
+        await ensureInStore(target, deps);
+        await ensureInStore(target, deps);
+
+        expect(calls).toEqual([{ token: "ghp-x" }, { first: ssh, token: "ghp-x" }]);
+        expect(JSON.parse(fs.readFileSync(path.join(dir, "read-strategies.json"), "utf8"))[IDENTITY].download).toMatchObject({ url: ssh });
+    });
+});

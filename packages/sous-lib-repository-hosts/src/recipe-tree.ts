@@ -6,7 +6,8 @@
 import { cp, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { ConfigError } from "@sous-io/sous-plugin-api";
-import type { RecipeDownloadAttempt, RecipeDownloadProblem, RepositoryHostContext } from "@sous-io/sous-plugin-recipes/types";
+import type { Environment } from "@sous-io/sous-plugin-api";
+import type { RecipeDownloadAttempt, RecipeDownloadProblem, RecipeTreeFetched, RepositoryHostContext, RepositoryToken } from "@sous-io/sous-plugin-recipes/types";
 import type {} from "@sous-io/sous-plugin-git/types";
 import { firstLine } from "./http-strategy.js";
 
@@ -19,10 +20,62 @@ export interface RecipeTreeRequest {
     recipePath: string;
     /** Where its files end up; replaced when it exists. */
     destination: string;
+    /** The URL that worked last time: tried first when it is one of `urls`. */
+    first?: string;
+    /** A token for the HTTPS URLs, handed to git through the environment of the clone alone. */
+    token?: RepositoryToken;
+    /** The user name sent with the token (`oauth2` on GitLab, `x-access-token` on GitHub). */
+    tokenUser?: string;
+}
+
+/** The source name `git credential fill` gives a token: git already sends that credential itself. */
+const GIT_CREDENTIAL_SOURCE = "git credential fill";
+
+/**
+ * The environment that hands git a token for one HTTPS URL: an `http.<origin>/.extraHeader` set
+ * through `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`, after any the
+ * environment sets already. The token is never put in the URL, so git never prints it or writes it
+ * into the clone's `.git/config`. `undefined` for an SSH URL, or a token git found itself.
+ *
+ * ```ts
+ * tokenEnvironment("https://gitlab.example.com:8443/acme/recipes.git", { value: "glpat-x", source: "GITLAB_TOKEN" }, "oauth2", {});
+ * // { GIT_CONFIG_COUNT: "1",
+ * //   GIT_CONFIG_KEY_0: "http.https://gitlab.example.com:8443/.extraHeader",
+ * //   GIT_CONFIG_VALUE_0: "Authorization: Basic b2F1dGgyOmdscGF0LXg=" }
+ * ```
+ */
+export function tokenEnvironment(url: string, token: RepositoryToken | undefined, user: string, env: Environment): Environment | undefined {
+    if (token === undefined || token.source === GIT_CREDENTIAL_SOURCE || !/^https:\/\//i.test(url)) {
+        return undefined;
+    }
+
+    let origin: string;
+
+    try {
+        origin = new URL(url).origin;
+    } catch {
+        return undefined;
+    }
+
+    const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10);
+    const index = Number.isInteger(count) && count > 0 ? count : 0;
+    const basic = Buffer.from(`${user}:${token.value}`, "utf8").toString("base64");
+
+    return {
+        GIT_CONFIG_COUNT: String(index + 1),
+        [`GIT_CONFIG_KEY_${index}`]: `http.${origin}/.extraHeader`,
+        [`GIT_CONFIG_VALUE_${index}`]: `Authorization: Basic ${basic}`,
+    };
+}
+
+/** The URLs in the order to try them: `first` ahead of the rest when it is one of them. */
+function inOrder(urls: readonly string[], first: string | undefined): string[] {
+    return first !== undefined && urls.includes(first) ? [first, ...urls.filter((url) => url !== first)] : [...urls];
 }
 
 /**
- * Fetches one folder at one tag into `destination`, trying each URL until one clones.
+ * Fetches one folder at one tag into `destination`, trying each URL until one clones, `first`
+ * first. Returns the URL that cloned.
  *
  * ```ts
  * await fetchRecipeTree({
@@ -33,7 +86,7 @@ export interface RecipeTreeRequest {
  * }, ctx);
  * ```
  */
-export async function fetchRecipeTree(request: RecipeTreeRequest, ctx: RepositoryHostContext): Promise<void> {
+export async function fetchRecipeTree(request: RecipeTreeRequest, ctx: RepositoryHostContext): Promise<RecipeTreeFetched> {
     const git = ctx.services.get("git.runner");
     const parent = path.dirname(request.destination);
 
@@ -44,19 +97,36 @@ export async function fetchRecipeTree(request: RecipeTreeRequest, ctx: Repositor
     try {
         const attempts: RecipeDownloadAttempt[] = [];
 
-        for (const [index, url] of request.urls.entries()) {
+        for (const [index, url] of inOrder(request.urls, request.first).entries()) {
             const checkout = path.join(work, `checkout-${index}`);
-
-            try {
-                await git.clone(url, checkout, {
+            const env = tokenEnvironment(url, request.token, request.tokenUser ?? "oauth2", ctx.env);
+            const clone = (withEnv: typeof env, into: string) =>
+                git.clone(url, into, {
                     branch: request.tag,
                     depth: 1,
                     sparsePaths: [request.recipePath],
+                    ...(withEnv === undefined ? {} : { env: withEnv }),
                     ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
                 });
+
+            try {
+                await clone(env, checkout);
             } catch (error) {
                 attempts.push(cloneAttempt(url, error));
-                continue;
+
+                if (env === undefined) {
+                    continue;
+                }
+
+                // A token the host refuses must not stop git's own credentials, which worked before
+                // sous handed it one: the same URL is tried once more without the token.
+                try {
+                    await rm(checkout, { recursive: true, force: true });
+                    await clone(undefined, checkout);
+                } catch (retryError) {
+                    attempts.push(cloneAttempt(url, retryError));
+                    continue;
+                }
             }
 
             const source = path.join(checkout, request.recipePath);
@@ -70,7 +140,7 @@ export async function fetchRecipeTree(request: RecipeTreeRequest, ctx: Repositor
             await rm(request.destination, { recursive: true, force: true });
             await move(source, request.destination);
 
-            return;
+            return { url };
         }
 
         throw new RecipeDownloadError(`Could not fetch '${request.recipePath}' at the tag '${request.tag}'.`, attempts);

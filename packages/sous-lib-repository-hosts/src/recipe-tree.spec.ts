@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GitCloneOptions } from "@sous-io/sous-plugin-git/types";
-import { cloneAttempt, copyRecipeTree, fetchRecipeTree, RecipeDownloadError } from "./recipe-tree.js";
+import { cloneAttempt, copyRecipeTree, fetchRecipeTree, RecipeDownloadError, tokenEnvironment } from "./recipe-tree.js";
 import { fakeGit, hostContext } from "./testing.js";
 
 let root: string;
@@ -86,6 +86,79 @@ describe("fetchRecipeTree()", () => {
             fetchRecipeTree({ urls: ["https://h/o/r.git"], tag: "t", recipePath: "x", destination }, hostContext({ services: { "git.runner": cloningGit(["https://h/o/r.git"]) } })),
         ).rejects.toThrow("Could not fetch 'x' at the tag 't'.");
         expect(existsSync(destination)).toBe(false);
+    });
+
+    /**
+     * The URL that worked last time is tried first, and the URL that cloned is returned, so the
+     * caller can remember it (#230 item 10).
+     *
+     * fetchRecipeTree({ urls: [https, ssh], first: ssh, ... }); // -> { url: ssh }, HTTPS never tried
+     */
+    it("should try the remembered URL first and return the URL that cloned", async () => {
+        const git = cloningGit();
+        const fetched = await fetchRecipeTree(
+            { urls: ["https://h/o/r.git", "git@h:o/r.git"], first: "git@h:o/r.git", tag: "t", recipePath: "x", destination: path.join(root, "alpha") },
+            hostContext({ services: { "git.runner": git } }),
+        );
+
+        expect(fetched).toEqual({ url: "git@h:o/r.git" });
+        expect(git.calls.map((call) => call.args[0])).toEqual(["git@h:o/r.git"]);
+    });
+
+    /**
+     * A token is handed to the HTTPS clone through the environment of that one command, as an
+     * `http.<origin>/.extraHeader`, never in the URL; when that clone fails, the URL is tried again
+     * without the token, and the SSH clone gets none (#213).
+     *
+     * // https clone env: GIT_CONFIG_COUNT=1, GIT_CONFIG_KEY_0=http.https://h:8443/.extraHeader,
+     * //                  GIT_CONFIG_VALUE_0="Authorization: Basic base64(oauth2:glpat-x)"
+     */
+    it("should hand a token to an HTTPS clone through the environment only", async () => {
+        const git = cloningGit(["https://h:8443/o/r.git"]);
+
+        await fetchRecipeTree(
+            {
+                urls: ["https://h:8443/o/r.git", "git@h:o/r.git"],
+                token: { value: "glpat-x", source: "GITLAB_TOKEN" },
+                tokenUser: "oauth2",
+                tag: "t",
+                recipePath: "x",
+                destination: path.join(root, "alpha"),
+            },
+            hostContext({ services: { "git.runner": git } }),
+        );
+
+        const [https, retry, ssh] = git.calls;
+
+        // A refused token never stops git's own credentials: the same URL is tried again without it.
+        expect(git.calls.map((call) => call.args[0])).toEqual(["https://h:8443/o/r.git", "https://h:8443/o/r.git", "git@h:o/r.git"]);
+        expect((retry?.args[2] as GitCloneOptions).env).toBeUndefined();
+        expect((https?.args[2] as GitCloneOptions).env).toEqual({
+            GIT_CONFIG_COUNT: "1",
+            GIT_CONFIG_KEY_0: "http.https://h:8443/.extraHeader",
+            GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from("oauth2:glpat-x").toString("base64")}`,
+        });
+        expect((ssh?.args[2] as GitCloneOptions).env).toBeUndefined();
+    });
+});
+
+describe("tokenEnvironment()", () => {
+    /**
+     * The header is added after the ones the environment already sets, and a token git found itself
+     * (`git credential fill`) is not handed back to it.
+     *
+     * tokenEnvironment(url, token, "oauth2", { GIT_CONFIG_COUNT: "2" }); // -> GIT_CONFIG_KEY_2 ...
+     */
+    it("should add after the environment's own entries and skip git's own credential", () => {
+        const token = { value: "t", source: "GITHUB_TOKEN" };
+
+        expect(tokenEnvironment("https://github.com/o/r.git", token, "x-access-token", { GIT_CONFIG_COUNT: "2" })).toMatchObject({
+            GIT_CONFIG_COUNT: "3",
+            GIT_CONFIG_KEY_2: "http.https://github.com/.extraHeader",
+        });
+        expect(tokenEnvironment("https://github.com/o/r.git", { value: "t", source: "git credential fill" }, "u", {})).toBeUndefined();
+        expect(tokenEnvironment("git@github.com:o/r.git", token, "u", {})).toBeUndefined();
+        expect(tokenEnvironment("https://github.com/o/r.git", undefined, "u", {})).toBeUndefined();
     });
 });
 

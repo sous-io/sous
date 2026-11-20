@@ -387,13 +387,21 @@ export interface RefsFormat {
 
 /** A repository in its canonical form. */
 export interface CanonicalRepository {
-    /** `github.com`. */
+    /** `github.com`, with the HTTPS port when the URL names one: `gitlab.example.com:8443`. */
     host: string;
     /** The owner, or the whole group path of a nested group (`acme/platform`). */
     owner: string;
     name: string;
     httpsUrl: string;
     sshUrl: string;
+    /** The SSH port, only when an SSH URL names one (`ssh://git@host:2222/...`). */
+    sshPort?: number;
+    /**
+     * The leading part of `owner` that is the path a self-managed instance is installed under
+     * (`gitlab` for `https://host/gitlab/acme/recipes`), never part of the project path. HTTPS
+     * clone URLs keep it; SSH URLs and API addresses do not treat it as a group.
+     */
+    basePath?: string;
 }
 
 /** A location as written, before a host reads it. */
