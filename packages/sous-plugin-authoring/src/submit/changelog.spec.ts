@@ -145,6 +145,25 @@ describe("buildChangelog()", () => {
     expect(changelogIsEmpty(changelog)).toBe(true);
     expect(renderChangelog(changelog)).toMatch(/could not compare this change with the branch 'main'/);
   });
+
+  /**
+   * A retired recipe lists the replacements the repository manifest names for it, so a reviewer
+   * sees where its subscribers are sent.
+   */
+  it("should list the replacements of a retired recipe", () => {
+    const head = snapshot(["core"], [recipe("core/new", "1.0.0")]);
+    const changelog = buildChangelog({
+      baseBranch: "main",
+      base: snapshot(["core"], [recipe("core/new", "1.0.0"), recipe("core/old", "0.3.0")]),
+      head: { ...head, repo: { ...head.repo, retired: { "core/old": { replacements: ["core/new", "github://acme/recipes/tools/old"] } } } },
+      changedPaths: [],
+    });
+
+    expect(changelog.recipesRemoved).toEqual([{ key: "core/old", version: "0.3.0", replacements: ["core/new", "github://acme/recipes/tools/old"] }]);
+    expect(renderChangelog(changelog)).toContain(
+      "`core/old`, last at version 0.3.0; subscribers are offered `core/new`, `github://acme/recipes/tools/old` in its place"
+    );
+  });
 });
 
 describe("compareVariables()", () => {

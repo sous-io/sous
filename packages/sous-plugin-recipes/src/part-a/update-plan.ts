@@ -21,6 +21,7 @@ import { configuredSubscriptions, enabledSubscriptions, trustedRepos } from "./p
 import { compareBytewise, describeError, sortBytewise } from "./util.js";
 import { NoVersionSatisfiesError } from "../part-b/resolver/resolve.js";
 import { IndexReadError, readFailureSentence } from "../part-b/index-cache/read-chain.js";
+import { publishedOrRetired } from "../part-b/support.js";
 
 /** The scope in words, for a sentence that says what was updated. */
 export function describeUpdateScope(scope: RecipeUpdateScope): string {
@@ -322,7 +323,8 @@ async function newVariables(ctx: Context, changed: readonly ResolvedRecipe[], be
 
     for (const recipe of changed) {
         const pinned = before.recipes[recipe.key];
-        const old = pinned === undefined ? undefined : indexes.get(pinned.repo)?.recipes[recipe.key]?.versions[pinned.version]?.variables;
+        const index = pinned === undefined ? undefined : indexes.get(pinned.repo);
+        const old = index === undefined ? undefined : publishedOrRetired(index, recipe.key)?.entry.versions[pinned!.version]?.variables;
 
         for (const variable of old ?? []) {
             known.add(`${recipe.key}.${variable.name}`);

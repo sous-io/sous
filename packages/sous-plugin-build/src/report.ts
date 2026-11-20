@@ -6,7 +6,7 @@
 import type { Memory } from "@sous-io/sous-plugin-memories/types";
 import { LogLevel, type Reporter } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
-import type { LockDiff, ResolvedLink, RestoreReport, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
+import type { LockDiff, ResolvedLink, RestoreReport, RetiredRecipe, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { BuildPrepareResult, UnansweredWarning } from "./types.js";
 
 /** Warns about memories no output included, or says nothing when there are none. */
@@ -53,6 +53,72 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
         },
         level,
     );
+}
+
+/**
+ * Warns about each pinned recipe its repository retired: the facts (the pinned version, what holds
+ * it, each replacement), then the commands that act on it, unless the build is about to offer its
+ * replacements (`asking`: it can ask, and the project subscribes to the recipe by name).
+ *
+ * ```text
+ * The repository 'recipes' retired 'acme/widget'. This project still builds it at the pinned
+ * version, and it gets no more updates:
+ *   • Pinned version: 0.1.2
+ *   • Used by: this project's subscription to 'acme/widget'
+ *   • Replacement: recipes:acme/gadget
+ *   • Replacement: https://github.com/other/recipes/tools/widget, in a repository this project has not added
+ * To swap it, run 'sous subscription remove acme/widget', then 'sous subscribe' with each replacement you want.
+ * ```
+ */
+export function reportRetired(retired: readonly RetiredRecipe[] | undefined, reporter: Reporter, asking: boolean): void {
+    for (const recipe of retired ?? []) {
+        const usedBy = recipe.subscription !== undefined ? [`this project's subscription to '${recipe.subscription}'`] : [];
+        const dependents = recipe.requestedBy.filter((holder) => holder !== "project");
+
+        if (dependents.length > 0) {
+            usedBy.push(`${dependents.length === 1 ? "the recipe" : "the recipes"} ${dependents.join(", ")}, which ${dependents.length === 1 ? "depends" : "depend"} on it`);
+        }
+
+        const items = [
+            `Pinned version: ${recipe.version}`,
+            ...(usedBy.length === 0 ? [] : [`Used by: ${usedBy.join("; ")}`]),
+            ...recipe.replacements.map((replacement) =>
+                replacement.repo === undefined ? `Replacement: ${replacement.ref}, in a repository this project has not added` : `Replacement: ${replacement.ref}`,
+            ),
+        ];
+
+        reporter.list(
+            items,
+            {
+                title: `The repository '${recipe.repo}' retired '${recipe.key}'. This project still builds it at the pinned version, and it gets no more updates:`,
+                ...(asking && offered(recipe) ? {} : retiredFooter(recipe)),
+            },
+            LogLevel.Warning,
+        );
+    }
+}
+
+/** Whether a build that can ask offers this retired recipe's replacements. */
+export function offered(recipe: RetiredRecipe): boolean {
+    return recipe.subscription !== undefined && recipe.replacements.length > 0;
+}
+
+/** What to run about a retired recipe, when the project subscribes to it by name. */
+function retiredFooter(recipe: RetiredRecipe): { footer?: string } {
+    if (recipe.subscription === undefined) {
+        return {};
+    }
+
+    if (recipe.replacements.length === 0) {
+        return { footer: `To stop using it, run 'sous subscription remove ${recipe.subscription}'.` };
+    }
+
+    // A replacement under the same name is a subscription that replaces this one when added.
+    if (recipe.replacements.some((replacement) => replacement.key === recipe.key)) {
+        return { footer: `To swap it, run 'sous subscribe' with the replacement you want.` };
+    }
+
+    return { footer: `To swap it, run 'sous subscription remove ${recipe.subscription}', then 'sous subscribe' with each replacement you want.` };
 }
 
 /** The words a change to, or a newer version of, one holder's own pin ends with. */

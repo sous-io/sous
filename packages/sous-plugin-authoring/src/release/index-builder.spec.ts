@@ -396,17 +396,205 @@ describe("buildIndex()", { timeout: GIT_TIMEOUT }, () => {
   });
 
   /**
-   * Tags for a recipe the repository no longer publishes are ordinary history
-   * after a rename, so they are reported as a warning and left alone.
+   * A tag for a recipe whose folder the repository never listed at that tag
+   * cannot be rebuilt: nothing says where its files are. The version is left
+   * out of the index, and the release says so.
    */
-  it("should warn about release tags for a recipe that is no longer published", async () => {
+  it("should leave out a tagged version whose folder the tag does not hold", async () => {
     git(repo, "tag", "--annotate", "core/retired@1.0.0", "--message", "old");
 
     const result = await build();
 
+    expect(result.index.retired).toBeUndefined();
     expect(warningsIn(result.problems)[0]!.message).toMatch(
-      /which it no longer publishes/
+      /version 1\.0\.0 is left out of the index, because sous could not find the recipe's folder at the tag 'core\/retired@1\.0\.0'/
     );
+  });
+});
+
+/** Adds `core/old` beside the example recipe, publishes both at 1.0.0, then retires `core/old`. */
+async function publishThenRetireOld(retiredBlock = ""): Promise<IndexFile> {
+  writeFile(
+    repo,
+    "sous.repo.yaml",
+    "formatVersion: 1\nname: test-repo\nnamespaces:\n  core:\n    description: Core recipes.\n" +
+      "recipes:\n  - recipes/core/example\n  - recipes/core/old\n"
+  );
+  writeFile(
+    repo,
+    "recipes/core/old/sous.recipe.yaml",
+    "formatVersion: 1\nnamespace: core\nname: old\nversion: 1.0.0\ndescription: The old recipe.\n"
+  );
+  writeFile(repo, "recipes/core/old/skills/old.md", "old\n");
+  commitAll(repo, "add core/old");
+
+  const published = await buildIndex({
+    validation: await validateRepo(repo),
+    sousVersion: GENERATOR,
+    now: new Date("2026-09-10T12:00:00.000Z"),
+    publishing: { "core/example": "1.0.0", "core/old": "1.0.0" },
+  });
+  saveIndex(published.text);
+  commitAll(repo, "release");
+  git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+  git(repo, "tag", "--annotate", "core/old@1.0.0", "--message", "release");
+
+  fs.rmSync(path.join(repo, "recipes/core/old"), { recursive: true });
+  writeFile(
+    repo,
+    "sous.repo.yaml",
+    "formatVersion: 1\nname: test-repo\nnamespaces:\n  core:\n    description: Core recipes.\n" +
+      "recipes:\n  - recipes/core/example\n" +
+      retiredBlock
+  );
+  commitAll(repo, "retire core/old");
+
+  return published.index;
+}
+
+describe("buildIndex() and retired recipes", { timeout: GIT_TIMEOUT }, () => {
+  /**
+   * A recipe the repository stops listing is retired, never dropped: every
+   * version it published moves to `retired`, unchanged, so a project whose
+   * lockfile pins one still restores it on a fresh machine.
+   *
+   * recipes: [core/example]   (core/old removed, tagged core/old@1.0.0)
+   * // -> retired["core/old"].versions["1.0.0"] as it was published
+   */
+  it("should keep every published version of a removed recipe under retired", async () => {
+    const published = await publishThenRetireOld();
+
+    const result = await buildIndex({
+      validation: await validateRepo(repo),
+      existing: readIndexFile(repo),
+      sousVersion: GENERATOR,
+      now: new Date("2026-09-11T12:00:00.000Z"),
+    });
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(warningsIn(result.problems)).toEqual([]);
+    expect(result.index.recipes["core/old"]).toBeUndefined();
+    expect(result.index.retired).toEqual({
+      "core/old": {
+        path: "recipes/core/old",
+        description: "The old recipe.",
+        versions: published.recipes["core/old"]!.versions,
+      },
+    });
+    expect(result.stale).toBe(true);
+  });
+
+  /**
+   * A recipe retired before the index recorded retired recipes was dropped
+   * from it. Its tags still carry every version, so the next release rebuilds
+   * it from them, folder and description included.
+   */
+  it("should rebuild a retired recipe the index lost from its tags", async () => {
+    const published = await publishThenRetireOld();
+
+    const result = await buildIndex({
+      validation: await validateRepo(repo),
+      sousVersion: GENERATOR,
+      now: new Date("2026-09-11T12:00:00.000Z"),
+    });
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.index.retired?.["core/old"]).toMatchObject({
+      path: "recipes/core/old",
+      description: "The old recipe.",
+      versions: { "1.0.0": { hash: published.recipes["core/old"]!.versions["1.0.0"]!.hash, tag: "core/old@1.0.0" } },
+    });
+  });
+
+  /**
+   * `sous.repo.yaml` may name replacements for a retired recipe: one in this
+   * repository by its key, one in another repository by a locator. The index
+   * records each with the repository it lives in, in the order written.
+   */
+  it("should record the replacements sous.repo.yaml names, in order", async () => {
+    await publishThenRetireOld(
+      "retired:\n  core/old:\n    replacements:\n      - core/example\n" +
+        "      - github://acme/recipes/tools/widget\n"
+    );
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.index.retired?.["core/old"]?.replacements).toEqual([
+      { key: "core/example", declared: "core/example" },
+      { key: "tools/widget", repo: "github.com/acme/recipes", declared: "github://acme/recipes/tools/widget" },
+    ]);
+  });
+
+  /**
+   * A replacement in this repository must be a recipe it publishes, and a
+   * replacement names one recipe, never a namespace.
+   */
+  it("should refuse a replacement this repository does not publish, or a namespace", async () => {
+    await publishThenRetireOld(
+      "retired:\n  core/old:\n    replacements:\n      - core/missing\n      - core\n"
+    );
+
+    const errors = errorsIn((await regenerate()).problems);
+
+    expect(errors.map((problem) => problem.where)).toEqual([
+      "sous.repo.yaml retired['core/old'].replacements[0]",
+      "sous.repo.yaml retired['core/old'].replacements[1]",
+    ]);
+    expect(errors[0]!.message).toMatch(/names a recipe this repository does not publish/);
+    expect(errors[1]!.message).toMatch(/names a namespace, and a replacement names one recipe/);
+  });
+
+  /**
+   * A recipe is either published or retired: an entry under `retired` for a
+   * recipe `recipes` still lists is an error naming both ways out.
+   */
+  it("should refuse a retired entry for a recipe that is still listed", async () => {
+    writeFile(
+      repo,
+      "sous.repo.yaml",
+      "formatVersion: 1\nname: test-repo\nnamespaces:\n  core: {}\n" +
+        "recipes:\n  - recipes/core/example\nretired:\n  core/example: {}\n"
+    );
+    commitAll(repo, "retire and keep");
+
+    const errors = errorsIn((await build()).problems);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toMatch(/is listed as retired, and 'recipes' still lists its folder/);
+  });
+
+  /**
+   * An entry under `retired` for a recipe this repository never published has
+   * nothing to keep: the index records nothing, and the release says so.
+   */
+  it("should warn about a retired entry for a recipe never published", async () => {
+    writeFile(
+      repo,
+      "sous.repo.yaml",
+      "formatVersion: 1\nname: test-repo\nnamespaces:\n  core: {}\n" +
+        "recipes:\n  - recipes/core/example\nretired:\n  core/never: {}\n"
+    );
+    commitAll(repo, "retire something unpublished");
+
+    const result = await build();
+
+    expect(result.index.retired).toBeUndefined();
+    expect(warningsIn(result.problems)[0]!.message).toMatch(/this repository never published it/);
+  });
+
+  /**
+   * Regenerating an index that already records the retired recipe changes
+   * nothing, so `--check` calls it current.
+   */
+  it("should leave an index that records the retired recipe unchanged", async () => {
+    await publishThenRetireOld("retired:\n  core/old:\n    replacements: [core/example]\n");
+    saveIndex((await regenerate()).text);
+    commitAll(repo, "record the retirement");
+
+    const again = await regenerate();
+
+    expect(again.stale).toBe(false);
   });
 });
 

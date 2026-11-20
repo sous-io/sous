@@ -46,6 +46,11 @@ namespaces:
 recipes:                            # every recipe folder, relative to the repository root
   - recipes/workflow/qa-variables
   - recipes/quality/qa-remote-dep
+retired:                            # optional: replacements for recipes no longer listed above
+  quality/qa-old-dep:
+    replacements:
+      - quality/qa-remote-dep                                  # in this repository
+      - github://acme/recipes/quality/qa-remote-dep            # in another repository
 ```
 
 | Field | Required | Notes |
@@ -55,6 +60,26 @@ recipes:                            # every recipe folder, relative to the repos
 | `namespaces` | yes | Keyed by namespace name; each entry takes an optional `description` |
 | `recipes` | yes | Relative paths, each holding a recipe manifest; a path listed twice is an error |
 | `submissions` | no | Whether the repository's recipes take proposed changes; see [The submissions block](#the-submissions-block) |
+| `retired` | no | Keyed `namespace/recipe`; see [Retired recipes](#retired-recipes) |
+
+### Retired recipes
+
+A recipe is retired when the repository stops listing its folder under `recipes`. Nothing else is
+needed: the next release keeps every version it published in the index, under `retired`, so a project
+whose lockfile pins one still restores it on a fresh machine. Release tags are never deleted; the tags
+and the index together are the archive.
+
+An entry under `retired` names `replacements`: zero or more recipes subscribers are offered in its
+place, in the order listed. Each is written as a `depends` entry is: `namespace/recipe` for a recipe
+this repository publishes, or a locator ([Ref forms](#ref-forms)) for a recipe in another repository.
+A recipe that moved to another repository is retired here, naming its new home as a replacement; there
+is no separate "moved" record.
+
+The release refuses an entry for a recipe `recipes` still lists (a recipe is published or retired, never
+both), a replacement in this repository that it does not publish, and a replacement that names a
+namespace or a repository rather than one recipe. An entry for a recipe the repository never published
+is a warning, and records nothing. What a build does about a retired recipe is in
+[Retired recipes](repositories-consuming.md#retired-recipes).
 
 ## `sous.recipe.yaml`: the recipe manifest
 
@@ -347,6 +372,8 @@ fetches only this file; nothing more is downloaded until a project subscribes.
 | `dependencies` | per version | The range each dependency may take, keyed `namespace/recipe`; see below |
 | `variables` | per version | The version's variable definitions, exactly as its manifest publishes them (see [Variable definitions](#variable-definitions)), with `required`, `secret` and `scope` filled in; `[]` when it asks nothing |
 | `depends`, `subscribes` | per version | The version's manifest lists, exactly as written; `[]` when empty |
+| `retired` | top level | Recipes the repository published and no longer lists, keyed `namespace/recipe`; absent when there are none. Each entry carries `path`, `description` and `versions` as a recipe under `recipes` does, plus `replacements`; see below |
+| `replacements` | per retired recipe | The recipes offered in its place, in order. Each carries `key` (`namespace/recipe`), `repo` (the identity of another repository; absent for this one) and `declared` (the entry exactly as `sous.repo.yaml` wrote it) |
 
 Dependencies are recorded at release time and keyed `namespace/recipe`. Each entry carries `range`: the range
 the manifest declares, or `^<the sibling's version at release>` for a sibling named with no range (`*` when the
@@ -394,6 +421,18 @@ forward with those fields intact.
 !> A sous older than 0.2.26, the first to tolerate unknown fields, refuses the whole index of any
 repository released with `declared`, `kind`, `variables`, `depends` or `subscribes` in it, the official
 one included. A project pinned to such a sous fails to read that index until it moves to 0.2.26 or later.
+
+**Retired recipes.** A release keeps every version a retired recipe published: the entries the committed
+index held, and any version a tag carries that it lacks, rebuilt from the tag (the folder and description
+come from the newest tag when the index never recorded them). A retired version whose tag no longer exists
+is an error, as for a published one. A key is under `recipes` or under `retired`, never both, and a retired
+recipe's namespace need not be declared any more. Retired recipes sit outside `recipes`, so a namespace
+never reaches one and a new subscription cannot find one; a subscription or a dependency that already names
+one still resolves to its versions.
+
+?> A sous older than this change (0.2.26 or later) ignores `retired`, as it ignores any field it does not
+define: it reads the index without error and treats a retired recipe as gone, so a pin to one fails to
+restore there, as before, until the project moves to a newer sous.
 
 **The `seeded` field.** Sous ships the `core` recipe in its own npm package, so a project can build before
 reaching the network. That copy is folded into the official repository's index in memory and resolved like

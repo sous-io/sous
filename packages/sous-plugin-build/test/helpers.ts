@@ -41,6 +41,7 @@ import type {
     ResolvedRecipe,
     ResolveOptions,
     RestoreReport,
+    RetiredRecipe,
     SkippedRecipe,
     StillBuiltRecipe,
 } from "@sous-io/sous-plugin-recipes/types";
@@ -73,6 +74,8 @@ export interface World {
     published: Record<string, { repo: string; version: string; namespace: string; requestedBy?: string[]; pins?: Record<string, string> }>;
     restoreCalls: Array<{ keys?: readonly string[] }>;
     restoreReport: RestoreReport;
+    /** What `recipes.lock` says its repositories retired. */
+    retired: RetiredRecipe[];
     /** The hash of each repository's cached index, which `withIndexHashes` fills in. */
     indexHashes: Record<string, string>;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
@@ -113,6 +116,7 @@ export function newWorld(root: string): World {
         published: {},
         restoreCalls: [],
         restoreReport: { restored: [], alreadyPresent: [], failed: [] },
+        retired: [],
         indexHashes: {},
         indexes: { indexes: [], failed: [] },
         indexCalls: 0,
@@ -302,6 +306,7 @@ export function standIns(world: World): PluginDefinition[] {
             },
             diff: diffLocks,
             exists: () => true,
+            retired: () => world.retired,
             migratedVersion: () => world.lockfile.migratedVersion,
             setMigratedVersion: async (version: string) => {
                 world.lockfile = { ...world.lockfile, migratedVersion: version };

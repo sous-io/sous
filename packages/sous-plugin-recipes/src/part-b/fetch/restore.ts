@@ -13,7 +13,7 @@ import type { IndexCacheCore } from "../index-cache/index-cache.js";
 import { sweepAbandonedWork } from "../../part-a/store.js";
 import { IndexReadError } from "../index-cache/read-chain.js";
 import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
-import { hostFor, splitStoredKey } from "../support.js";
+import { hostFor, publishedOrRetired, splitStoredKey } from "../support.js";
 
 /** One pinned recipe to download. */
 export type RestoreTarget = EnsureInStoreTarget;
@@ -71,13 +71,14 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
     const indexTarget = { name: target.repo, url: target.url, identity: target.identity, ...(target.provider === undefined ? {} : { provider: target.provider }) };
     const signal = deps.context.signal;
     let lookup = await deps.cache.get(indexTarget, { freshnessSeconds: deps.freshnessSeconds, hosts: deps.hosts, ...(signal ? { signal } : {}) });
-    let recipe = lookup.index.recipes[target.key];
+    // A retired recipe keeps every version it published, so a pin to one restores like any other.
+    let recipe = publishedOrRetired(lookup.index, target.key)?.entry;
     let version = recipe?.versions[target.entry.version];
 
     if (version === undefined && lookup.source === "cache") {
         // The cached index may predate the release; look upstream once.
         lookup = await deps.cache.get(indexTarget, { latest: true, hosts: deps.hosts, ...(signal ? { signal } : {}) });
-        recipe = lookup.index.recipes[target.key];
+        recipe = publishedOrRetired(lookup.index, target.key)?.entry;
         version = recipe?.versions[target.entry.version];
     }
 

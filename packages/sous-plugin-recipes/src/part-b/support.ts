@@ -2,7 +2,26 @@
  * Small helpers part B's modules share.
  */
 
+import type { IndexFile, IndexRecipe, IndexRetiredRecipe } from "@sous-io/sous-plugin-formats/types";
 import type { RepoEntry, RepositoryHostEntity, SubscriptionEntry } from "../types.js";
+
+/**
+ * The entry an index holds for a recipe key: the published one, else the retired one, whose
+ * versions are kept so a pin to one still restores. `undefined` when the index holds neither.
+ *
+ * ```ts
+ * publishedOrRetired(index, "acme/widget"); // { entry: { path, versions, replacements }, retired: true }
+ * ```
+ */
+export function publishedOrRetired(index: IndexFile, key: string): { entry: IndexRecipe | IndexRetiredRecipe; retired: boolean } | undefined {
+    if (Object.hasOwn(index.recipes, key)) {
+        return { entry: index.recipes[key]!, retired: false };
+    }
+
+    const retired = index.retired;
+
+    return retired !== undefined && Object.hasOwn(retired, key) ? { entry: retired[key]!, retired: true } : undefined;
+}
 
 /**
  * Splits a stored `namespace/recipe` key, as the lockfile and the index write it, at its first `/`.

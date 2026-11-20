@@ -632,6 +632,40 @@ export interface RestoreReport {
     readonly failed: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
 }
 
+/**
+ * A recipe the lockfile pins that its repository retired: it still builds at the pinned version,
+ * and gets no more updates.
+ */
+export interface RetiredRecipe {
+    /** `namespace/recipe`. */
+    readonly key: string;
+    /** The short name of the repository that retired it. */
+    readonly repo: string;
+    /** The version the lockfile pins. */
+    readonly version: string;
+    /** Who holds it: `project` for one of the project's subscriptions, else the recipes that depend on it. */
+    readonly requestedBy: readonly string[];
+    /** The project's switched-on subscription that names it directly, when there is one. */
+    readonly subscription?: string;
+    /** The recipes its repository offers in its place, in the order the repository lists them. */
+    readonly replacements: readonly RetiredReplacement[];
+}
+
+/** One recipe offered in place of a retired one. */
+export interface RetiredReplacement {
+    /** `namespace/recipe`. */
+    readonly key: string;
+    /**
+     * What to subscribe with: `<repository>:<namespace>/<recipe>` when this project has added the
+     * repository publishing it, else the locator the retiring repository wrote.
+     */
+    readonly ref: string;
+    /** The short name this project gives the repository publishing it; absent when the project has not added it. */
+    readonly repo?: string;
+    /** The identity of the repository publishing it (`github.com/acme/recipes`). */
+    readonly identity: string;
+}
+
 /** The lockfile: read, write, diff, restore. Works out a missing identity after parsing. */
 export interface RecipesLock {
     path(): string;
@@ -650,6 +684,11 @@ export interface RecipesLock {
     withIndexHashes(lockfile: Lockfile): Lockfile;
     /** Downloads every pinned recipe missing from the store. */
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
+    /**
+     * The pinned recipes whose repository retired them, as the cached indexes say; nothing is read
+     * upstream. `keys` limits it to those recipes (default: every pinned recipe).
+     */
+    retired(lockfile?: Lockfile, keys?: readonly string[]): RetiredRecipe[];
     /** One pinned recipe. */
     get(key: string): LockedRecipe | undefined;
     /**

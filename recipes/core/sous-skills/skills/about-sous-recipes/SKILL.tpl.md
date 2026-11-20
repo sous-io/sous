@@ -89,6 +89,10 @@ index change, because `sous repo submit` refuses one that edits `sous.index.json
 Example: `review/checklist` is at `1.2.0`, its last tag. One pull request fixes a typo (a patch) and
 adds a command (a minor). The manifest goes to `1.3.0`, once.
 
+Renaming, removing or moving a whole recipe is not a version raise: the old recipe is retired in
+its repository's `sous.repo.yaml`, which may name its replacements (`about-sous-repos`, "Retiring
+or Moving a Recipe").
+
 ## Variables
 
 A recipe that needs a value from the project declares a **definition**; the project stores the

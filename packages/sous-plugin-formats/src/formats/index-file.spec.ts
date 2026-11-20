@@ -370,6 +370,53 @@ describe("parseIndexFile()", () => {
   });
 });
 
+describe("the retired section", () => {
+  /** A retired recipe of `validIndex`, with one replacement in another repository. */
+  function retiredEntry() {
+    return {
+      path: "recipes/workflow/old-files",
+      description: "The old file workflow.",
+      replacements: [
+        { key: "workflow/task-files", declared: "workflow/task-files" },
+        { key: "tools/files", repo: "github.com/other/recipes", declared: "github://other/recipes/tools/files" },
+      ],
+      versions: { "0.3.0": { hash: HASH, tag: "workflow/old-files@0.3.0", prerelease: false } },
+    };
+  }
+
+  /**
+   * Retired recipes sit under their own key, with every version they
+   * published and the replacements their repository names.
+   */
+  it("should accept retired recipes with their versions and replacements", () => {
+    const index = { ...validIndex(), retired: { "workflow/old-files": retiredEntry() } };
+
+    expect(parseIndexFile(index, SOURCE)).toEqual(index);
+  });
+
+  /**
+   * A retired recipe's namespace need not be declared any more: the namespace
+   * may have been retired with it.
+   */
+  it("should accept a retired recipe whose namespace is no longer declared", () => {
+    const index = { ...validIndex(), retired: { "gone/old": { ...retiredEntry(), versions: { "0.3.0": { hash: HASH, tag: "gone/old@0.3.0", prerelease: false } } } } };
+
+    expect(parseIndexFile(index, SOURCE).retired?.["gone/old"]).toBeDefined();
+  });
+
+  /**
+   * A retired version's tag names its recipe and version, as a published one's
+   * does, and a recipe is never both published and retired.
+   */
+  it("should reject a wrong tag, and a recipe both published and retired", () => {
+    const wrongTag = { ...validIndex(), retired: { "workflow/old-files": { ...retiredEntry(), versions: { "0.3.0": { hash: HASH, tag: "main", prerelease: false } } } } };
+    const both = { ...validIndex(), retired: { "workflow/task-files": { ...retiredEntry(), versions: { "0.3.0": { hash: HASH, tag: "workflow/task-files@0.3.0", prerelease: false } } } } };
+
+    expect(expectRejectMessage(wrongTag)).toMatch(/retired\.workflow\/old-files\.versions\.0\.3\.0\.tag/);
+    expect(expectRejectMessage(both)).toMatch(/is also listed under 'recipes'/);
+  });
+});
+
 describe("stringifyIndexFile()", () => {
   /**
    * The index is written with every key sorted and a trailing newline, so

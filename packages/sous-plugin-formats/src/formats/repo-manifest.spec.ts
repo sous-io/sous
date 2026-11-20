@@ -209,3 +209,34 @@ describe("the submissions block", () => {
     ).toMatch(/submissions\.instead/);
   });
 });
+
+describe("the retired block", () => {
+  /**
+   * A retired recipe may name zero, one or several replacements, each in this
+   * repository or in another one.
+   *
+   * retired: { acme/widget: { replacements: [acme/gadget, github://other/recipes/tools/widget] } }
+   */
+  it("should accept retired recipes with zero or more replacements", () => {
+    const manifest = {
+      ...validManifest(),
+      retired: {
+        "workflow/old-files": {},
+        "workflow/moved": { replacements: ["workflow/task-files", "github://other/recipes/tools/moved"] },
+      },
+    };
+
+    expect(parseRepoManifest(manifest, SOURCE)).toEqual(manifest);
+  });
+
+  /**
+   * A key that is not `namespace/recipe`, or an empty replacement, is
+   * rejected, naming the field.
+   */
+  it("should reject a key that is not a recipe, and an empty replacement", () => {
+    expect(expectRejectMessage({ ...validManifest(), retired: { workflow: {} } })).toMatch(/retired/);
+    expect(expectRejectMessage({ ...validManifest(), retired: { "workflow/old": { replacements: [" "] } } })).toMatch(
+      /retired\.workflow\/old\.replacements/
+    );
+  });
+});

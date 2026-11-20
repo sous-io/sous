@@ -241,4 +241,23 @@ describe("isLocked()", () => {
         expect(isLocked("acme", {}, lockfile({ "other/x": locked("1.0.0") }))).toBe(false);
         expect(isLocked("acme/jira", {}, lockfile({ "acme/jira": { ...locked("1.0.0"), requestedBy: ["acme/base"] } }))).toBe(false);
     });
+
+    /**
+     * The retired recipes the lockfile pins are listed, except one skipped on this machine, which is
+     * not built here.
+     *
+     * retired: acme/widget, acme/off (skipped) // -> retired: [acme/widget]
+     */
+    it("should list the retired recipes built here", async () => {
+        const widget = { key: "acme/widget", repo: "acme", version: "0.1.2", requestedBy: ["project"], subscription: "acme/widget", replacements: [] };
+        const h = await harness({
+            world: (world) => {
+                world.retired = [widget, { ...widget, key: "acme/off", subscription: "acme/off" }];
+                world.skipped = [{ key: "acme/off", reason: "subscription-disabled", message: "" }];
+            },
+        });
+        const result = await h.run<BuildPrepareResult>("build.prepare", { offline: true });
+
+        expect(result.retired).toEqual([widget]);
+    });
 });

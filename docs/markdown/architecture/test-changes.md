@@ -2022,3 +2022,12 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 
 - **New** "should warn with the host's file warning and suggest a contribute address in the host's shape" (`sous-plugin-authoring/src/scaffold/scaffold.spec.ts`).
 - **Changed** "should write a pipeline that checks merge requests and releases the default branch" (`sous-plugin-gitlab/src/proposals.spec.ts`): it also expects the file's `SOUS_RELEASE_TOKEN` warning and the host's `fileUrl` shape. **New** "should fail the release job naming SOUS_RELEASE_TOKEN before anything is committed", which runs the job's check with and without the variable.
+
+### Retired recipes stay in the index and name their replacements (sous-plugin-formats, sous-plugin-authoring, sous-plugin-recipes, sous-plugin-build)
+
+- **Changed** "should warn about release tags for a recipe that is no longer published" (`sous-plugin-authoring/src/release/index-builder.spec.ts`) is now "should leave out a tagged version whose folder the tag does not hold": the warning says the version is left out of the index because sous could not find the recipe's folder at the tag.
+  - **Why:** a recipe the repository no longer lists is now retired and kept in the index under `retired` (ADR 0042), so its tags are no longer orphans; only a tag whose tree does not list the recipe has nothing to rebuild from.
+- **Changed** "should say a removed recipe leaves the index at the next release that publishes" (`sous-plugin-authoring/src/release/release.spec.ts`) is now "should say a removed recipe is recorded as retired at the next release that publishes": `--check` says "the recipe 'core/other' is retired, and the index does not record it as retired yet" instead of "the index still publishes 'core/other', which this repository does not".
+  - **Why:** the next release keeps the removed recipe under `retired` rather than dropping it (ADR 0042).
+- **Changed** the stand-in `recipes.lock` services in `sous-plugin-recipes/test/part-a/helpers.ts` and `sous-plugin-build/test/helpers.ts` gain `retired()`; the build's `World` gains `retired`.
+- **New** retired-recipe cases in `sous-plugin-formats` (`index-file.spec.ts`, `repo-manifest.spec.ts`), `sous-plugin-authoring` (`index-builder.spec.ts`, "buildIndex() and retired recipes"), `sous-plugin-recipes` (`restore.spec.ts`, `resolve.spec.ts`, `lock-service.spec.ts`) and `sous-plugin-build` (`build.test.ts`, "the build intent and retired recipes"; `prepare.test.ts`).
