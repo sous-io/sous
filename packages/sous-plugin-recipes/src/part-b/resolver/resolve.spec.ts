@@ -200,6 +200,40 @@ describe("resolveWanted: finding recipes", () => {
     });
 });
 
+/** `acme` with `w/a` published and `w/old` retired at 1.2.0. */
+function withRetired(): IndexFile {
+    const acme = index("acme", { "w/a": { "1.0.0": {} } });
+
+    return { ...acme, retired: { "w/old": { path: "recipes/w/old", versions: { "1.2.0": { hash: HASH, tag: "w/old@1.2.0", prerelease: false } } } } };
+}
+
+describe("resolveWanted: retired recipes", () => {
+    /**
+     * A subscription or a dependency that names a retired recipe still resolves to the versions it
+     * published, so updating the lockfile does not fail on it (#80).
+     */
+    it("should resolve a retired recipe named directly", async () => {
+        const result = await resolveWanted([project("w", "old")], context({ acme: withRetired() }));
+
+        expect(result.resolved.map((recipe) => `${recipe.key}@${recipe.version}`)).toEqual(["w/old@1.2.0"]);
+    });
+
+    /** A namespace holds what its repository publishes now, so it never reaches a retired recipe. */
+    it("should leave a retired recipe out of its namespace", async () => {
+        const result = await resolveWanted([project("w")], context({ acme: withRetired() }));
+
+        expect(result.resolved.map((recipe) => recipe.key)).toEqual(["w/a"]);
+    });
+
+    /** A recipe one repository publishes wins over the same name another repository retired. */
+    it("should prefer a published recipe over a retired one of the same name elsewhere", async () => {
+        const other = index("other", { "w/old": { "2.0.0": {} } });
+        const result = await resolveWanted([project("w", "old")], context({ acme: withRetired(), other }));
+
+        expect(result.resolved[0]).toMatchObject({ key: "w/old", repo: "other", version: "2.0.0" });
+    });
+});
+
 describe("resolveWanted: dependencies", () => {
     it("should resolve a sibling dependency in the declaring recipe's repository, as a build dependency", async () => {
         const indexes = { acme: index("acme", { "w/a": { "1.0.0": {} }, "lib/x": { "1.0.0": {} } }), other: index("other", { "lib/x": { "9.0.0": {} } }) };

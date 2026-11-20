@@ -16,7 +16,7 @@ import type { DependencyKind, IndexDependency, IndexFile, IndexVersion } from "@
 import type { RefLocation, RepoRef, SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { MissingRepo, ResolvedPin, ResolvedRecipe, ResolveResult } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
-import { identitySegments, sortKeys, splitStoredKey } from "../support.js";
+import { identitySegments, publishedOrRetired, sortKeys, splitStoredKey } from "../support.js";
 import { recordedRange } from "./ranges.js";
 
 /** One thing to resolve, in the resolver's own terms. */
@@ -435,7 +435,7 @@ function knownLocally(reading: SousRef, context: ResolveContext): boolean {
         return settleBrowsed(wanted.browsed.path, index).length > 0;
     }
 
-    return wanted.name === undefined ? Object.hasOwn(index.namespaces, wanted.namespace) : Object.hasOwn(index.recipes, `${wanted.namespace}/${wanted.name}`);
+    return wanted.name === undefined ? Object.hasOwn(index.namespaces, wanted.namespace) : publishedOrRetired(index, `${wanted.namespace}/${wanted.name}`) !== undefined;
 }
 
 /**
@@ -566,7 +566,11 @@ function expandNamespace(item: WorkItem, context: ResolveContext): WorkItem[] {
     return expanded;
 }
 
-/** Resolves one recipe request, merging it with what is already resolved for the key. */
+/**
+ * Resolves one recipe request, merging it with what is already resolved for the key. A recipe its
+ * repository retired still resolves when it is named: its published versions are kept, so a
+ * subscription or a dependency naming it keeps working. A namespace never reaches it.
+ */
 function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<string, Draft>): Draft {
     const key = `${item.namespace}/${item.name}`;
     const candidates: string[] = [];
@@ -574,6 +578,15 @@ function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<st
     for (const [repoName, index] of context.indexes) {
         if ((item.repo === undefined || repoName === item.repo) && Object.hasOwn(index.recipes, key)) {
             candidates.push(repoName);
+        }
+    }
+
+    // A published recipe wins over a retired one of the same name in another repository.
+    if (candidates.length === 0) {
+        for (const [repoName, index] of context.indexes) {
+            if ((item.repo === undefined || repoName === item.repo) && publishedOrRetired(index, key) !== undefined) {
+                candidates.push(repoName);
+            }
         }
     }
 
@@ -586,7 +599,7 @@ function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<st
     }
 
     const repo = candidates[0];
-    const entry = (context.indexes.get(repo) as IndexFile).recipes[key];
+    const entry = publishedOrRetired(context.indexes.get(repo) as IndexFile, key)!.entry;
     const previous = resolved.get(key);
 
     if (previous !== undefined && previous.repo !== repo) {

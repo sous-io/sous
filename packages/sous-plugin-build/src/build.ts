@@ -3,13 +3,13 @@ import "@sous-io/sous-plugin-memories/types";
 import path from "node:path";
 import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/sous-plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/sous-plugin-compiler/types";
-import type { SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
+import type { RetiredRecipe, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
 import { checksFailedError, runHandlerPurpose } from "@sous-io/sous-plugin-handlers";
 import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
-import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
+import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportRetired, reportUnincludedMemories, skippedLine } from "./report.js";
 import type {
     BuildInput,
     BuildPrepareResult,
@@ -96,8 +96,16 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         prepared = (await ctx.run("build.prepare", { dryRun })).toPlain();
         reportPrepared(prepared, ctx.reporter);
 
+        // A retired recipe the project subscribes to by name: in a terminal, its replacements are
+        // offered; anywhere else the warning names the commands that swap it.
+        const asking = !dryRun && input.watch !== true && ctx.prompter.interactive;
+
+        reportRetired(prepared.retired, ctx.reporter, asking);
+
+        const swapped = asking && (await offerReplacements(ctx, prepared.retired ?? []));
+
         // The lockfile now pins other recipes: rebuild the config, so this build compiles them.
-        if (!prepared.locked.unchanged && !dryRun) {
+        if ((swapped || !prepared.locked.unchanged) && !dryRun) {
             if (ctx.chain && !ctx.chain.parallel) {
                 await ctx.refreshConfig();
                 // What is skipped was worked out before the new pins were fetched: work it out again.
@@ -425,6 +433,58 @@ export async function clear(input: ClearInput, ctx: Context): Promise<IntentOutp
     const result = (await ctx.run("compiler.prune", { all: true, report: false, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
     return removalOutputs<ClearResult>({ ...result, confirmed: true });
+}
+
+/**
+ * Offers the replacements of each retired recipe the project subscribes to by name, one question
+ * each; nothing changes on a no. A yes subscribes to it (`subscription.add`, which asks before
+ * adding a repository the project has not added, as `sous repo add` does). Once one is added, the
+ * old subscription may be removed, unless a replacement under the same name took its place.
+ * Returns whether any subscription changed.
+ */
+async function offerReplacements(ctx: Context, retired: readonly RetiredRecipe[]): Promise<boolean> {
+    let changed = false;
+
+    for (const recipe of retired) {
+        const subscription = recipe.subscription;
+
+        if (subscription === undefined || recipe.replacements.length === 0) {
+            continue;
+        }
+
+        let added = 0;
+        let sameName = false;
+
+        for (const replacement of recipe.replacements) {
+            const take = await ctx.prompter.confirm({ message: `Subscribe to '${replacement.ref}' in place of '${recipe.key}'?`, default: false });
+
+            if (!take) {
+                continue;
+            }
+
+            try {
+                // Already answered; only a repository the project has not added is asked about again.
+                await ctx.run("subscription.add", { ref: replacement.ref, noBuild: true, ...(replacement.repo === undefined ? {} : { yes: true }) });
+                ctx.reporter.notice(`Subscribed to '${replacement.ref}' in place of '${recipe.key}'.`);
+                added += 1;
+                sameName ||= replacement.key === recipe.key;
+                changed = true;
+            } catch (error) {
+                ctx.reporter.problem(`Sous did not subscribe to '${replacement.ref}'.`, { subject: replacement.ref, cause: error instanceof Error ? error.message : String(error) });
+            }
+        }
+
+        if (added === 0 || sameName) {
+            continue;
+        }
+
+        if (await ctx.prompter.confirm({ message: `Remove the subscription to '${subscription}'?`, default: true })) {
+            await ctx.run("subscription.remove", { ref: subscription, noBuild: true });
+            ctx.reporter.notice(`Removed the subscription to '${subscription}'.`);
+        }
+    }
+
+    return changed;
 }
 
 /** The result of preparing nothing, for a partial rebuild. */

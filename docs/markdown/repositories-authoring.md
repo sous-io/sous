@@ -375,6 +375,25 @@ uncommitted, because a tag names one commit and the index records what each reci
 refuses when git does not know who is committing: set `git config user.name` and `git config user.email` first, or
 give that identity to the account a continuous integration job runs as (the scaffolded workflow already does).
 
+### Retire or move a recipe
+
+To retire a recipe, remove its folder and its line under `recipes` in `sous.repo.yaml`; never delete its
+tags. The next release keeps every version it published in the index, marked retired, so projects that pin
+it keep building. To point subscribers somewhere, name replacements under `retired`:
+
+```yaml
+retired:
+  acme/widget:
+    replacements:
+      - acme/gadget                         # a recipe this repository publishes
+      - github://other/recipes/tools/widget # a recipe in another repository
+```
+
+A recipe that moved to another repository is retired the same way, naming its new home. Like every index
+change, a retirement reaches the index with the next release that publishes a version. The fields and what
+the release checks are in [Retired recipes](repositories-file-formats.md#retired-recipes); what a
+subscriber sees is in [Retired recipes](repositories-consuming.md#retired-recipes).
+
 ### The scaffolded workflow
 
 `sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its two presets,
@@ -539,7 +558,8 @@ answer the two questions at a terminal (Tab opens your editor for a longer descr
 commit message. The body is your description followed by a changelog sous generates by comparing the manifests
 your change carries with the default branch:
 
-- recipes added, and recipes retired (a renamed recipe shows as one of each);
+- recipes added, and recipes retired with the replacements `sous.repo.yaml` names for each (a renamed recipe
+  shows as one of each);
 - version changes;
 - recipes whose files changed without a version raise, with a warning that a release run with `--ci` (as the
   scaffolded workflow runs it after a merge) refuses a changed recipe whose version was not raised;

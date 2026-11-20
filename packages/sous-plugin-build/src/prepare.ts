@@ -34,7 +34,8 @@ export const NOTHING_RESTORED: RestoreReport = Object.freeze({ restored: [], alr
  * 3. restoring what the store is missing, at exactly the pinned versions;
  * 4. checking upstream: a recipe whose repository or subscription prefers newer versions
  *    (`alwaysPull`) moves to the newest version in range; every other newer version is only
- *    reported.
+ *    reported;
+ * 5. finding the pinned recipes their repository retired, from the indexes now cached.
  *
  * A dry run writes nothing and never goes upstream. A failed upstream check is reported and then
  * ignored, because a build must not depend on the network being up. When the lockfile changed, the
@@ -131,6 +132,9 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     const skipped = active.skipped();
     const { unanswered, unanswerable } = ctx.services.get("recipe-answers.answers").get();
     const followsSous = builtInPins(subscriptions, current);
+    // 5. A retired recipe skipped on this machine is not built here, so nothing is said about it.
+    const notBuilt = new Set(skipped.map((recipe) => recipe.key));
+    const retired = lock.retired(current).filter((recipe) => !notBuilt.has(recipe.key));
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -141,6 +145,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         unanswered,
         unanswerable,
         ...(followsSous.length === 0 ? {} : { followsSous }),
+        ...(retired.length === 0 ? {} : { retired }),
     };
 
     await ctx.emit("build.prepared", result);

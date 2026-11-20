@@ -464,6 +464,34 @@ rather than stopping the build, and the build prints a warning naming it before 
 `sous vars ask` from a terminal to fill it in. How an answer reaches a template is described in
 [How a template reads an answer](repositories-variables.md#how-a-template-reads-an-answer).
 
+## Retired recipes
+
+A repository retires a recipe by no longer listing it, and may name replacements for it, in the same
+repository or in another one ([Retired recipes](repositories-file-formats.md#retired-recipes)). Its
+published versions stay in the index, so a project that pins one keeps building it, on a fresh clone too,
+and gets no more updates for it. Every build says so:
+
+```text
+The repository 'recipes' retired 'acme/widget'. This project still builds it at the pinned version,
+  and it gets no more updates:
+    • Pinned version: 0.1.2
+    • Used by: this project's subscription to 'acme/widget'
+    • Replacement: recipes:acme/gadget
+    • Replacement: https://github.com/other/recipes/tools/widget, in a repository this project has not added
+  To swap it, run 'sous subscription remove acme/widget', then 'sous subscribe' with each replacement you want.
+```
+
+In a terminal, for a recipe the project subscribes to by name, the build offers each replacement in turn
+(`Subscribe to 'recipes:acme/gadget' in place of 'acme/widget'?`, no by default); you may take any of them,
+or none. A yes subscribes as `sous subscription add` does, so a replacement in a repository the project has
+not added goes through the trust question first. Once one is added, the build offers to remove the old
+subscription, unless a replacement of the same name (a recipe that moved) took its place. Nothing changes
+without a yes, and the question comes back on the next build until the subscription is swapped or removed.
+Without a terminal, on a dry run, or in watch mode the build never asks; the warning names the commands
+instead. A retired recipe reached only through a namespace or another recipe's dependencies is reported
+without a question: a namespace never picks up a retired recipe on its next resolve, and a recipe that
+depends on one decides for itself when to stop.
+
 ## Control freshness and the store
 
 A build holds the versions the lockfile pins and does not talk to the network on every run. Sous

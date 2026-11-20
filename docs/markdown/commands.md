@@ -254,7 +254,10 @@ and reloads the config when a file is added to or removed from a glob target's f
 
 Before it compiles, a build prepares the project's recipes: it pins any new subscription, restores whatever this
 machine's recipe store is missing, and lists each recipe that has a newer version within its range (it moves no
-pin; see [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions)). The other commands
+pin; see [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions)). It warns about each
+recipe it builds that its repository retired, naming the replacements; in a terminal it offers to subscribe to
+each replacement of a recipe the project subscribes to by name, then to remove the old subscription (see
+[Retired recipes](repositories-consuming.md#retired-recipes)). The other commands
 that build (`init`, `launch`, `prune`, `subscription add` and the like) run this same build.
 
 A build compiles only the recipes whose subscriptions are switched on on this machine. Each one it skips gets a
@@ -565,7 +568,9 @@ sous repo init ./my-recipes --name team-recipes --namespace workflow
 
 Publishes new versions of the repository's recipes: raises their versions, regenerates the index, commits and
 tags. It plans first and asks once, and it needs a git commit identity (`user.name` and `user.email`) in the
-repository. `--check` only validates, and `--ci` is the setting for a merge job.
+repository. `--check` only validates, and `--ci` is the setting for a merge job. A recipe the repository no
+longer lists keeps its published versions in the index, marked retired, with any replacements `sous.repo.yaml`
+names (see [Retire or move a recipe](repositories-authoring.md#retire-or-move-a-recipe)).
 
 ```bash
 sous repo release --recipe workflow/task-files --bump minor --push

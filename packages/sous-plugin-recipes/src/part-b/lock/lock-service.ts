@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigError, NotFoundError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { LockedRecipe, Lockfile } from "@sous-io/sous-plugin-formats/types";
-import type { LockDiff, RecipesLock, RepoEntry, ResolvedRecipe, RestoreReport, SubscriptionEntry } from "../../types.js";
+import type { LockDiff, RecipesLock, RepoEntry, ResolvedRecipe, RestoreReport, RetiredRecipe, RetiredReplacement, SubscriptionEntry } from "../../types.js";
 import { LOCKFILE_NAME } from "../constants.js";
 import { ensureInStore } from "../fetch/restore.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -271,6 +271,68 @@ export class LockService implements RecipesLock {
         const earlier = alreadyPresent.filter((key) => fetched.includes(key));
 
         return { restored: sortKeys([...restored, ...earlier]), alreadyPresent: alreadyPresent.filter((key) => !fetched.includes(key)), failed };
+    }
+
+    retired(lockfile: Lockfile = this.read(), keys?: readonly string[]): RetiredRecipe[] {
+        const trusted = trustedRepos(this.ctx);
+        const cache = this.ctx.services.get("recipes.index-cache");
+        const subscriptions = this.ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {};
+        const direct = new Map<string, string>();
+        const found: RetiredRecipe[] = [];
+
+        for (const [subscription, entry] of Object.entries(subscriptions)) {
+            if (entry?.enabled !== false && subscription.includes("/")) {
+                direct.set(this.keyOf(subscription), subscription);
+            }
+        }
+
+        // The short name this project gives each repository it added, by identity.
+        const byIdentity = new Map<string, string>();
+
+        for (const [name, entry] of Object.entries(trusted)) {
+            const identity = this.runtime.tryIdentity(entry.url);
+
+            if (identity !== undefined && !byIdentity.has(identity)) {
+                byIdentity.set(identity, name);
+            }
+        }
+
+        for (const key of sortKeys(keys ?? Object.keys(lockfile.recipes))) {
+            const entry = lockfile.recipes[key];
+            let index;
+
+            try {
+                index = entry === undefined ? undefined : cache.cached(entry.repo)?.index;
+            } catch {
+                index = undefined;
+            }
+
+            if (entry === undefined || index === undefined || Object.hasOwn(index.recipes, key) || index.retired?.[key] === undefined) {
+                continue;
+            }
+
+            const home = lockfile.repos[entry.repo]?.identity ?? entry.repo;
+            const replacements = (index.retired[key].replacements ?? []).map((replacement): RetiredReplacement => {
+                const identity = replacement.repo ?? home;
+                const added = replacement.repo === undefined ? entry.repo : byIdentity.get(identity);
+
+                return added === undefined
+                    ? { key: replacement.key, ref: replacement.declared, identity }
+                    : { key: replacement.key, ref: `${added}:${replacement.key}`, repo: added, identity };
+            });
+            const subscription = direct.get(key);
+
+            found.push({
+                key,
+                repo: entry.repo,
+                version: entry.version,
+                requestedBy: [...entry.requestedBy],
+                ...(subscription === undefined ? {} : { subscription }),
+                replacements,
+            });
+        }
+
+        return found;
     }
 
     held(lockfile: Lockfile, except: Iterable<string> = []): { keep: Record<string, string>; keepPins: Record<string, Record<string, string>> } {

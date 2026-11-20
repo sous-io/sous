@@ -25,6 +25,8 @@ export interface ManifestSnapshot {
 export interface RecipeEntry {
     readonly key: string;
     readonly version: string;
+    /** For a retired recipe: the replacements the repository manifest names for it, as written. */
+    readonly replacements?: readonly string[];
 }
 
 export interface VersionChange {
@@ -164,7 +166,9 @@ export function buildChangelog(input: {
 
     for (const [key, entry] of sortedEntries(base.recipes)) {
         if (!head.recipes.has(key)) {
-            changelog.recipesRemoved.push({ key, version: entry.manifest.version });
+            const replacements = head.repo.retired?.[key]?.replacements ?? [];
+
+            changelog.recipesRemoved.push({ key, version: entry.manifest.version, ...(replacements.length === 0 ? {} : { replacements }) });
         }
     }
 
@@ -198,11 +202,18 @@ export const BREAKING_VARIABLE_WARNING =
 /** The title of the section that lists recipes changed without a version raise. */
 const UNRAISED_TITLE = "Changed without a version raise";
 
+/** One retired recipe, with the replacements subscribers are offered. */
+function describeRetired(entry: RecipeEntry): string {
+    const replaced = entry.replacements === undefined ? "" : `; subscribers are offered ${entry.replacements.map((ref) => `\`${ref}\``).join(", ")} in its place`;
+
+    return `\`${entry.key}\`, last at version ${entry.version}${replaced}`;
+}
+
 /** The changelog's sections that have entries, in order. */
 function changelogSections(changelog: Changelog): { title: string; entries: string[] }[] {
     return [
         { title: "Recipes added", entries: changelog.recipesAdded.map((entry) => `\`${entry.key}\`, at version ${entry.version}`) },
-        { title: "Recipes retired", entries: changelog.recipesRemoved.map((entry) => `\`${entry.key}\`, last at version ${entry.version}`) },
+        { title: "Recipes retired", entries: changelog.recipesRemoved.map(describeRetired) },
         { title: "Version changes", entries: changelog.versionChanges.map((entry) => `\`${entry.key}\`: ${entry.from} becomes ${entry.to}`) },
         { title: UNRAISED_TITLE, entries: changelog.unraised.map((entry) => `\`${entry.key}\`: its files changed and its version is still ${entry.version}`) },
         { title: "Namespaces added", entries: changelog.namespacesAdded.map((name) => `\`${name}\``) },

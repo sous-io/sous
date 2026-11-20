@@ -89,3 +89,59 @@ describe("ensureInStore()", () => {
         expect(error.message).toContain("getaddrinfo ENOTFOUND raw.githubusercontent.com");
     });
 });
+
+describe("ensureInStore() and retired recipes", () => {
+    /** The index upstream serves: `acme/widget` retired, its 0.1.2 kept with its tag. */
+    const upstream: IndexFile = {
+        ...seeded,
+        namespaces: { core: {}, acme: {} },
+        retired: {
+            "acme/widget": {
+                path: "recipes/acme/widget",
+                replacements: [{ key: "acme/gadget", declared: "acme/gadget" }],
+                versions: { "0.1.2": { hash: HASH, tag: "acme/widget@0.1.2", prerelease: false } },
+            },
+        },
+    };
+
+    /**
+     * A recipe its repository retired keeps every version it published, so a lockfile pin to one
+     * downloads on a fresh machine from the folder and tag the index records (#80, #230 item 2).
+     *
+     * ensureInStore(acme/widget@0.1.2) // the index lists it under `retired` only
+     * // -> fetchRecipeTree(..., "recipes/acme/widget", "acme/widget@0.1.2", ...), then the store holds it
+     */
+    it("should download a pinned version of a retired recipe from its tag", async () => {
+        const fetched: Array<{ path: string; tag: string }> = [];
+        const host = {
+            ...offlineHost,
+            readStrategies: [{ id: "http", label: "HTTP without token", read: async () => ({ ok: true, text: JSON.stringify(upstream), ref: "HEAD" }) }],
+            fetchRecipeTree: async (_repository: unknown, recipePath: string, tag: string, into: string) => {
+                fetched.push({ path: recipePath, tag });
+                fs.mkdirSync(into, { recursive: true });
+            },
+        } as unknown as RepositoryHostEntity;
+        const stored: string[] = [];
+        const store = {
+            ...emptyStore(path.join(dir, "store")),
+            put: async (key: { name: string; version: string }) => {
+                stored.push(`${key.name}@${key.version}`);
+
+                return { hash: HASH };
+            },
+        } as unknown as RecipesStore;
+        const target: RestoreTarget = {
+            key: "acme/widget",
+            entry: { repo: "sous-recipes", version: "0.1.2", hash: HASH, requestedBy: ["project"], kind: "subscribes" },
+            repo: "sous-recipes",
+            url: URL,
+            identity: IDENTITY,
+        };
+
+        const ensured = await ensureInStore(target, { store, cache: core, hosts: [host], context: { reporter: nullReporter } as unknown as RepositoryHostContext });
+
+        expect(ensured.downloaded).toBe(true);
+        expect(fetched).toEqual([{ path: "recipes/acme/widget", tag: "acme/widget@0.1.2" }]);
+        expect(stored).toEqual(["widget@0.1.2"]);
+    });
+});

@@ -268,6 +268,21 @@ export interface RepoManifest extends Extensions {
     namespaces: Record<string, RepoNamespace>;
     /** Each recipe's directory, relative to the repository root. */
     recipes: string[];
+    /**
+     * The recipes this repository published once and retired, keyed `namespace/recipe`. A recipe
+     * no longer listed under `recipes` is retired whether or not it has an entry here; an entry
+     * only adds what the release records about it.
+     */
+    retired?: Record<string, RepoRetirement>;
+}
+
+/** What a repository manifest says about one recipe it retired. */
+export interface RepoRetirement extends Extensions {
+    /**
+     * The recipes subscribers are offered in its place, each a recipe ref as `depends` takes one:
+     * `acme/gadget` in this repository, or a locator naming a recipe in another one. Zero or more.
+     */
+    replacements?: string[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -312,6 +327,28 @@ export interface IndexRecipe {
     [key: string]: unknown;
 }
 
+/** One replacement an index suggests for a retired recipe. */
+export interface IndexReplacement {
+    /** `namespace/recipe`. */
+    key: string;
+    /** The identity of another repository it lives in; absent for this same repository. */
+    repo?: string;
+    /** The entry exactly as `sous.repo.yaml` wrote it. */
+    declared: string;
+    [key: string]: unknown;
+}
+
+/** One recipe an index keeps as retired: every version it published, and what replaces it. */
+export interface IndexRetiredRecipe {
+    path: string;
+    description?: string;
+    /** In the order `sous.repo.yaml` lists them; absent or empty when there are none. */
+    replacements?: IndexReplacement[];
+    /** At least one, keyed by version. */
+    versions: Record<string, IndexVersion>;
+    [key: string]: unknown;
+}
+
 /** One namespace an index lists. */
 export interface IndexNamespace {
     description?: string;
@@ -328,6 +365,8 @@ export interface IndexFile {
     generator: string;
     namespaces: Record<string, IndexNamespace>;
     recipes: Record<string, IndexRecipe>;
+    /** Recipes it published once and no longer does; never a key `recipes` also holds. */
+    retired?: Record<string, IndexRetiredRecipe>;
     [key: string]: unknown;
 }
 

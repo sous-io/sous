@@ -167,6 +167,54 @@ export const indexRecipeSchema = forwardCompatibleObject({
     }),
 });
 
+/**
+ * One replacement a repository suggests for a recipe it retired, as the
+ * release settled it from the `retired` block of `sous.repo.yaml`.
+ */
+export const indexReplacementSchema = forwardCompatibleObject({
+  /** The replacement's stored key, `namespace/recipe`. */
+  key: recipeKeySchema,
+  /**
+   * The canonical identity of the repository publishing it
+   * (`github.com/acme/recipes`). Omitted for a recipe in this same repository.
+   */
+  repo: repoIdentitySchema.optional(),
+  /**
+   * The entry exactly as `sous.repo.yaml` wrote it: a recipe of this
+   * repository (`acme/gadget`), or a locator naming a recipe in another one.
+   * A consumer subscribes with it when the project has not added that
+   * repository yet.
+   */
+  declared: z.string().min(1, "must not be empty"),
+});
+
+/**
+ * A recipe the repository no longer publishes. Every version it published is
+ * kept, exactly as it was, so a project whose lockfile pins one still restores
+ * on a fresh machine (the tags are never deleted). It sits under the index's
+ * own `retired` key, never under `recipes`, so nothing resolves a namespace or
+ * a new subscription to it, and a sous that predates `retired` ignores it.
+ */
+export const indexRetiredRecipeSchema = forwardCompatibleObject({
+  /** The recipe folder at its last published version, relative to the repo root. */
+  path: relativePathSchema("a recipe path"),
+  /** Its summary, as the last release that published it recorded it. */
+  description: z.string().optional(),
+  /**
+   * The recipes the repository suggests in its place, in the order
+   * `sous.repo.yaml` lists them. Absent or empty when it suggests none. A
+   * recipe that moved to another repository is a retired recipe whose
+   * replacement lives there.
+   */
+  replacements: z.array(indexReplacementSchema).optional(),
+  /** Every version it published, keyed by the exact version string. */
+  versions: z
+    .record(semverVersionSchema, indexVersionSchema)
+    .refine((versions) => Object.keys(versions).length > 0, {
+      message: "must list at least one published version",
+    }),
+});
+
 /** One namespace declaration, copied from the repo manifest at release time. */
 export const indexNamespaceSchema = forwardCompatibleObject({
   description: z.string().optional(),
@@ -194,6 +242,12 @@ export const indexFileSchema = forwardCompatibleObject({
   namespaces: z.record(namespaceNameSchema, indexNamespaceSchema),
   /** Every recipe the repo publishes, keyed `namespace/recipe`. */
   recipes: z.record(recipeKeySchema, indexRecipeSchema),
+  /**
+   * Every recipe the repo published once and no longer does, keyed
+   * `namespace/recipe`. Absent when it retired none. A key is never under both
+   * `recipes` and `retired`.
+   */
+  retired: z.record(recipeKeySchema, indexRetiredRecipeSchema).optional(),
 }).superRefine((index, ctx) => {
   // A recipe whose namespace is not declared could never be resolved, so a
   // release that produced one is broken; say which recipe and which namespace.
@@ -217,18 +271,35 @@ export const indexFileSchema = forwardCompatibleObject({
   // target, whose content changes on every push and whose pinned hash then
   // simply starts failing. Sous writes these tags itself, so requiring the
   // shape it writes costs a correct index nothing.
-  for (const [key, recipe] of Object.entries(index.recipes)) {
-    for (const [version, published] of Object.entries(recipe.versions)) {
-      const expected = `${key}@${version}`;
-      if (published.tag === expected) continue;
-      ctx.addIssue({
-        code: "custom",
-        path: ["recipes", key, "versions", version, "tag"],
-        message:
-          `is '${published.tag}', but a published version's tag names the recipe and ` +
-          `the version it carries, so this one must be '${expected}'`,
-      });
+  const sections = [
+    ["recipes", index.recipes],
+    ["retired", index.retired ?? {}],
+  ] as const;
+  for (const [section, entries] of sections) {
+    for (const [key, recipe] of Object.entries(entries)) {
+      for (const [version, published] of Object.entries(recipe.versions)) {
+        const expected = `${key}@${version}`;
+        if (published.tag === expected) continue;
+        ctx.addIssue({
+          code: "custom",
+          path: [section, key, "versions", version, "tag"],
+          message:
+            `is '${published.tag}', but a published version's tag names the recipe and ` +
+            `the version it carries, so this one must be '${expected}'`,
+        });
+      }
     }
+  }
+
+  // A recipe is published or retired, never both: a consumer would not know
+  // which entry answers for it.
+  for (const key of Object.keys(index.retired ?? {})) {
+    if (!Object.hasOwn(index.recipes, key)) continue;
+    ctx.addIssue({
+      code: "custom",
+      path: ["retired", key],
+      message: `is also listed under 'recipes'; a recipe is either published or retired`,
+    });
   }
 });
 
@@ -243,6 +314,12 @@ export type IndexVersion = z.infer<typeof indexVersionSchema>;
 
 /** One resolved dependency of one published version. */
 export type IndexDependency = z.infer<typeof indexDependencySchema>;
+
+/** One retired recipe in a repo index. */
+export type IndexRetiredRecipe = z.infer<typeof indexRetiredRecipeSchema>;
+
+/** One suggested replacement of a retired recipe. */
+export type IndexReplacement = z.infer<typeof indexReplacementSchema>;
 
 /** One namespace entry in a repo index. */
 export type IndexNamespace = z.infer<typeof indexNamespaceSchema>;

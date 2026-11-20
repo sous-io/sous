@@ -59,6 +59,7 @@ import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
 import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, resolvedAtPin, sortBytewise } from "../util.js";
+import { publishedOrRetired } from "../../part-b/support.js";
 import { subscriptionListOutputs } from "./catalog-outputs.js";
 import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag, yesFlagNoTrust } from "./schema.js";
 import { builtInMoveNote, recipeUpdateOutputs, subscriptionAddOutputs, subscriptionRemoveOutputs, subscriptionToggleOutputs, subscriptionUpdateOutputs } from "./subscription-outputs.js";
@@ -678,7 +679,7 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
         if (input.latest === true) {
             for (const pin of pinned) {
                 const index = (await indexOf(lock.recipes[pin.key]!.repo))?.index;
-                const versions = index?.recipes[pin.key]?.versions ?? {};
+                const versions = (index === undefined ? undefined : publishedOrRetired(index, pin.key)?.entry.versions) ?? {};
                 const inRange = Object.fromEntries(
                     Object.entries(versions).filter(([version]) => semver.satisfies(version, entry.range ?? "*", { includePrerelease: entry.prerelease === true, loose: true })),
                 );
@@ -693,7 +694,8 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
         const latest: Array<{ key: string; version?: string }> = [];
 
         for (const pin of pinned) {
-            const best = latestVersion((await indexOf(lock.recipes[pin.key]!.repo))?.index.recipes[pin.key]?.versions ?? {});
+            const index = (await indexOf(lock.recipes[pin.key]!.repo))?.index;
+            const best = latestVersion((index === undefined ? undefined : publishedOrRetired(index, pin.key)?.entry.versions) ?? {});
 
             latest.push({ key: pin.key, ...(best === undefined ? {} : { version: best }) });
         }
