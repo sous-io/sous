@@ -2,6 +2,10 @@
 
 **Status:** Accepted, 2026-11-16. Built 2026-11-18.
 
+!> **Superseded in part by [ADR 0041](0041-harness-only-targets.md) (2026-11-20):** a compilation
+!> target only a harness's build holds now reaches that harness, with that harness's outputs, and a
+!> target whose outputs all belong to one harness comes whole from that harness's build.
+
 This record summarizes a decision of the 1.0 architecture. The details are in
 [One Config Build per Harness](../architecture/specifications/S8-per-harness-config-builds.md). Where
 this record and that file disagree, it wins.

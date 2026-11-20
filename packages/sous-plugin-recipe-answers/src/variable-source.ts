@@ -5,7 +5,10 @@
  * The entity is added by a contributor, since which recipes are active is known only while the
  * config is built (`active-recipe` entities); reading them re-runs the contributor whenever they
  * change. Its methods read the `varMappings` key and the env files each time they are called, so
- * they always see the config they are asked about.
+ * they always see the config they are asked about. It carries its definitions as data
+ * (`definitions`), since core tells one source from another by its data alone: a source whose
+ * definitions lived only in its methods would look unchanged when they arrive, and a contributor
+ * that read it (such as the one evaluating recipe manifests) would never run again.
  *
  * No expression under `subscriptions` or `repos` may read an answer: which recipes are pinned
  * depends on the subscriptions, so an answer could switch off the recipe that asked for it.
@@ -30,7 +33,10 @@ export const FORBIDDEN_UNDER = ["subscriptions", "repos"] as const;
  * @param variables - The variables the active recipes define.
  * @param services - The engine's services; only singletons are used, so this works while building.
  */
-export function recipeAnswersSource(variables: readonly DefinedVariable[], services: Pick<ServiceReader, "get" | "has">): VariableSourceEntity {
+export function recipeAnswersSource(
+    variables: readonly DefinedVariable[],
+    services: Pick<ServiceReader, "get" | "has">,
+): VariableSourceEntity & { readonly definitions: readonly DefinedVariable[] } {
     const answers = (ctx: VariableSourceContext): RecipeAnswers => computeAnswers(variables, buildLadder({ services, env: ctx.env, config: ctx.config }));
     // The recipes with a scope of their own: each defining recipe, and each holder of a version
     // whose variable gets no answer, which renders it empty.
@@ -42,6 +48,7 @@ export function recipeAnswersSource(variables: readonly DefinedVariable[], servi
     return {
         id: VARIABLE_SOURCE_ID,
         description: "recipe answers",
+        definitions: variables,
         variables: (ctx): VarScope => (variables.length === 0 ? {} : answers(ctx).merged),
         scoped: (scopeKey, ctx): VarScope | undefined => {
             if (!scopeKeys.has(scopeKey)) {

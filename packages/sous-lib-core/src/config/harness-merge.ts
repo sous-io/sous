@@ -12,11 +12,24 @@
  * added to the merged list marked with the harness. An entry of the build with no harness that is
  * marked with a harness which had its own build is replaced by that build's entries.
  *
+ * On the way to such a list, an array (`compilation.targets[]`) is merged item by item (ADR 0041):
+ *
+ * - An item of the build with no harness whose list entries are all marked with one harness that
+ *   had a build comes whole from that harness's build, so what it is made of (a memories target's
+ *   `content`) is that harness's too.
+ * - An item only a harness's build holds (a condition on `harness.id` put it there) is carried,
+ *   with only its list entries marked with that harness; it is dropped when none remain. Carried
+ *   items go after the items of the build with no harness, harnesses in id order.
+ *
  * ```text
  * no harness:  outputs [ {dir: a}, {dir: .claude/skills, harness: claude}, {dir: .codex/skills, harness: codex} ]
  * claude:      outputs [ {dir: a}, {dir: .claude/skills, harness: claude, _vars: {tool: Claude}}, ... ]
  * codex:       outputs [ {dir: a}, ..., {dir: .codex/skills, harness: codex, _vars: {tool: Codex}} ]
  * merged:      outputs [ {dir: a}, the claude build's claude output, the codex build's codex output ]
+ *
+ * no harness:  targets [ skills/a ]
+ * claude:      targets [ skills/a, skills/skplug (outputs: {dir: a}, {harness: claude}, {harness: codex}) ]
+ * merged:      targets [ skills/a, skills/skplug (outputs: {harness: claude}) ]
  * ```
  */
 
@@ -160,24 +173,7 @@ function mergeAt(node: JsonValue | undefined, others: Others, rest: readonly Lis
     const [segment, ...tail] = rest;
 
     if (segment === EACH) {
-        if (!Array.isArray(node)) {
-            return undefined;
-        }
-
-        let changed = false;
-        const items = node.map((item, index) => {
-            const result = mergeAt(item, others.map(([id, other]) => [id, counterpart(item, index, other)] as const), tail, built);
-
-            if (result === undefined) {
-                return item;
-            }
-
-            changed = true;
-
-            return result;
-        });
-
-        return changed ? items : undefined;
+        return mergeItems(node, others, tail, built);
     }
 
     const own = isObject(node) ? node[segment!] : undefined;
@@ -188,6 +184,126 @@ function mergeAt(node: JsonValue | undefined, others: Others, rest: readonly Lis
     }
 
     return { ...(isObject(node) ? node : {}), [segment!]: result };
+}
+
+/**
+ * Merges an array on the way to a list (`compilation.targets[]`), item by item. An item of the base
+ * whose list entries all belong to one built harness comes whole from that harness's build; any
+ * other base item is merged further down. Then the items only a harness's build holds are carried,
+ * each with only its entries marked with that harness, harnesses in id order.
+ */
+function mergeItems(node: JsonValue | undefined, others: Others, tail: readonly ListSegment[], built: readonly string[]): JsonValue | undefined {
+    const base = Array.isArray(node) ? node : [];
+    const matched = new Set<JsonValue>();
+    let changed = false;
+
+    const items = base.map((item, index) => {
+        const counterparts = others.map(([id, other]) => [id, counterpart(item, index, other)] as const);
+
+        for (const [, found] of counterparts) {
+            if (found !== undefined) {
+                matched.add(found);
+            }
+        }
+
+        const sole = soleHarness(item, tail, built);
+        const whole = sole === undefined ? undefined : onlyMarked(counterparts.find(([id]) => id === sole)?.[1], tail, sole);
+
+        if (whole !== undefined) {
+            changed = true;
+
+            return whole;
+        }
+
+        const result = mergeAt(item, counterparts, tail, built);
+
+        if (result === undefined) {
+            return item;
+        }
+
+        changed = true;
+
+        return result;
+    });
+
+    for (const [id, other] of others) {
+        if (!Array.isArray(other)) {
+            continue;
+        }
+
+        for (const item of other) {
+            if (matched.has(item)) {
+                continue;
+            }
+
+            const carried = onlyMarked(item, tail, id);
+
+            if (carried !== undefined) {
+                changed = true;
+                items.push(carried);
+            }
+        }
+    }
+
+    return changed ? items : undefined;
+}
+
+/**
+ * The harness every list entry of `item` is marked with, when there is at least one entry, they
+ * all name the same harness, and that harness had a build; else `undefined`.
+ */
+function soleHarness(item: JsonValue, rest: readonly ListSegment[], built: readonly string[]): string | undefined {
+    const entries = listEntries(item, rest);
+    const mark = entries.length === 0 ? undefined : markOf(entries[0]);
+
+    if (mark === undefined || !built.includes(mark)) {
+        return undefined;
+    }
+
+    return entries.every((entry) => markOf(entry) === mark) ? mark : undefined;
+}
+
+/** Every entry of the lists `rest` leads to from `node`. */
+function listEntries(node: JsonValue | undefined, rest: readonly ListSegment[]): JsonValue[] {
+    if (rest.length === 0) {
+        return Array.isArray(node) ? node : [];
+    }
+
+    const [segment, ...tail] = rest;
+
+    if (segment === EACH) {
+        return Array.isArray(node) ? node.flatMap((item) => listEntries(item, tail)) : [];
+    }
+
+    return isObject(node) ? listEntries(node[segment!], tail) : [];
+}
+
+/**
+ * `node` with each list `rest` leads to cut down to the entries marked with `harness`, or
+ * `undefined` when no such entry remains. Inside an array on the way, an item with none is dropped.
+ */
+function onlyMarked(node: JsonValue | undefined, rest: readonly ListSegment[], harness: string): JsonValue | undefined {
+    if (rest.length === 0) {
+        const kept = Array.isArray(node) ? node.filter((entry) => markOf(entry) === harness) : [];
+
+        return kept.length === 0 ? undefined : kept;
+    }
+
+    const [segment, ...tail] = rest;
+
+    if (segment === EACH) {
+        const kept = Array.isArray(node) ? node.map((item) => onlyMarked(item, tail, harness)).filter((item) => item !== undefined) : [];
+
+        return kept.length === 0 ? undefined : kept;
+    }
+
+    if (!isObject(node)) {
+        return undefined;
+    }
+
+    const inner = onlyMarked(node[segment!], tail, harness);
+
+    return inner === undefined ? undefined : { ...node, [segment!]: inner };
 }
 
 /**

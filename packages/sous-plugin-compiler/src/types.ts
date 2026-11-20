@@ -127,6 +127,12 @@ export interface CompilationListing {
     targets: number;
     /** What went wrong: a variable no one sets, a glob that matched nothing. */
     problems: CompilationFileProblem[];
+    /**
+     * The targets at or after `targets` whose files a harness's own build listed: those the merge
+     * of the per-harness builds carried from that build (spec S8, "The Merge"). Never in the
+     * config; the compiler adds it when it reads the merged config (`withHarnessFiles`).
+     */
+    fromHarness?: number[];
 }
 
 /**
