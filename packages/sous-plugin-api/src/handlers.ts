@@ -48,8 +48,17 @@ export interface HandlerRegistration<P extends HandlerPurpose = HandlerPurpose> 
     order?: number;
 }
 
+/**
+ * A purpose a plugin may add a handler for. `uninstall` and `migrate` run only for a recipe, so a
+ * plugin declares them in its recipe's manifest instead, pointing at a function its bundle exports.
+ */
+export type PluginHandlerPurpose = Exclude<HandlerPurpose, "uninstall" | "migrate">;
+
 /** `sous.handlers`. */
 export interface HandlerRegistry {
-    /** Adds a handler for a purpose, as a `handler` entity of this plugin. */
-    add<const P extends HandlerPurpose>(purpose: P, definition: HandlerRegistration<P>): void;
+    /**
+     * Adds a handler for a purpose, as a `handler` entity of this plugin. Throws a `PluginError` for
+     * `uninstall` and `migrate`.
+     */
+    add<const P extends PluginHandlerPurpose>(purpose: P, definition: HandlerRegistration<P>): void;
 }

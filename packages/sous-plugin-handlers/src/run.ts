@@ -32,8 +32,34 @@ export function orderHandlers<T>(items: readonly T[], purpose: HandlerPurpose, e
 }
 
 /** A thrown value as one line. */
-function describeThrown(error: unknown): string {
+export function describeThrown(error: unknown): string {
     return error instanceof Error ? messageText(error) : String(error);
+}
+
+/**
+ * Who reported a line: the recipe or plugin, then the purpose and the handler. A recipe's handler is
+ * named by its function, a plugin's by its id.
+ *
+ * ```ts
+ * handlerLabel({ id: "workflow/github-projects/check/handlers/check.js#hasGh", purpose: "check", recipe: "workflow/github-projects", source: "handlers/check.js#hasGh" });
+ * // -> "workflow/github-projects (check: hasGh)"
+ * handlerLabel({ id: "acme/needs-jq", purpose: "check", plugin: "sous-plugin-acme" });
+ * // -> "sous-plugin-acme (check: acme/needs-jq)"
+ * ```
+ */
+export function handlerLabel(entry: Pick<HandlerEntity, "id" | "purpose" | "recipe" | "plugin" | "source">): string {
+    if (entry.recipe !== undefined) {
+        const name = entry.source === undefined ? entry.id : entry.source.slice(entry.source.lastIndexOf("#") + 1);
+
+        return `${entry.recipe} (${entry.purpose}: ${name})`;
+    }
+
+    return entry.plugin === undefined ? `${entry.purpose}: ${entry.id}` : `${entry.plugin} (${entry.purpose}: ${entry.id})`;
+}
+
+/** A report line as printed: who reported it, then what it says. */
+export function reportLine(label: string, message: string): string {
+    return `${label}: ${message}`;
 }
 
 /**
@@ -67,6 +93,7 @@ export async function runHandlers(ctx: Context, purpose: HandlerPurpose, options
             continue;
         }
 
+        const label = handlerLabel({ ...entry, plugin: entry.plugin ?? record.plugin });
         const collector = new ReportCollector(entry.id);
         const tools = createTools(ctx, project, entry.recipe, collector.report);
         let threw: string | undefined;
@@ -75,11 +102,11 @@ export async function runHandlers(ctx: Context, purpose: HandlerPurpose, options
             await (entry.handle as (sous: unknown, input: unknown) => unknown)(tools, options.input);
         } catch (error) {
             threw = describeThrown(error);
-            collector.entries.push({ level: "error", message: `The ${purpose} handler ${entry.id} failed: ${threw}`, handler: entry.id });
+            collector.entries.push({ level: "error", message: `failed: ${threw}`, handler: entry.id });
         }
 
         for (const report of collector.entries) {
-            forward(ctx, report, ignoring);
+            forward(ctx, label, report, ignoring);
             errors += report.level === "error" ? 1 : 0;
             warnings += report.level === "warn" ? 1 : 0;
         }
@@ -87,6 +114,7 @@ export async function runHandlers(ctx: Context, purpose: HandlerPurpose, options
         ran.push({
             id: entry.id,
             plugin: record.plugin,
+            label,
             ...(entry.recipe === undefined ? {} : { recipe: entry.recipe }),
             reports: collector.entries,
             ...(threw === undefined ? {} : { threw }),
@@ -96,20 +124,21 @@ export async function runHandlers(ctx: Context, purpose: HandlerPurpose, options
     return { purpose, ran, errors, warnings, ignoredErrors: ignoring ? errors : 0, failed: errors > 0 && !ignoring };
 }
 
-/** Hands one report to the command's reporter. An ignored failed check is shown as a warning. */
-function forward(ctx: Context, report: HandlerReportEntry, ignoring: boolean): void {
+/** Hands one report to the command's reporter, naming who reported it. An ignored failed check is shown as a warning. */
+function forward(ctx: Context, label: string, report: HandlerReportEntry, ignoring: boolean): void {
     const details = { handler: report.handler };
+    const line = reportLine(label, report.message);
 
     if (report.level === "error") {
         if (ignoring) {
-            ctx.reporter.warning(`${report.message} (a failed check, ignored)`, details);
+            ctx.reporter.warning(`${line} (a failed check, ignored)`, details);
         } else {
-            ctx.reporter.error(report.message, details);
+            ctx.reporter.error(line, details);
         }
     } else if (report.level === "warn") {
-        ctx.reporter.warning(report.message, details);
+        ctx.reporter.warning(line, details);
     } else {
-        ctx.reporter.info(report.message, details);
+        ctx.reporter.info(line, details);
     }
 }
 

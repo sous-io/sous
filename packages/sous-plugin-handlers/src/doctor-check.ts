@@ -6,7 +6,7 @@
 
 import { BufferedReporter, type Context } from "@sous-io/sous-plugin-api";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity, type DoctorCheckResult, type DoctorRun } from "@sous-io/sous-plugin-doctor";
-import { runHandlers } from "./run.js";
+import { reportLine, runHandlers } from "./run.js";
 
 /** What the check finds. */
 export async function checkHandlers(ctx: Context, run: Pick<DoctorRun, "configFailed">): Promise<DoctorCheckResult> {
@@ -22,7 +22,7 @@ export async function checkHandlers(ctx: Context, run: Pick<DoctorRun, "configFa
         return { status: "ok", summary: "No recipe or plugin declares a check handler." };
     }
 
-    const lines = (level: "error" | "warn") => result.ran.flatMap((one) => one.reports.filter((report) => report.level === level).map((report) => `${one.id}: ${report.message}`));
+    const lines = (level: "error" | "warn") => result.ran.flatMap((one) => one.reports.filter((report) => report.level === level).map((report) => reportLine(one.label, report.message)));
     const ran = `${result.ran.length} check ${result.ran.length === 1 ? "handler" : "handlers"} ran`;
 
     if (result.errors > 0) {

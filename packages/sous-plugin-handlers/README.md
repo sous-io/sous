@@ -4,7 +4,8 @@ Runs handlers: functions a recipe or a plugin provides for a purpose (`check`, `
 `beforeBuild`, `afterBuild`, `uninstall`, `migrate`). It defines the `handler` entity kind, the
 helpers a handler receives as `sous`, and one internal intent per purpose (`handlers.check`,
 `handlers.beforeBuild`, `handlers.afterBuild`, `handlers.uninstall`, `handlers.migrate`).
-`configure` handlers run inside the `handlers/configure` contributor.
+`configure` handlers run inside the `handlers/configure` contributor. Every line a handler reports is
+printed with who reported it in front (`handlerLabel` in `src/run.ts`).
 
 It adds no commands.
 

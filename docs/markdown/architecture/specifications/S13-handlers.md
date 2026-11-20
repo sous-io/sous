@@ -89,8 +89,10 @@ Following L8, the manifest becomes config before anything acts on it:
    trusts and has switched on.
 2. The contributor `handlers/recipes` responds to `recipes.handlers` by adding a `handler` entity for each
    entry, after checking the file stays inside the recipe (the same check a recipe's plugin bundle
-   gets). Its id is `<namespace>/<recipe>/<purpose>/<function>`; a repeat gets `#2`, `#3`. An entry
-   repeated exactly (two contributors declaring one manifest) is one handler.
+   gets). Its id is `<namespace>/<recipe>/<purpose>/<file>#<function>`
+   (`voltagrid/knowledge-worker/check/handlers/prerequisites.js#checkCommands`), so two files exporting
+   one function name are told apart. An entry repeated exactly (two contributors declaring one manifest)
+   is one handler.
 3. The entity's function imports the file the first time a handler from it runs, and calls the named
    export. A missing file or export fails that handler with a message naming the recipe.
 
@@ -120,13 +122,20 @@ register(sous) {
 ```
 
 `sous.handlers.add(purpose, { id, handle, order? })` is part of the plugin API (`@sous-io/sous-plugin-api`). It
-adds a `handler` entity of the registering plugin, `{ id, purpose, handle, order? }`; the kind is
+adds a `handler` entity of the registering plugin, `{ id, purpose, handle, order?, plugin }` (`plugin` is the
+plugin's name, which the engine fills in); the kind is
 defined by `sous-plugin-handlers`. The handler's types (`HandlerTools`, the second argument of each
 purpose) reach plugin authors through `SousHandlerTypes`, which `sous-plugin-handlers` fills in by
 declaration merging, as `SousServices` is filled in.
 
 A plugin's form of `configure` is `sous.config.contribute`, as before; `sous.handlers.add("configure", ...)`
 also works and runs with the recipes' `configure` handlers.
+
+`sous.handlers.add("uninstall", ...)` and `sous.handlers.add("migrate", ...)` throw a `PluginError`
+naming the plugin, the purpose and the handler's id, and saying to declare the handler in the recipe's
+manifest, whose entry may point at a function the plugin's bundle exports. Sous runs those two purposes
+only for a recipe (removed, or moved to a new version), so a plugin's would never run; the type of
+`add` (`PluginHandlerPurpose`) leaves them out too.
 
 ## What a Handler Receives
 
@@ -166,8 +175,17 @@ throws, telling the author to declare the edit.
 
 A handler never prints (L3). What it reports is collected, returned in the run's result, and handed to
 the chain's reporter, the front end's: `error` at `error`, `warn` at `warning`, `info` at `info`, each
-with `{ handler: <id> }` as details. A handler that throws counts as one `error`, naming it, and the
-handlers after it still run.
+with `{ handler: <id> }` as details. Each line names who reported it, from one helper (`handlerLabel` in
+`sous-plugin-handlers/src/run.ts`), used by the intents, the `handlers/configure` contributor and the
+doctor check alike:
+
+```text
+<namespace>/<recipe> (<purpose>: <function>): <message>
+<plugin> (<purpose>: <id>): <message>
+```
+
+A handler that throws counts as one `error`, reported as `<who> (<purpose>: <handler>): failed: <error>`,
+and the handlers after it still run.
 
 ## Order
 
@@ -190,7 +208,7 @@ config build, so it runs in the contributor `handlers/configure`, which applies 
 ```ts
 interface HandlerRunResult {
     purpose: HandlerPurpose;
-    ran: Array<{ id: string; plugin: string; recipe?: string; reports: HandlerReportEntry[]; threw?: string }>;
+    ran: Array<{ id: string; plugin: string; recipe?: string; label: string; reports: HandlerReportEntry[]; threw?: string }>;
     errors: number;
     warnings: number;
     ignoredErrors: number;
@@ -233,8 +251,8 @@ the lockfile's order, and is forgotten. Nothing is stored: the lockfile holds th
 >
 >   -- **Luke Chavers** in an agent session (2026-11-18)
 
-Plugins installed from npm get no `migrate` call: their version changes when the package manager installs
-a new one, which sous does not see.
+A plugin cannot add a `migrate` handler (see "In a Plugin"); a plugin installed from npm changes version
+when the package manager installs a new one, which sous does not see.
 
 ### `uninstall`
 
@@ -249,6 +267,17 @@ reported; the removal stands. A recipe or plugin removed by hand gets no call:
 >   -- **Luke Chavers** in an agent session (2026-11-17)
 
 ## Changes
+
+### 2026-11-20: Plugins cannot add `uninstall` or `migrate`; report lines and ids name their source (gh-288)
+
+Luke's ruling (option 1 of the walk on 2026-11-20): `sous.handlers.add("uninstall" | "migrate", ...)`
+throws a `PluginError` naming the plugin and pointing at the recipe manifest route, since a plugin's
+handlers of those purposes never ran (`handlers.uninstall` and `handlers.migrate` run only the named
+recipes' handlers). Every line a handler reports, and the line for one that threw, now starts with the
+recipe or plugin, the purpose and the handler; the doctor check's lines use the same helper. A recipe's
+handler id includes its file, and the `#2` counter for a repeat is gone, since an exact repeat is already
+one handler. The engine records the registering plugin on the entity (`plugin`). The label's wording is
+the agent's, from the example in the issue.
 
 ### 2026-11-18: The build order, as built
 

@@ -2011,3 +2011,9 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should create starter files and folders and roll them back safely" (`src/apply.spec.ts`): `directories.created` also lists `.kw`, the folder created to hold `.kw/descriptor.json`, and the rollback removes `.kw`.
   - **Why:** a new file's missing parent folders are now created, recorded and rolled back like a declared folder's.
 - **New** in `src/apply.spec.ts`: "should remove the parent folders it created for a starter file", "should keep a parent folder that existed, holds other files or is still wanted", "should remove the .claude folder a set created settings.json in" and "should read a history without createdFolders as recording no folders".
+
+### Plugin uninstall and migrate handlers refused; report lines and ids name their source (sous-plugin-handlers; gh-288)
+
+- **Changed** in `test/plugin.test.ts`: every expected report line now starts with who reported it (`sous-plugin-a (check: a/needs-jq): ran a/needs-jq`, `acme/tool (migrate: migrate): migrated from 1.0.0 to 2.0.0`), a thrown error reads `<who>: failed: <error>`, and a recipe handler's id includes its file (`z/last/afterBuild/h.js#two`). The `migrate` and `uninstall` tests filter lines with `includes` instead of `startsWith`.
+  - **Why:** report lines name the recipe or plugin and the handler, and ids name the file, as #288 asked.
+- **New** in `test/plugin.test.ts`: "should refuse a plugin's uninstall handler..." and "...migrate handler...", "should name the file in the id of each of two same-named handlers", and "should name the recipe and the handler on every line it reports" (configure).
