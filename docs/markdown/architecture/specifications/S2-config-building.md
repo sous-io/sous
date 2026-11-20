@@ -98,7 +98,11 @@ come in the same way, from the plugins that own them (S6).
 3. A contributor is given the config made from every other contributor's latest patch, without its
    own. It may also read its own previous patches. So no contributor has to make itself idempotent.
 4. Every read through the builder is recorded: each config key read, with the value it saw, and each
-   entity list or entity read, with which entries existed (their ids and plugins).
+   entity list or entity read, with which entries existed (their ids, the plugin or contributor
+   that added them, and a hash of each entry's fields that are not functions). Methods are left
+   out of the hash, since they never compare equal across runs, so an entity must carry as data
+   everything its methods depend on; an entity whose data lives only in its methods' closures reads
+   the same when it is replaced, and its readers never run again.
 5. A contributor adds the entities the config creates through the builder (`config.addEntity`).
    They are part of its patch, so they are removed and re-added when it re-runs (S1, "Entities").
 6. During config building, contributors read entities through the builder (`config.entities(kind)`,
@@ -840,6 +844,14 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-20: An entity read records a hash of the entity's data
+
+"The Builder", rule 4, now says what core already did: an entity read records a
+hash of the entry's fields that are not functions, and so an entity must carry as data everything
+its methods depend on. The `recipe-answers` variable source kept its definitions only in its
+methods, so a recipe manifest condition reading an answer never saw it (#266); it now carries them
+as `definitions`.
 
 ### 2026-11-18: Keys and items carry their comment lines; a key can go back where it was
 

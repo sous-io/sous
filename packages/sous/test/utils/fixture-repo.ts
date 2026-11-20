@@ -53,6 +53,8 @@ export type RecipeFixture = {
   variables?: unknown[];
   /** The recipe's `contents` block; defaults to a single skills entry. */
   contents?: unknown[];
+  /** The recipe's `edits` block: changes to documents the recipe does not own. */
+  edits?: unknown[];
   /** The recipe's `handlers` block: each purpose's `{ file, handler }` list. */
   handlers?: Record<string, Array<{ file: string; handler: string }>>;
 };
@@ -91,6 +93,7 @@ export async function buildFixtureRepo(
           ...(recipe.depends === undefined ? {} : { depends: recipe.depends }),
           ...(recipe.subscribes === undefined ? {} : { subscribes: recipe.subscribes }),
           contents: recipe.contents ?? [{ kind: "skills", include: ["skills/**/*.md"] }],
+          ...(recipe.edits === undefined ? {} : { edits: recipe.edits }),
           ...(recipe.variables === undefined ? {} : { variables: recipe.variables }),
           ...(recipe.handlers === undefined ? {} : { handlers: recipe.handlers }),
         },

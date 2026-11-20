@@ -46,6 +46,12 @@ export interface VariableSourceContext {
 /**
  * A `variable-source` entity: an extra source of variables, such as recipe answers. Its values sit
  * between the auto-variables and `_env`, so the user's `_env` and `_vars` win.
+ *
+ * A source must carry, as fields that are not functions, everything its methods depend on other
+ * than the context they are given (recipe answers carry their `definitions`). Core tells one
+ * source from another by those fields alone (spec S2, "Every read through the builder is
+ * recorded"), so a source whose data lives only in its methods' closures looks unchanged when it
+ * is replaced, and a contributor that read it never runs again.
  */
 export interface VariableSourceEntity {
     id: string;
