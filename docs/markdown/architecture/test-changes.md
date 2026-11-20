@@ -1997,3 +1997,11 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should compile only the targets that read a changed file" (`targets.test.ts`): the target naming the missing `@later.md` is compiled and its output holds `@later.md`, instead of reporting "Include not found".
 - **Replaced** the `looksLikeIncludeLine` and `isIncludeLine` cases in `sous-plugin-compiler/src/paths.spec.ts` with cases for `importPath`, `isIncludableFile`, `isSousIncludeForm` and the new `isIncludeLine`; `looksLikeIncludeLine` and `INCLUDE_LINE_PATTERN` are gone.
 - **New** `sous-plugin-compiler/src/markdown.spec.ts` (the rows of the comparison with Claude Code), `sous-plugin-compiler/src/globs.spec.ts` (the 21-row order table), "includes anywhere in Markdown text" and "should leave a glob's binary matches out" in `includes.test.ts`, and "should order a recipe's memories like a glob include" in `sous-plugin-memories/src/listing.spec.ts`.
+
+### `vars ask --save-locally` and `--save-shared` replace `--env-file` (sous-plugin-recipe-answers; gh-263, gh-230 item 11)
+
+- **Removed** `sous-plugin-recipe-answers/src/env-file.spec.ts` ("resolveEnvFile()"), with the resolver it tested.
+  - **Why:** Node 22 and later claim `--env-file` anywhere on their command line, so the flag never reached sous; two switches name the two files instead, and nothing is left to resolve.
+- **Changed** the `describe("--env-file")` block of `src/ask.spec.ts` is now `describe("--save-locally and --save-shared")`; its tests are unchanged.
+- **Changed** `e2e/scenarios/04-variables.mjs`: "--env-file .sous/.env.local writes the answer to the machine-local file" is now "--save-locally writes the answer to the machine-local file", and "an --env-file that is not one of the two allowed files fails naming both" is now "--save-locally and --save-shared together fail naming both".
+- **New** "should store every answer in the file a save switch names" (`test/plugin.test.ts`).

@@ -55,7 +55,7 @@ export interface AskRun {
     /** What a hidden value prints as. */
     readonly hidden: string;
     readonly dryRun: boolean;
-    /** The env file every answer of this run goes to (`--env-file`); unset means each answer's own. */
+    /** The env file every answer of this run goes to (`--save-locally` or `--save-shared`); unset means each answer's own. */
     readonly envFile?: EnvFileKind;
     /** `--yes`: the committed file may receive a secret or machine-specific answer without asking. */
     readonly yes?: boolean;
@@ -243,7 +243,7 @@ export function committedFileWarning(variable: DefinedVariable, file: string): s
 }
 
 /**
- * Where an answer goes: the run's `--env-file` when it has one, else the file given. Returns
+ * Where an answer goes: the file `--save-locally` or `--save-shared` chose for the run, else the file given. Returns
  * false when the answer would reach the committed file against its recipe's wishes and the
  * person answering declined (or `--yes` was not passed and nobody can be asked).
  */

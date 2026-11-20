@@ -638,9 +638,9 @@ Inspects the questions the project's recipes ask, and the answers they hold; see
 - `vars list` lists every variable, with where its value came from.
 - `vars show NAME` shows everything about one variable. `NAME` may also be an environment variable name that
   answers it.
-- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--env-file .env` or
-  `--env-file .env.local` stores every answer of the run in that one file (committed, or this machine only); a
-  secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
+- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--save-shared` stores
+  every answer of the run in `.sous/.env` (committed), and `--save-locally` in `.sous/.env.local` (this machine
+  only); the two cannot be used together. A secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
 
 ```bash
 sous vars show workflow/task-files.apiUrl

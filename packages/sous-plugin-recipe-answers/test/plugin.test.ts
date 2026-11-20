@@ -120,6 +120,23 @@ describe("sous-plugin-recipe-answers through the engine", () => {
         expect(engine.config.services.get("recipe-answers.answers").get().merged.taskRoot).toBe("docs/tasks");
     });
 
+    /**
+     * `--save-locally` and `--save-shared` should send every answer of the run to one env file,
+     * whatever each variable's own file is, and refuse to be used together (gh-263).
+     */
+    it("should store every answer in the file a save switch names", async () => {
+        await engine.handle.submit({ intent: "vars.ask", input: { answer: ["workflow/task-files.taskRoot=docs/tasks"], saveLocally: true } }, { prompter: nonInteractivePrompter });
+
+        expect(standIns.env.files.local).toEqual({ SOUS_VAR_TASK_ROOT: "docs/tasks" });
+
+        await engine.handle.submit({ intent: "vars.ask", input: { answer: ["apiToken=tok_123"], saveShared: true, yes: true } }, { prompter: nonInteractivePrompter });
+
+        expect(standIns.env.files.shared).toEqual({ SOUS_VAR_API_TOKEN: "tok_123" });
+        await expect(
+            engine.handle.submit({ intent: "vars.ask", input: { answer: ["apiToken=x"], saveLocally: true, saveShared: true } }, { prompter: nonInteractivePrompter }),
+        ).rejects.toThrow("--save-locally and --save-shared cannot be used together");
+    });
+
     /** `vars ask <name>` should ask about that variable through the chain's prompter. */
     it("should ask a named variable through the prompter", async () => {
         const prompter = scriptedPrompter(["https://typed.example.com"]);
