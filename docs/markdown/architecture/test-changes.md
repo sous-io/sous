@@ -2077,3 +2077,9 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** `sous/test/utils/in-process.ts`: `runInProcess` takes an optional `answer` for typed questions; one that throws stands for Ctrl-C.
 - **Changed** "should refuse to install a recipe whose question nothing answers" (`sous/test/integration/repositories.test.ts`): it checks the lockfile is unchanged instead of expecting "Nothing was written." (the error is `vars.ask`'s own now). **New** "should not record trust in a repository when the subscription fails".
 - **New** in `sous/test/integration/subscription-add-checks-first.test.ts`: "should write nothing when a question is interrupted" and "should ask before writing, then write the answer with the subscription".
+
+### A target without an id is matched only with a target without an id (sous-lib-core, sous; gh-267 after 1.1.1)
+
+- **Changed** "should write a skill excluded for every other harness into Claude Code's skills only" (`sous/test/integration/harness-only-targets.test.ts`): the project's config also holds the skills target `sous init` writes (no `id`), and the gated skill ships a `SKILL.tpl.md`, a reference and a script; the test expects all three in `.claude/skills/skplug/`.
+  - **Why:** a target without an `id` was matched by its place among all targets, so the project's own target could take one of the gated skill's files for itself.
+- **New** "should match a target without an id only with a target without an id" (`sous-lib-core/src/config/harness-merge.spec.ts`).

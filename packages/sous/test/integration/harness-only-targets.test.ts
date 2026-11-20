@@ -64,7 +64,9 @@ beforeAll(async () => {
       ],
       files: {
         "skills/example-skill/SKILL.md": "# example\n",
-        "skills/skplug/SKILL.md": "# skplug\n",
+        "skills/skplug/SKILL.tpl.md": "# skplug\n",
+        "skills/skplug/references/x.md": "reference\n",
+        "skills/skplug/scripts/y.sh": "#!/bin/sh\necho y\n",
         "memories/shared.md": "SHARED MEMORY\n",
         "memories/claude.md": "CLAUDE ONLY MEMORY\n",
       },
@@ -72,13 +74,16 @@ beforeAll(async () => {
   ]);
 
   // Codex is turned on by writing its plugin's options, even as {}; Claude Code is on by default.
+  // The target without an id is the project's own skills target that `sous init` writes; a merge
+  // that matched it by place took one of skplug's files for it (#267).
   writeFixtureFile(
     path.join(projectRoot, ".sous", "sous.config.jsonc"),
     [
       "{",
       '  "name": "Harness Only Targets",',
       '  "plugins": { "options": { "@sous-io/sous-plugin-codex": {} } },',
-      '  "repos": { "sous-recipes": { "enabled": false } }',
+      '  "repos": { "sous-recipes": { "enabled": false } },',
+      '  "compilation": { "targets": [{ "entryGlob": "${sousDir}/skills/**/*", "globBase": "${sousDir}/skills", "outputs": [{ "destinationDir": "${projectRoot}/.claude/skills" }] }] }',
       "}",
       "",
     ].join("\n")
@@ -108,6 +113,8 @@ describe("files a recipe gives to one harness", () => {
     expect(exists(".claude/skills/example-skill/SKILL.md")).toBe(true);
     expect(exists(".agents/skills/example-skill/SKILL.md")).toBe(true);
     expect(exists(".claude/skills/skplug/SKILL.md")).toBe(true);
+    expect(exists(".claude/skills/skplug/references/x.md")).toBe(true);
+    expect(exists(".claude/skills/skplug/scripts/y.sh")).toBe(true);
     expect(exists(".agents/skills/skplug")).toBe(false);
   });
 

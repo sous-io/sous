@@ -137,7 +137,9 @@ as the build with no harness has it.**
 5. An entry marked with a harness that had no build of its own (no plugin registered it) stays as
    the build with no harness has it.
 6. For a path through an array (`compilation.targets[]`), each target of the build with no harness
-   is matched in a harness's build by its `id`, else by its place (ADR 0041):
+   is matched in a harness's build by its `id`. A target without an `id` (such as the project's own
+   skills target `sous init` writes) is matched with the target without an `id` in the same place
+   among those without one, never with a target that has an `id` (ADR 0041):
     - A target whose outputs are all marked with one harness that had a build comes whole from that
       harness's build, with only its outputs marked with that harness. What it is made of (a
       memories target's `content`, its `_vars`) is then that harness's: a memory a condition on
@@ -273,6 +275,15 @@ only in what happens after the builds finish.
   first guess, like every other budget.
 
 ## Changes
+
+### 2026-11-20: A target without an id is matched only with a target without an id
+
+"The Merge", rule 6 (#267, after 1.1.1). A target without an `id` was matched by its place among
+all targets, so in a project whose own skills target has no `id` (every project `sous init` made),
+a target only Claude Code's build holds could sit in that place, be taken for the project's target,
+and never be carried: a gated skill reached Claude Code without its `SKILL.md`, or without a
+reference file, depending on the order. A target without an `id` is now matched only with a target
+without an `id`, by its place among those.
 
 ### 2026-11-20: A target one harness's build holds reaches that harness
 

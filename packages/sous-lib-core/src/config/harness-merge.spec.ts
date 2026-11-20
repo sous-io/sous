@@ -199,6 +199,26 @@ describe("mergeHarnessBuilds", () => {
         });
     });
 
+    /**
+     * A target without an id (the project's own skills target `sous init` writes) is matched only
+     * with a target without an id, never with one in the same place that has one; otherwise the
+     * harness-only target at that place was taken for the project's target and never carried, and
+     * a gated skill reached Claude Code without its SKILL.md (#267).
+     *
+     * base:        [ own (no id), a ]
+     * claude-code: [ gate, own (no id), a ]
+     * // -> merged [ own, a, gate ]
+     */
+    it("should match a target without an id only with a target without an id", () => {
+        const own: JsonObject = { entryGlob: ".sous/skills/**/*", outputs: [{ destinationDir: ".claude/skills" }] };
+        const a: JsonObject = { id: "a", outputs: [{ destinationDir: ".claude/skills", harness: "claude-code" }] };
+        const gate: JsonObject = { id: "gate", entryPoint: "gate/SKILL.tpl.md", outputs: [{ destinationDir: ".claude/skills", harness: "claude-code" }] };
+
+        expect(merge({ compilation: { targets: [own, a] } }, { "claude-code": { compilation: { targets: [gate, own, a] } } })).toEqual({
+            compilation: { targets: [own, a, gate] },
+        });
+    });
+
     /** A target only a harness's build holds, with no output marked with that harness, is dropped. */
     it("should drop a carried target left with no outputs", () => {
         const base: JsonObject = { compilation: { targets: [] } };

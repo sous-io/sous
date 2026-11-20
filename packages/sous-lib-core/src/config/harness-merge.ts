@@ -62,7 +62,7 @@ export const CORE_HARNESS_LISTS: readonly HarnessListEntity[] = [
     {
         id: "compilation.outputs",
         path: "compilation.targets[].outputs",
-        description: "The outputs of each compilation target. A target is matched between builds by its id, else by its place.",
+        description: "The outputs of each compilation target. A target is matched between builds by its id; one without an id is matched by its place among the targets without one.",
     },
     { id: "editor.edits", path: "editor.edits", description: "The editor's list of document edits." },
     { id: "recipes.contents", path: "recipes.contents", description: "The contents groups of every active recipe." },
@@ -198,7 +198,7 @@ function mergeItems(node: JsonValue | undefined, others: Others, tail: readonly 
     let changed = false;
 
     const items = base.map((item, index) => {
-        const counterparts = others.map(([id, other]) => [id, counterpart(item, index, other)] as const);
+        const counterparts = others.map(([id, other]) => [id, counterpart(base, index, other)] as const);
 
         for (const [, found] of counterparts) {
             if (found !== undefined) {
@@ -307,21 +307,37 @@ function onlyMarked(node: JsonValue | undefined, rest: readonly ListSegment[], h
 }
 
 /**
- * The item of a harness's array that matches `item` of the base array: the one with the same `id`
- * when `item` has one, else the one in the same place.
+ * The item of a harness's array that matches the base array's item at `index`: the one with the
+ * same `id` when the item has one. An item without an id matches the item without an id in the same
+ * place among the items without an id, never an item that has one: a harness's build can hold
+ * targets the base does not, so counting every item would pair a project's own target with one of
+ * those (#267).
+ *
+ * ```ts
+ * // base:   [{ entryGlob }, { id: "a" }]
+ * // claude: [{ id: "gate" }, { entryGlob }, { id: "a" }]
+ * counterpart(base, 0, claude); // -> { entryGlob }, so { id: "gate" } stays unmatched and is carried
+ * ```
  */
-function counterpart(item: JsonValue, index: number, other: JsonValue | undefined): JsonValue | undefined {
+function counterpart(base: readonly JsonValue[], index: number, other: JsonValue | undefined): JsonValue | undefined {
     if (!Array.isArray(other)) {
         return undefined;
     }
 
-    const id = isObject(item) && typeof item.id === "string" ? item.id : undefined;
+    const id = idOf(base[index]);
 
     if (id !== undefined) {
-        return other.find((candidate) => isObject(candidate) && candidate.id === id);
+        return other.find((candidate) => idOf(candidate) === id);
     }
 
-    return other[index];
+    const place = base.slice(0, index).filter((item) => idOf(item) === undefined).length;
+
+    return other.filter((candidate) => idOf(candidate) === undefined)[place];
+}
+
+/** The `id` of an array item, when it is an object with a string `id`. */
+function idOf(item: JsonValue | undefined): string | undefined {
+    return isObject(item) && typeof item.id === "string" ? item.id : undefined;
 }
 
 /**
