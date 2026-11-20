@@ -312,6 +312,12 @@ from that harness's build:
 
 - a compilation output marked with a harness (`"harness": "codex"`) comes from that harness's build,
   with the `_vars` written on it;
+- a compilation target whose outputs are all marked with one harness comes whole from that
+  harness's build, so a memory a condition gives one harness reaches that harness's memories file;
+- a compilation target only a harness's build holds (a condition on `harness.id` left it out of the
+  build with no harness, such as a recipe's skills folder excluded for every other harness) is
+  added after the other targets, with only its outputs marked with that harness; a target with no
+  such output is left out;
 - an entry of `editor.edits` or `recipes.contents` that only a harness's build holds (a condition on
   `harness.id` put it there) is added, marked with that harness;
 - everything else keeps the value of the build with no harness.
