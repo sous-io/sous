@@ -548,6 +548,14 @@ export interface RecipesTrust {
     nameOf(repository: string): string | undefined;
     /** Asks (or, with `yes`, does not ask) to trust repositories, then adds them; asks through `io`. */
     confirm(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<ConfirmTrustResult>;
+    /**
+     * Only the question of `confirm`: asks (or, with `yes` or `dryRun`, does not ask) through `io`,
+     * and throws when trust is declined or cannot be asked. Writes nothing, so a command can trust
+     * in memory (a "what if" config) until everything else has passed, then `record`.
+     */
+    decide(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<void>;
+    /** Only the writing of `confirm`: adds each repository to `conf.d/500-repos.jsonc`; one with no URL is named in `needUrl`. */
+    record(missing: readonly MissingRepo[], options?: { dryRun?: boolean }): Promise<{ added: string[]; needUrl: string[] }>;
 }
 
 // =============================================================================================
@@ -1298,7 +1306,10 @@ export interface SubscriptionAddInput extends RecipeChangeFlags, AnswerFlags {
     installPlugins?: boolean;
 }
 
-/** The result of `subscription.add`. It runs `vars.ask` and `build` afterwards through `ctx.run`. */
+/**
+ * The result of `subscription.add`. Its `vars.ask` follow-up holds the questions it asked before
+ * writing (`recipe-answers.asking`); `build` runs afterwards through `ctx.run`.
+ */
 export interface SubscriptionAddResult {
     readonly ref: string;
     /** The key written under `subscriptions`. */

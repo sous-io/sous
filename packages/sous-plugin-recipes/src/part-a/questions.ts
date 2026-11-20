@@ -31,7 +31,7 @@ interface DefinitionsLike {
 }
 
 /** The ladder's rungs, in words, as `sous vars` names them. */
-export const RUNG_LABELS: Readonly<Record<string, string>> = {
+const RUNG_LABELS: Readonly<Record<string, string>> = {
     mapping: "mapping record",
     recipe: "recipe scope",
     namespace: "namespace scope",

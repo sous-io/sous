@@ -1,27 +1,39 @@
 /**
- * Checking the answers a subscription was given up front (`--answer`, `--answers-file`) before
- * anything is written, as before the refactor: an answer whose name nothing declares, or that does
- * not fit its definition, fails the run with the project unchanged. Storing them is `vars.ask`'s
- * job, after subscribing.
+ * The answers of a subscription, settled before anything is written (#230 item 1). An answer given
+ * up front (`--answer`, `--answers-file`) whose name nothing declares, or that does not fit its
+ * definition, fails the run with the project unchanged; then the recipes' questions are asked
+ * through `recipe-answers.asking`, which holds the answers until the subscription is written.
  *
- * The reading and matching are `recipe-answers.preanswers`'s; without that plugin nothing is
- * checked here.
+ * The reading, matching and asking are `recipe-answers`'s; without that plugin nothing is checked
+ * or asked here.
  */
 
-import { NonInteractiveError, SousError, type Context } from "@sous-io/sous-plugin-api";
+import { SousError, type Context, type IntentOutputs } from "@sous-io/sous-plugin-api";
 import type { AnswerFlags, ResolvedRecipe } from "../types.js";
-import { definedVariables, plannedQuestionsOf, RUNG_LABELS, type DefinedLike } from "./questions.js";
-import { hasIntent } from "./util.js";
+import { definedVariables, type DefinedLike } from "./questions.js";
 
 /** The part of `recipe-answers.preanswers` read here, by shape. */
 interface PreanswersLike {
     read(inputs: { answer?: readonly string[]; answersFile?: string }): Promise<unknown[]>;
-    match(answers: readonly unknown[], variables: readonly unknown[]): Array<{ readonly target: { readonly definition: { readonly name: string } } }>;
+    match(answers: readonly unknown[], variables: readonly unknown[]): unknown[];
 }
 
 /** The part of `recipe-answers.definitions` read here, by shape. */
 interface DefinitionsLike {
     listSync(): DefinedLike[];
+    combine(variables: readonly DefinedLike[]): DefinedLike[];
+}
+
+/** Answers asked for and held in memory (`recipe-answers`'s `HeldAnswers`), by shape. */
+export interface HeldAnswersLike {
+    readonly outputs: IntentOutputs<object>;
+    readonly empty: boolean;
+    write(): Promise<void>;
+}
+
+/** The part of `recipe-answers.asking` read here, by shape. */
+interface AskingLike {
+    hold(variables: readonly DefinedLike[], input: { within: readonly string[]; answer?: readonly string[]; answersFile?: string }, ctx: Context): Promise<HeldAnswersLike>;
 }
 
 /**
@@ -65,90 +77,42 @@ export async function checkProvidedAnswers(ctx: Context, resolved: readonly Reso
     }
 }
 
+
 /**
- * Throws, before anything is written, when there is no terminal to ask on and a variable the
- * recipes require would have no answer: none in scope, none given up front (`--answer`,
- * `--answers-file`), and no default. `vars.ask`, which runs after subscribing, would fail on it
- * once the subscription was already recorded. The recipes' files must be on this machine already
- * (or their index must record their questions).
- *
- * ```text
- * Error: One variable still needs an answer, and there is no terminal to ask on.
- *   Nothing was written. Set one of the environment variables listed under each variable, ...
- *   region (acme/gadget): Which region does the agent deploy to?
- *     SOUS_VAR_ACME_GADGET_REGION  (recipe scope)
- * ```
+ * Asks the questions of a subscription's recipes now, before anything is written, as `vars.ask`
+ * would after subscribing: what they require and nothing answers, after the answers given up front.
+ * The answers are held in memory; the caller writes them with the subscription. Throws as `vars.ask`
+ * does when a question cannot be asked (no terminal), or when one is declined or interrupted, with
+ * nothing written. `undefined` when no plugin asks. The recipes' files must be on this machine
+ * already, or their index must record their questions.
  */
-export async function checkAnswerable(ctx: Context, resolved: readonly ResolvedRecipe[], flags: AnswerFlags): Promise<void> {
-    if (ctx.prompter.interactive || !hasIntent(ctx, "vars.ask")) {
-        return;
+export async function holdAnswers(ctx: Context, resolved: readonly ResolvedRecipe[], flags: AnswerFlags): Promise<HeldAnswersLike | undefined> {
+    if (!ctx.services.has("recipe-answers.asking") || !ctx.services.has("recipe-answers.definitions")) {
+        return undefined;
     }
 
+    const definitions = ctx.services.get("recipe-answers.definitions" as never) as DefinitionsLike;
     const { defined } = await definedVariables(ctx, resolved);
-    // Without `recipe-answers.preanswers` to match them, each `--answer` counts by the name before its `=`.
-    const given = new Set<string>(ctx.services.has("recipe-answers.preanswers") ? [] : (flags.answer ?? []).map((entry) => entry.slice(0, Math.max(0, entry.indexOf("="))).trim()));
-
-    if (((flags.answer !== undefined && flags.answer.length > 0) || flags.answersFile !== undefined) && ctx.services.has("recipe-answers.preanswers")) {
-        const preanswers = ctx.services.get("recipe-answers.preanswers" as never) as PreanswersLike;
-        const answers = await preanswers.read({ ...(flags.answer === undefined ? {} : { answer: flags.answer }), ...(flags.answersFile === undefined ? {} : { answersFile: flags.answersFile }) });
-        let existing: DefinedLike[] = [];
-
-        try {
-            existing = ctx.services.has("recipe-answers.definitions") ? (ctx.services.get("recipe-answers.definitions" as never) as DefinitionsLike).listSync() : [];
-        } catch {
-            existing = [];
-        }
-
-        for (const applied of preanswers.match(answers, [...defined, ...existing])) {
-            given.add(applied.target.definition.name);
-        }
-    }
-
-    const missing = plannedQuestionsOf(ctx, defined).filter(
-        (question) =>
-            question.definition.required === true &&
-            !question.answered &&
-            question.unanswerable === undefined &&
-            question.definition.default === undefined &&
-            !given.has(question.definition.name),
-    );
-
-    if (missing.length === 0) {
-        return;
-    }
-
-    const first = missing[0]!;
-    const error = new NonInteractiveError(
-        missing.length === 1 ? first.definition.prompt : `${missing.length} questions about recipe variables`,
-        missing.length === 1 ? `--answer ${first.definition.name}=<value>` : "--answer <name>=<value>",
-        {
-            details: [
-                "Nothing was written. Set one of the environment variables listed under each variable, pass --answer <name>=<value>, or run the command from a terminal.",
-                ...missing.flatMap((question) => [
-                    `${question.definition.name} (${question.recipe}): ${question.definition.prompt}`,
-                    ...candidatesOf(ctx, defined, question.recipe, question.definition.name).map((candidate) => `  ${candidate.envName}  (${RUNG_LABELS[candidate.rung] ?? candidate.rung})`),
-                ]),
-            ],
-            exitCode: 1,
-        },
-    );
-
-    error.message = missing.length === 1 ? "One variable still needs an answer, and there is no terminal to ask on." : `${missing.length} variables still need answers, and there is no terminal to ask on.`;
-
-    throw error;
-}
-
-/** The environment names that would answer a variable, most specific first, from `recipe-answers.ladder`. */
-function candidatesOf(ctx: Context, defined: readonly DefinedLike[], recipe: string, name: string): Array<{ rung: string; envName: string }> {
-    const variable = defined.find((entry) => `${entry.recipe.namespace}/${entry.recipe.name}` === recipe && entry.definition.name === name);
-
-    if (variable === undefined || !ctx.services.has("recipe-answers.ladder")) {
-        return [];
-    }
+    // The active recipes' definitions too, so a name they share is settled as `vars.ask` settles it;
+    // an active recipe these define again is left out, since its new version replaces it.
+    const replaced = new Set(defined.map((variable) => `${variable.recipe.namespace}/${variable.recipe.name}`));
+    let active: DefinedLike[] = [];
 
     try {
-        return (ctx.services.get("recipe-answers.ladder" as never) as { candidates(variable: unknown): Array<{ rung: string; envName: string }> }).candidates(variable);
+        active = definitions.listSync().filter((variable) => !replaced.has(`${variable.recipe.namespace}/${variable.recipe.name}`));
     } catch {
-        return [];
+        active = [];
     }
+
+    const asking = ctx.services.get("recipe-answers.asking" as never) as AskingLike;
+
+    return asking.hold(
+        definitions.combine([...active, ...defined]),
+        {
+            within: resolved.map((recipe) => recipe.key),
+            ...(flags.answer === undefined ? {} : { answer: flags.answer }),
+            ...(flags.answersFile === undefined ? {} : { answersFile: flags.answersFile }),
+        },
+        ctx,
+    );
 }

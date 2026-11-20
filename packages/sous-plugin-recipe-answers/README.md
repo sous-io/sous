@@ -17,6 +17,11 @@ It adds these commands:
 import type {} from "@sous-io/sous-plugin-recipe-answers/types";
 
 const answers = ctx.services.get("recipe-answers.answers").get();
+
+// Ask a not-yet-active recipe's questions now, and write the answers later (as `subscription add` does).
+const held = await ctx.services.get("recipe-answers.asking").hold(variables, { within: ["acme/gadget"] }, ctx);
+// ... write the subscription ...
+await held.write();
 ```
 
 ## Where things are

@@ -10,7 +10,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { Prompter, Reporter } from "@sous-io/sous-plugin-api";
+import type { Context, IntentOutputs, Prompter, Reporter } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-confd/types";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
@@ -369,6 +369,46 @@ export interface VarsMapResult {
     readonly dryRun: boolean;
 }
 
+/** What {@link RecipeAnswersAsking.hold} asks about: the recipes, and the answers given up front. */
+export interface HoldAnswersInput extends ProvidedAnswerInputs {
+    /** The recipes (`namespace/recipe`) whose questions are asked, as `vars.ask --within` asks them. */
+    readonly within: readonly string[];
+    /** Answers yes to storing a secret or machine-specific answer in the committed env file. */
+    readonly yes?: boolean;
+}
+
+/** Answers asked for and held in memory, written only when {@link HeldAnswers.write} is called. */
+export interface HeldAnswers {
+    /** What asking found, as `vars.ask` reports it; each held answer's outcome is what writing it does. */
+    readonly outputs: IntentOutputs<VarsAskResult>;
+    /** Whether anything is held to write. */
+    readonly empty: boolean;
+    /** Writes every held answer and mapping record, in the order they were given, through their owners. */
+    write(): Promise<void>;
+}
+
+/**
+ * Asking before anything is written. `subscription add` asks a recipe's questions before it
+ * records the subscription, so a declined or failed question (or Ctrl-C) leaves the project
+ * unchanged.
+ *
+ * ```ts
+ * const held = await asking.hold(variables, { within: ["acme/gadget"], answer: ["region=eu"] }, ctx);
+ * // ... write the subscription, the lockfile ...
+ * await held.write();
+ * ```
+ */
+export interface RecipeAnswersAsking {
+    /**
+     * Asks, through `ctx`'s prompter, what `vars.ask --within` asks: every required question of the
+     * `within` recipes that nothing answers, after the answers given up front. `variables` are the
+     * definitions to ask from, which may belong to recipes that are not active yet; pass the active
+     * recipes' definitions too, so shared names are settled as `vars.ask` settles them. Throws as
+     * `vars.ask` does when a question cannot be asked (no terminal). Writes nothing.
+     */
+    hold(variables: readonly DefinedVariable[], input: HoldAnswersInput, ctx: Context): Promise<HeldAnswers>;
+}
+
 /** Where `vars.ask` asks and reports (the chain's own). */
 export interface AskIo {
     readonly prompter: Prompter;
@@ -383,6 +423,7 @@ declare module "@sous-io/sous-plugin-api" {
         "recipe-answers.preanswers": RecipeAnswersPreanswers;
         "recipe-answers.mappings": RecipeAnswersMappings;
         "recipe-answers.validator": RecipeAnswersValidator;
+        "recipe-answers.asking": RecipeAnswersAsking;
     }
 
     interface SousIntents {

@@ -110,10 +110,12 @@ trust question first, and nothing is fetched from it before the answer. The subs
 recorded in its canonical form, `namespace/recipe`.
 
 The whole dependency closure resolves before anything is written, and so is everything else that
-could make the subscription fail: every recipe it installs is downloaded into this machine's store,
-and without a terminal a required question nothing answers (no `--answer`, no value in scope, no
-default) is an error. Only then is anything written; an install is whole or not at all, and a failed
-one leaves the project as it was.
+could make the subscription fail: a repository you agree to trust along the way is trusted in memory
+only, every recipe the subscription installs is downloaded into this machine's store, and the
+recipes' questions are asked (without a terminal, a required question nothing answers, with no
+`--answer`, no value in scope and no default, is an error). Only then are the trust, the
+subscription, the lockfile and the answers written; an install is whole or not at all, and a failed
+one, a declined question or Ctrl-C leaves the project as it was.
 
 Written without `@<range>`, a subscription accepts any version, so `sous update` may move it to a new
 major version; with one, it stays in that range. The plan shown before the question, and the result,
@@ -160,8 +162,8 @@ $ sous subscription add workflow/qa-variables
   • Any scripts it ships can be run on this machine when an agent uses them. Sous does not
     run them itself, and it cannot vouch for what they do.
 // two more bullets: the variables it publishes that require an answer and have none yet are
-// asked about at the end of the command and written into this project's env files, and its
-// dependencies are pinned in the lockfile
+// asked about before anything is written, and the answers are written into this project's env
+// files with the subscription; and its dependencies are pinned in the lockfile
   • If a dependency turns out to live in a repository this project does not trust, sous stops
     and asks about that repository by name before fetching anything from it.
 ? Proceed? (y/N) y
@@ -171,10 +173,12 @@ $ sous subscription add workflow/qa-variables
   workflow/qa-variables  0.1.0    qa-recipes  you subscribed to it
 ```
 
-Answering no ends the command with nothing downloaded and no change to your config. Three things
-change when you say yes: `.sous/conf.d/510-subscriptions.jsonc` records the subscription,
-`.sous/sous.lock.json` records the exact versions and hashes, and the machine-wide store under
-`~/.sous/cache` gains the files (the first two are committed; the store is not). It then builds, so
+Answering no ends the command with nothing downloaded and no change to your config. When you say
+yes, the machine-wide store under `~/.sous/cache` gains the files and the recipes' questions are
+asked; then `.sous/conf.d/510-subscriptions.jsonc` records the subscription, `.sous/sous.lock.json`
+records the exact versions and hashes, the answers go to the env files, and any repository you
+agreed to trust goes to `.sous/conf.d/500-repos.jsonc` (all but the store and `.env.local` are
+committed). It then builds, so
 the new skills are on disk when it returns; `--no-build` defers that, and a failed build keeps it.
 
 ?> Only a recipe a manifest lists under `subscribes` contributes files; one listed under `depends`,

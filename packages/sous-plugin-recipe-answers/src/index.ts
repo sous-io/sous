@@ -9,7 +9,7 @@
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { AnswersService, computeAnswers } from "./answers.js";
 import { DefinitionsService } from "./definitions.js";
-import { varsIntents } from "./intents.js";
+import { asking, varsIntents } from "./intents.js";
 import { envVarLookup, variableLookup } from "./lookups.js";
 import { MappingsService } from "./mappings.js";
 import { PreanswersService } from "./preanswers.js";
@@ -48,6 +48,7 @@ export const recipeAnswersPlugin: PluginDefinition = definePlugin({
         sous.services.add("recipe-answers.preanswers", (_config, ctx) => new PreanswersService(ctx), { lifetime: "factory" });
         sous.services.add("recipe-answers.mappings", (_config, ctx) => new MappingsService(ctx), { lifetime: "config" });
         sous.services.add("recipe-answers.validator", () => validator, { lifetime: "singleton" });
+        sous.services.add("recipe-answers.asking", () => asking, { lifetime: "singleton" });
 
         sous.entities.add("config-key", {
             id: "varMappings",

@@ -45,11 +45,15 @@ export class Trust implements RecipesTrust {
     }
 
     async confirm(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<ConfirmTrustResult> {
-        if (missing.length === 0) {
-            return { accepted: [], added: [], needUrl: [] };
-        }
+        await this.decide(missing, options, io);
 
-        if (options.yes !== true && options.dryRun !== true) {
+        const { added, needUrl } = await this.record(missing, options);
+
+        return { accepted: [...missing], added, needUrl };
+    }
+
+    async decide(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<void> {
+        if (missing.length > 0 && options.yes !== true && options.dryRun !== true) {
             if (!io.prompter.interactive) {
                 throw new NonInteractiveError(trustQuestion(missing), "--yes", { details: nonInteractiveDetails(missing) });
             }
@@ -64,7 +68,9 @@ export class Trust implements RecipesTrust {
                 });
             }
         }
+    }
 
+    async record(missing: readonly MissingRepo[], options: { dryRun?: boolean } = {}): Promise<{ added: string[]; needUrl: string[] }> {
         const managed = this.services.get("confd.managed");
         const added: string[] = [];
         const needUrl: string[] = [];
@@ -75,24 +81,11 @@ export class Trust implements RecipesTrust {
                 continue;
             }
 
-            // Every requester is recorded, so removal can say why a repository is there.
-            const requesters = [...new Set(repo.requiredBy.map((entry) => entry.requestedBy))].sort(compareBytewise);
-
-            await writeRepoEntry(
-                managed,
-                repo.name,
-                {
-                    url: repo.url,
-                    ...(repo.provider === undefined ? {} : { provider: repo.provider }),
-                    addedAt: nowIso(),
-                    addedBy: requesters.length > 0 ? requesters.join(", ") : USER_ADDED_BY,
-                },
-                options.dryRun === true,
-            );
+            await writeRepoEntry(managed, repo.name, trustEntry(repo), options.dryRun === true);
             added.push(repo.name);
         }
 
-        return { accepted: [...missing], added, needUrl };
+        return { added, needUrl };
     }
 
     /** The canonical identity of a URL, locator or identity, or `undefined` when no host reads it. */
@@ -104,6 +97,19 @@ export class Trust implements RecipesTrust {
             return repository.includes("/") && !repository.includes("://") ? repository.toLowerCase() : undefined;
         }
     }
+}
+
+/** The entry trusting a repository writes, or a "what if" config holds: its URL, provider, and who asked. */
+export function trustEntry(repo: MissingRepo): RepoEntry {
+    // Every requester is recorded, so removal can say why a repository is there.
+    const requesters = [...new Set(repo.requiredBy.map((entry) => entry.requestedBy))].sort(compareBytewise);
+
+    return {
+        url: repo.url ?? "",
+        ...(repo.provider === undefined ? {} : { provider: repo.provider }),
+        addedAt: nowIso(),
+        addedBy: requesters.length > 0 ? requesters.join(", ") : USER_ADDED_BY,
+    };
 }
 
 /** The one question asked about a round of repositories. */
