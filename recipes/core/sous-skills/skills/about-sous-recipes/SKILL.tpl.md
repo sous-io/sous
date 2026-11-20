@@ -54,8 +54,9 @@ The fields in that example:
   files as described in "Shipping Memories" below, and nothing takes prompts yet. A `config` file
   is added to the project's config, and the project's own config files are applied after it, so
   the project always wins. It MUST be `.json`, `.jsonc`, `.yaml` or
-  `.yml`, and every key outside `_aliases`, `_vars`, `compilation`, `plugins`, `recipes`,
-  `runtimeContext`, `store` and `varMappings` is dropped with a warning. Its `_vars` MUST NOT set
+  `.yml`, and every key outside `_aliases`, `_vars`, `compilation`, `recipes` (only
+  `recipes.skills`), `runtimeContext`, `store` and `varMappings` is dropped with a warning;
+  `plugins` is refused, because a recipe ships its plugin through `plugin:` in its manifest. Its `_vars` MUST NOT set
   `projectRoot`, which sous sets itself (to the directory holding `.sous/`); setting it is an error. A recipe that only bundles others
   may leave `contents` out.
 - `plugin` and `requires` are described in "Shipping Sous Plugins" below.
