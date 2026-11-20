@@ -480,6 +480,8 @@ export interface CompileResult {
     readonly ok: boolean;
     readonly outputs: CompiledOutput[];
     readonly problems: CompileProblem[];
+    /** The outputs left unwritten: by an error, or because sous did not write the file already there. */
+    readonly notWritten?: string[];
     /** Every file the compile read, as real paths: sources and everything they include. */
     readonly included?: string[];
     readonly durationMs: number;

@@ -161,8 +161,11 @@ export abstract class BaseReporter {
         return typeof this.thresholdSource === "function" ? this.thresholdSource() : this.thresholdSource;
     }
 
-    /** Whether a message at `level` passes the threshold now. */
-    protected shows(level: LogLevel): boolean {
+    /**
+     * Whether a message at `level` passes the threshold now. A caller asks it before working out
+     * something only a more detailed level shows (`reporter.shows(LogLevel.Debug)`).
+     */
+    shows(level: LogLevel): boolean {
         return isLevelShown(level, this.threshold());
     }
 
@@ -276,6 +279,11 @@ export abstract class BaseReporter {
         const text = facts.note === undefined ? `${action}: ${target}` : `${action}: ${target} (${facts.note})`;
 
         this.log(level ?? (action === "failed" ? LogLevel.Error : LogLevel.Info), text, details, ReportEntryStyle.Operation);
+    }
+
+    /** What an operation did in all, in one line, reported just before it ends: `Files: 2 written (1 new, 1 updated), 13 unchanged.` */
+    operationSummary(text: string, level: LogLevel = LogLevel.Info): void {
+        this.log(level, text, undefined, ReportEntryStyle.OperationSummary);
     }
 
     /** How an operation ended: `Done.`, or `Done with 2 errors.` The level defaults to `info`, or `error` when it failed. */
@@ -410,7 +418,7 @@ export type Reporter = { [K in keyof BaseReporter]: BaseReporter[K] };
 export type ReportingMethods = Omit<Reporter, "log">;
 
 /** The members of `BaseReporter.prototype` that {@link Reporting} does not copy. */
-const NOT_ALIASED: readonly string[] = ["constructor", "log", "write", "threshold", "shows"];
+const NOT_ALIASED: readonly string[] = ["constructor", "log", "write", "threshold"];
 
 /** A class, abstract or not. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

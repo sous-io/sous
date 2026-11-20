@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "@sous-io/sous-plugin-memories/types";
 import path from "node:path";
-import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/sous-plugin-api";
+import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError, VariableSet } from "@sous-io/sous-plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/sous-plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
@@ -9,7 +9,7 @@ import { checksFailedError, runHandlerPurpose } from "@sous-io/sous-plugin-handl
 import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
-import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
+import { filesSummaryLine, prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
 import type {
     BuildInput,
     BuildPrepareResult,
@@ -40,16 +40,28 @@ import type {
  * so neither did the recipes it needs.
  */
 export async function build(input: BuildInput, ctx: Context): Promise<IntentOutputs<BuildResult>> {
+    reportCommandVariables(input, ctx, "build");
+
     const result = await runBuild(input, ctx);
 
-    return buildOutputs(input, ctx, result);
+    return buildOutputs(result);
+}
+
+/** What `build` and `compile` return: the result as data. A build with errors ends with exit code 1. */
+function buildOutputs<T extends { readonly ok: boolean }>(result: T): IntentOutputs<T> {
+    return new IntentOutputs<T>([new IntentOutput<T>({ data: result })], result.ok ? {} : { exitCode: 1 }) as IntentOutputs<T>;
 }
 
 /**
- * What `build` and `compile` return: the "Command Variables" block (with the flags that change the
- * run), then the result as data. A build with errors ends with exit code 1.
+ * Reports the "Command Variables" block (with the flags that change the run) before anything else,
+ * when the build is the command itself: a build's output is all progress, so the block opens it
+ * rather than following `Done.`. A build another command runs reports none; that command has its own.
  */
-function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | CompileCommandInput, ctx: Context, result: T): IntentOutputs<T> {
+function reportCommandVariables(input: BuildInput | CompileCommandInput, ctx: Context, command: "build" | "compile"): void {
+    if (ctx.chain?.intent !== command || (input as BuildInput).changedFiles !== undefined) {
+        return;
+    }
+
     const flags: Record<string, unknown> = {};
     const given = input as Record<string, unknown>;
 
@@ -67,7 +79,11 @@ function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | Co
         }
     }
 
-    return new IntentOutputs<T>([commandVariables(ctx, flags), new IntentOutput<T>({ data: result })], result.ok ? {} : { exitCode: 1 }) as IntentOutputs<T>;
+    const block = commandVariables(ctx, flags).result;
+
+    if (block instanceof VariableSet) {
+        ctx.reporter.commandVariables(block.entries);
+    }
 }
 
 /** Runs a build and gives its result. */
@@ -193,6 +209,15 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         const errors = compiled.problems.filter((problem) => problem.level === "error").length;
         const failedAssertions = edits === undefined || edits.ok ? 0 : failedAssertionCount(edits);
 
+        ctx.reporter.operationSummary(
+            filesSummaryLine({
+                outputs: compiled.outputs,
+                notWritten: compiled.notWritten ?? [],
+                removed: [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])],
+                dryRun,
+            }),
+        );
+
         if (errors > 0) {
             ctx.reporter.operationEnd(`Done with ${errors} error(s).`, false);
         } else if (failedAssertions > 0) {
@@ -281,7 +306,9 @@ export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefi
  * locking, restoring and checking upstream.
  */
 export async function compile(input: CompileCommandInput, ctx: Context): Promise<IntentOutputs<CompileCommandResult>> {
-    return buildOutputs(input, ctx, await runCompile(input, ctx));
+    reportCommandVariables(input, ctx, "compile");
+
+    return buildOutputs(await runCompile(input, ctx));
 }
 
 /** Compiles every target and gives the result. */
@@ -307,12 +334,19 @@ async function runCompile(input: CompileCommandInput, ctx: Context): Promise<Com
             ...(input.rebuild ? { rebuild: true } : {}),
             ...(dryRun ? { dryRun: true } : {}),
             ...(partial ? { changedFiles: input.changedFiles } : {}),
+            // "Done." is printed below, after the summary of the files.
+            reportEnd: false,
         })
     ).toPlain();
 
     if (!partial) {
         warnUnincludedMemories(ctx, compiled);
     }
+
+    const errors = compiled.problems.filter((problem) => problem.level === "error").length;
+
+    ctx.reporter.operationSummary(filesSummaryLine({ outputs: compiled.outputs, notWritten: compiled.notWritten ?? [], dryRun }));
+    ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
 
     const watching = input.watch === true;
 

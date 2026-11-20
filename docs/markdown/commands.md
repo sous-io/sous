@@ -41,6 +41,15 @@ already exists.
 - `--timings` prints how long each step of the run took.
 - `--json`, on the commands that print a listing or a report, prints it as JSON instead.
 
+A table fits the terminal's width, and steps aside its least important columns when the window is too narrow.
+Sent to a pipe or a file, a table keeps every column and follows the `COLUMNS` environment variable when it is
+set; when it is not, the table is laid out 2,000 characters wide, so each row stays on one line for `grep`:
+
+```bash
+sous recipe list | grep workflow
+COLUMNS=120 sous vars list > vars.txt
+```
+
 Sous reports, at the `debug` level, when a step takes longer than its time budget, so the report shows only
 with `--debug` or `--log-level debug`. It goes to standard error, so it never mixes with `--json` output. Time
 spent waiting for you to answer a question does not count. The `budgets` config key changes a budget, and
@@ -266,6 +275,32 @@ Skipped tool-usage/automated-browser-tasks: its subscription is switched off (co
 Pruned 4 outputs it had written.
 ```
 
+A build opens with its Command Variables (the project, its config file and the flags that change the run) and
+then prints a block for each file it wrote, removed or could not write. A file that was already up to date gets
+no block unless you pass `--debug`, which shows every unchanged file too, with its size in tokens. Every build
+ends with one line counting the files, before `Done.`:
+
+```text
+$ sous build
+$ Command Variables:
+    Project: my-project
+    Config : /home/me/my-project/.sous/sous.config.jsonc
+
+  ▷ SKILL.tpl.md
+    Entry Point: /home/me/my-project/.sous/skills/review/SKILL.tpl.md
+    ✓ /home/me/my-project/.claude/skills/review/SKILL.md (~2,905 tokens)
+
+  Files: 1 written (1 updated), 14 unchanged.
+
+Done.
+```
+
+With `--debug`, an unchanged file reads `⊘ /home/me/my-project/.claude/skills/plan/SKILL.md (unchanged, ~1,240
+tokens)`. The count adds "removed" and "not written" only when there are some, and a dry run says what it
+would do: `Files: 2 would be written (1 new, 1 updated), 13 unchanged.` `init` and `launch` print the same
+blocks and the same line, since they run this build. All of it goes to standard error; with `--json`, standard
+output holds the build's result as data.
+
 A compile error (a missing or circular include, a template that fails to render, a file sous cannot read) fails
 the build, but only after every target is compiled and every error listed. An output whose target had an error is
 not written, so the copy from the last good build stays in place. A build also warns about every recipe memory
@@ -485,7 +520,7 @@ Inspects the built configuration; see [Inspecting and validating](config-inspect
 - `sous config show` prints the built config as JSON, with config expressions evaluated: what sous will do on
   this machine. `--layers` shows each change in order and what made it.
 - `sous config get PATH` prints one value by dot-path. `--layers` shows every file, recipe or plugin that
-  changed it.
+  changed it, each named in full, and each value as pretty-printed JSON, never cut short.
 - `sous config validate` checks the config against its schema, then resolves every variable, which is what
   finds circular and undefined `${var}` references.
 
@@ -609,7 +644,8 @@ Browse what the trusted repositories publish, offline.
 
 - `namespace list` lists every namespace and how much of it the project subscribes to.
 - `namespace show REF` lists one namespace's recipes, with their latest and pinned versions.
-- `recipe list` lists every recipe, across every namespace.
+- `recipe list` lists every recipe, across every namespace. A description takes at most three lines, the
+  third ending in `...` when more is left out; `recipe show` prints it whole.
 - `recipe show REF` describes one recipe completely: its versions, dependencies, the questions it asks and where
   its files go, even before anything installs it.
 

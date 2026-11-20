@@ -663,6 +663,11 @@ Every message goes through one method of the reporter, `log(level, message, deta
   `warn()` and `emerg()`; `warning()` and above also take an `Error`), one or more per style
   (`operationStart(name, level = LogLevel.Notice)`, `variables(entries)`, ...), and `result(outputs)`.
 
+`operationSummary(text)` reports the one line that says what an operation did in all, just before its
+`operationEnd` (`Files: 2 written (1 new, 1 updated), 13 unchanged.`). `shows(level)` says whether a
+message at a level would be shown now, so a caller can skip work only a more detailed level displays; the
+compiler counts an unchanged file's tokens only when `shows(LogLevel.Debug)` is true.
+
 All of them are defined once, in `BaseReporter` (sous-plugin-api). `Reporter`, the type plugins see, is
 derived from it; every reporter extends it; the `Reporting` mixin copies its convenience methods onto
 any other class, and a contributor's `ConfigBuilder` reports the same way.
@@ -923,6 +928,19 @@ project loads no other plugin:
 None. (The name `sous-plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-11-20: A summary line before "Done.", and `shows(level)` is public
+
+**What changed.** "Reporting: levels and styles": the `OperationSummary` style and its method
+`operationSummary(text)`, and `BaseReporter.shows(level)`, which was protected, is now public (the
+`Reporting` mixin forwards it too). A build reports a block only for a file it wrote, removed or could not
+write; a unit whose outputs are all unchanged is reported at the `debug` level, with token counts. A
+build then reports one line counting the files before `Done.`, and reports its Command Variables first,
+on standard error, instead of returning them after `Done.`.
+
+**Why.** The user's ruling on gh-230 item 6 (2026-11-20): "keep the output exactly the same, EXCEPT,
+only show blocks for changed files unless verbose/debug output is enabled. Also, _always_ show a summary
+of files written and changed." and "let's report token counts even for unchanged files in verbose mode."
 
 ### 2026-11-18: One config build per harness
 

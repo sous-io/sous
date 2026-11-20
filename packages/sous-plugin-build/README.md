@@ -11,7 +11,7 @@ It adds these commands:
 | `sous prune` | removes outputs the config no longer produces |
 | `sous clear` | deletes every file and directory sous wrote for the project |
 
-`build` and `compile` return the "Command Variables" block, then the result as data, and exit with code 1 when the build has errors. `prune` and `clear` return one sentence saying how much was removed. Progress (targets, removed files, the lockfile) is reported while they run.
+`build` and `compile` return the result as data, and exit with code 1 when the build has errors. Run as the command itself, they report the "Command Variables" block first. `prune` and `clear` return one sentence saying how much was removed. Progress is reported while they run: a block for each output written, removed or not written (an unchanged one only at the `debug` level), then one line counting the files (`filesSummaryLine` in `src/report.ts`) before `Done.`.
 
 ## Using it from another plugin
 
