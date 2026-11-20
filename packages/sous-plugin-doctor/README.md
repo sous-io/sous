@@ -6,11 +6,16 @@ problem, asking before each fix.
 | Command | What it does |
 |---|---|
 | `sous doctor` | runs every check, and fixes what it can after asking |
-| `sous doctor --dry-run` | reports, and changes nothing |
+| `sous doctor --dry-run` | reports, and changes nothing in the project (it may download recipes into the machine's store, and says so) |
 | `sous doctor --yes` | applies every fix without asking |
 | `sous doctor --only outputs` | runs one check |
 
-It ends with exit code 1 when a problem remains.
+It ends with exit code 1 when a problem remains. A `pending` finding (a migration waiting for an answer) does
+not change the exit code, and the last line counts it: "Nothing failed, but 3 migrations are waiting for an
+answer."
+
+A finding's `details` are lines, or `{ text, details }` for an item with lines of its own; its `notes` say what
+the check did while it looked (the recipes it downloaded); a `pending` finding's `waiting` counts what waits.
 
 ## Adding a check
 

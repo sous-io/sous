@@ -1,4 +1,4 @@
-import { IntentOutputs, isSousErrorOfKind, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/sous-plugin-api";
+import { IntentOutputs, isSousErrorOfKind, NonInteractiveError, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/sous-plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import { describe, expect, it, vi } from "vitest";
 import { builtConfig, context, memoryLock, memoryManaged, serviceReader, shortRefs } from "../../../test/part-a/helpers.js";
@@ -563,9 +563,53 @@ describe("subscription.add", () => {
     });
 
     /**
+     * Without a terminal, a required question nothing answers fails the subscription before
+     * anything is written (#230 item 1), instead of after 510 and the lockfile are.
+     *
+     * addSubscription({ ref: "workflow/task-files", yes: true })   // no terminal, apiUrl required
+     * // -> throws "One variable still needs an answer, and there is no terminal to ask on."; nothing written
+     */
+    it("should write nothing when a required question cannot be asked", async () => {
+        const indexes = { r: index({ "workflow/task-files": ["1.0.0"] }, { "workflow/task-files@1.0.0": ["apiUrl"] }) };
+        const { config, managed, lock } = setup({ indexes });
+        const ctx = context(config, { intents: ["vars.ask", "build"] });
+        const error = await addSubscription({ ref: "workflow/task-files", yes: true }, ctx).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(NonInteractiveError);
+        expect((error as Error).message).toBe("One variable still needs an answer, and there is no terminal to ask on.");
+        expect((error as NonInteractiveError).details).toEqual(["Nothing was written.", "apiUrl (workflow/task-files): apiUrl"]);
+        expect(managed.files).toEqual({});
+        expect(lock.current.recipes).toEqual({});
+        expect(ctx.run).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The range a subscription is recorded with is in the plan shown before the question and in
+     * the result: none means any version (#230 item 3).
+     *
+     * addSubscription({ ref: "workflow/reviews" })        // -> "... the version range 'any version', ..."
+     * addSubscription({ ref: "workflow/reviews@^0.1.0" }) // -> "... the version range '^0.1.0', ..."
+     */
+    it("should say the version range the subscription is recorded with", async () => {
+        const plan = async (ref: string) => {
+            const ctx = context(setup().config, { intents: ["vars.ask", "build"] });
+            const result = await addSubscription({ ref, dryRun: true }, ctx);
+
+            return { notice: ctx.reporter.at("notice").join("\n"), result };
+        };
+        const any = await plan("workflow/reviews");
+        const ranged = await plan("workflow/reviews@^0.1.0");
+
+        expect(any.notice).toContain("It is recorded with the version range 'any version', so an update may move it to any newer version, a new major version included.");
+        expect(any.result.range).toBeUndefined();
+        expect(ranged.notice).toContain("It is recorded with the version range '^0.1.0', so an update moves it only to versions in that range.");
+        expect(ranged.result.range).toBe("^0.1.0");
+    });
+
+    /**
      * After writing, subscribing refreshes the chain's config (ctx.refreshConfig()), so vars.ask
      * and build see the new subscription; it refreshes again after vars.ask, so build sees the
-     * answers.
+     * answers. The required question is answered up front, since there is no terminal.
      */
     it("should refresh the config before vars.ask and again before build", async () => {
         const indexes = { r: index({ "workflow/task-files": ["1.0.0"] }, { "workflow/task-files@1.0.0": ["apiUrl"] }) };
@@ -581,7 +625,7 @@ describe("subscription.add", () => {
             return IntentOutputs.of({ ran: intent });
         });
 
-        await addSubscription({ ref: "workflow/task-files", yes: true }, ctx);
+        await addSubscription({ ref: "workflow/task-files", yes: true, answer: ["apiUrl=https://x"] }, ctx);
 
         expect(seen).toEqual([
             { intent: "vars.ask", buildNumber: 99, refreshes: 1 },

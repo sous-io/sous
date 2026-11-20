@@ -124,14 +124,17 @@ interface DoctorCheckEntity {
 A check reports `ok`, `problem`, `warning`, `pending` (waiting on an answer only a person can give) or `skipped`
 (it cannot run here, saying why). A finding that can be fixed names the fix in a short imperative phrase. A check
 that throws is reported as a problem saying it could not run. Neither a check nor a fix prints or prompts (L3); a
-fix that needs answers runs intents, which ask through the chain's prompter.
+fix that needs answers runs intents, which ask through the chain's prompter. A finding's `details` are lines, or
+an item with lines of its own under it; its `notes` say what the check did while it looked (the recipes it
+downloaded), whatever its status. A `pending` finding says what waits, counted (`waiting: { count, label }`), for
+the closing line.
 
 ### The checks, in order
 
 | Order | Check | Owner | Fix |
 |---|---|---|---|
 | 100 | The config loads | doctor | none |
-| 200 | The lockfile agrees with the subscriptions | doctor, through `recipes.lock` and `recipes.resolver` | write the lockfile the subscriptions make, keeping every pin their ranges allow |
+| 200 | The lockfile agrees with the subscriptions | doctor, through `recipes.lock` and `recipes.resolver` | write the lockfile the subscriptions make, keeping every pin their ranges allow; none while a recipe's dependencies cannot be read |
 | 300 | Required recipe variables have answers | doctor, through `vars.list` | `vars.ask` |
 | 400 | Every migration for this version has run | migrations | run them (asks no confirmation of its own) |
 | 500 | The git hooks are installed, when the project was set up with them | the git hooks stream | install them |
@@ -142,9 +145,17 @@ fix that needs answers runs intents, which ask through the chain's prompter.
 The numbers are `DOCTOR_CHECK_ORDER`. A check whose owner is not loaded skips itself. When the config does not
 load, every check that needs it skips itself; the first check reports the error.
 
+The lockfile check reads what each recipe depends on, which an index does not always record, so `doctor`
+declares `needsRecipeFiles`: the pinned recipes this machine lacks are downloaded before it runs, and the
+resolver downloads any other recipe whose manifest it needs (`download`). A recipe whose dependencies still
+cannot be read is a problem with no fix, naming it, because a lockfile written then would drop its dependencies'
+pins. The check notes the recipes it downloaded, `--dry-run` included.
+
 ### Flags, exit code, no terminal
 
-- `--dry-run` reports and changes nothing.
+- `--dry-run` reports and changes nothing in the project. It may download recipes into this machine's recipe
+  store to read them, and says so (Luke's ruling, 2026-11-20).
+
 - `--yes` applies every fix without asking, and takes every migration question's default.
 - `--answer <name>=<value>` answers a migration's question or a recipe variable (one list for both: the entries
   naming a migration's question go to the migrations, the rest to `vars.ask`).
@@ -153,6 +164,11 @@ load, every check that needs it skips itself; the first check reports the error.
 - It ends with exit code 1 when a `problem` remains. `warning`, `pending` and `skipped` do not change the exit
   code: a migration waiting for an answer is not a failure (Luke rejected failing the command because
   it would break scripts that call `sous doctor`).
+- The closing line counts what waits as well as what failed: "No problem remains.", "Nothing failed, but 3
+  migrations are waiting for an answer.", or "1 problem remains, and 3 migrations are waiting for an answer."
+- The migrations check's `pending` finding lists every waiting migration by name, each one's unanswered questions
+  under it; a migration that asks nothing waits because migrations run in order and none runs until every
+  question is answered.
 
 ## `sous upgrade` and `sous update`
 
@@ -209,6 +225,17 @@ as that plugin's). Plugins type it with declaration merging on `SousExtensions`.
 an error naming both.
 
 ## Changes
+
+### 2026-11-20: The doctor never writes a lockfile it could not work out, and counts what waits
+
+`sous doctor --yes` on a machine whose recipe store lacked the project's recipes resolved without their
+manifests, so it wrote a lockfile without their dependencies' pins and reported one change (#291). Now `doctor`
+declares `needsRecipeFiles`, the resolver downloads a recipe whose manifest it needs (`ResolveOptions.download`,
+used by the doctor, `build`, `sous lock rebuild`, `sous update` and `sous subscription add`), and no lockfile is
+written while a recipe stays unreadable. `diffLockfiles` reports a pin whose holders (`requestedBy`) or `kind`
+changed (`LockDiff.changed`). The closing line counts `pending` findings, and the migrations finding lists each
+waiting migration with its own questions (#265). Luke ruled that a dry run may fill the recipe store; the
+rest is the agent's fix as decided in the issues.
 
 ### 2026-11-18: Migrations run when the config does not load
 

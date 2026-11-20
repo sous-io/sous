@@ -23,7 +23,7 @@ import type {
     VersionStatus,
 } from "../../types.js";
 import { BUILT_IN_ADDED_BY, USER_ADDED_BY } from "../defaults.js";
-import { blockOutput, finish, noteOutput, questionPlanOutputs, sentence, tableOutput, underHeading } from "../outputs.js";
+import { blockOutput, describeRange, finish, noteOutput, questionPlanOutputs, sentence, tableOutput, underHeading } from "../outputs.js";
 
 // --- Columns ----------------------------------------------------------------------------------------
 
@@ -578,7 +578,7 @@ export function subscriptionListOutputs(ctx: Context, input: BrowsingFlags, resu
                 columns,
                 listings.map((entry) => ({
                     key: entry.key,
-                    range: entry.range ?? "any version",
+                    range: describeRange(entry.range),
                     pinned: describePinned(entry.pinned, entry.enabled),
                     latest: describeLatest(entry),
                     origin: describeSubscriptionOrigin(entry.addedBy),

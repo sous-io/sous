@@ -66,11 +66,17 @@ export class PartBRuntime {
         this.recipeFilesWanted = true;
     }
 
-    /** The recipes downloaded while the config was built and not reported yet; reading them forgets them. */
-    takeFetched(): string[] {
-        const keys = [...this.fetched];
+    /**
+     * The recipes downloaded while the config was built, or by a resolve that read their
+     * manifests, and not reported yet; reading them forgets them. With `among`, only those labels
+     * are read and forgotten.
+     */
+    takeFetched(among?: readonly string[]): string[] {
+        const keys = [...this.fetched].filter((key) => among === undefined || among.includes(key));
 
-        this.fetched.clear();
+        for (const key of keys) {
+            this.fetched.delete(key);
+        }
 
         return keys;
     }

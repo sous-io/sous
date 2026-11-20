@@ -21,7 +21,7 @@ import semver from "semver";
 import type { ResolvedRecipe } from "../types.js";
 import type { RanFollowUp } from "./outputs.js";
 import { trustedRepos } from "./project.js";
-import { hasIntent } from "./util.js";
+import { describeError, hasIntent, resolvedAtPin } from "./util.js";
 
 /**
  * The line added when installing a plugin named under `requires.plugins` fails: a plugin that
@@ -105,26 +105,65 @@ export async function recipeDirectory(ctx: Context, recipe: ResolvedRecipe, down
     }
 
     try {
-        const outcome = await ctx.services.get("recipes.index-cache").ensureInStore(
-            {
-                key: recipe.key,
-                entry: { repo: recipe.repo, version: recipe.version, hash: recipe.hash, requestedBy: recipe.requestedBy, kind: recipe.kind },
-                repo: recipe.repo,
-                url: entry.url,
-                identity: recipe.identity,
-                ...(entry.provider === undefined ? {} : { provider: entry.provider }),
-            },
-            {
-                store: ctx.services.get("recipes.store"),
-                hosts: ctx.entities.list("repository-host"),
-                context: { plugin: ctx.plugin, config: ctx.config, services: ctx.services, entities: ctx.entities, project: ctx.project, env: ctx.env, cwd: ctx.cwd, reporter: ctx.reporter },
-            },
-        );
-
-        return outcome.dir;
+        return await ensureRecipeFiles(ctx, recipe, entry);
     } catch {
         return undefined;
     }
+}
+
+/** Downloads one resolved recipe into the store when it is not there yet; returns its directory, or throws why it cannot be had. */
+async function ensureRecipeFiles(ctx: Context, recipe: ResolvedRecipe, entry: { url: string; provider?: string }): Promise<string> {
+    const outcome = await ctx.services.get("recipes.index-cache").ensureInStore(
+        {
+            key: recipe.key,
+            entry: { repo: recipe.repo, version: recipe.version, hash: recipe.hash, requestedBy: recipe.requestedBy, kind: recipe.kind },
+            repo: recipe.repo,
+            url: entry.url,
+            identity: recipe.identity,
+            ...(entry.provider === undefined ? {} : { provider: entry.provider }),
+        },
+        {
+            store: ctx.services.get("recipes.store"),
+            hosts: ctx.entities.list("repository-host"),
+            context: { plugin: ctx.plugin, config: ctx.config, services: ctx.services, entities: ctx.entities, project: ctx.project, env: ctx.env, cwd: ctx.cwd, reporter: ctx.reporter },
+        },
+    );
+
+    return outcome.dir;
+}
+
+/**
+ * Downloads every version of the resolved recipes that the store lacks (the shared version, then
+ * each version pinned for one holder alone), so a command can find out before writing anything that
+ * its recipes can be had. Returns each version that could not be downloaded, and why; empty when
+ * every one is here now. Without the store, nothing is checked.
+ */
+export async function downloadRecipes(ctx: Context, resolved: readonly ResolvedRecipe[]): Promise<Array<{ key: string; version: string; reason: string }>> {
+    if (!ctx.services.has("recipes.store") || !ctx.services.has("recipes.index-cache")) {
+        return [];
+    }
+
+    const trusted = trustedRepos(ctx.config);
+    const failed: Array<{ key: string; version: string; reason: string }> = [];
+
+    for (const recipe of resolved) {
+        const entry = trusted[recipe.repo];
+
+        for (const version of [recipe, ...(recipe.pins ?? []).map((pin) => resolvedAtPin(recipe, pin))]) {
+            if (entry === undefined) {
+                failed.push({ key: recipe.key, version: version.version, reason: `the repository '${recipe.repo}' is not trusted in this project` });
+                continue;
+            }
+
+            try {
+                await ensureRecipeFiles(ctx, version, entry);
+            } catch (error) {
+                failed.push({ key: recipe.key, version: version.version, reason: describeError(error) });
+            }
+        }
+    }
+
+    return failed;
 }
 
 /** What each resolved recipe requires, read from its manifest; `download: false` reads only what the store holds already. */

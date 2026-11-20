@@ -2,7 +2,7 @@
  * `lock.rebuild`, `lock.show` and `repo.gc`: the intents over the lockfile and the store.
  */
 
-import { ConfigError, type IntentOutput, type IntentOutputs, type Context, type TableColumn } from "@sous-io/sous-plugin-api";
+import { ConfigError, SousError, type IntentOutput, type IntentOutputs, type Context, type TableColumn } from "@sous-io/sous-plugin-api";
 import type {
     LockRebuildInput,
     LockRebuildResult,
@@ -24,12 +24,15 @@ import { plural } from "../support.js";
 
 /**
  * Resolves every subscription again against the cached indexes and rewrites the lockfile, keeping
- * the pins of switched-off subscriptions, then downloads what the store lacks.
+ * the pins of switched-off subscriptions, then downloads what the store lacks. A recipe whose index
+ * does not record what it depends on is downloaded to read it; while one still cannot be read, the
+ * lockfile is not written, since it would leave out that recipe's dependencies (#291). A dry run
+ * downloads nothing.
  */
 export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promise<IntentOutputs<LockRebuildResult>> {
     const lock = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");
-    const result = await resolver.resolveSubscriptions();
+    const result = await resolver.resolveSubscriptions(input.dryRun === true ? {} : { download: true });
 
     if (result.missingRepos.length > 0) {
         throw new ConfigError(`This project's subscriptions need ${result.missingRepos.length === 1 ? "a repository" : "repositories"} it does not trust, so the lockfile cannot be rebuilt.`, {
@@ -59,9 +62,22 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
         outputs.push(noteOutput(`These repositories are trusted and their index has not been fetched yet, so nothing in them could be resolved: ${notFetched.sort().join(", ")}.`));
     }
 
+    if (result.unreadable.length > 0 && !input.dryRun) {
+        const reasons = new Map((result.downloadFailures ?? []).map((failure) => [failure.key, failure.reason]));
+
+        throw new SousError(`The lockfile was not written: sous could not read what ${result.unreadable.length === 1 ? "this recipe depends" : "these recipes depend"} on, so it would leave out their dependencies.`, {
+            details: [
+                ...result.unreadable.map((key) => (reasons.has(key) ? `${key}: ${reasons.get(key)}` : key)),
+                "Their files could not be downloaded into this machine's recipe store, and their repository's index does not record what they depend on. Check the network and that the repositories are reachable, then run this command again.",
+            ],
+        });
+    }
+
     if (result.unreadable.length > 0) {
         outputs.push(
-            noteOutput(`The files of these recipes are not on this machine, and their repository's index does not record what they depend on, so their own dependencies are not in the rebuilt lockfile: ${result.unreadable.join(", ")}.`),
+            noteOutput(
+                `The files of these recipes are not on this machine, and their repository's index does not record what they depend on, so their own dependencies are not in the lockfile above. A dry run downloads nothing: ${result.unreadable.join(", ")}.`,
+            ),
         );
     }
 

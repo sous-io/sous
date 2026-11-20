@@ -9,7 +9,7 @@
 import { ConfigError } from "@sous-io/sous-plugin-api";
 import semver from "semver";
 import type { LockedRecipe, Lockfile } from "@sous-io/sous-plugin-formats/types";
-import type { LockChange, LockDiff, ResolvedRecipe } from "../../types.js";
+import type { LockChange, LockDiff, LockEntryChange, ResolvedRecipe } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
 import { sortKeys } from "../support.js";
 
@@ -324,6 +324,7 @@ export function diffLockfiles(before: Lockfile, after: Lockfile): LockDiff {
     const added: LockChange[] = [];
     const removed: LockChange[] = [];
     const updated: LockChange[] = [];
+    const changed: LockEntryChange[] = [];
 
     for (const [key, entry] of Object.entries(after.recipes)) {
         const previous = before.recipes[key];
@@ -332,6 +333,21 @@ export function diffLockfiles(before: Lockfile, after: Lockfile): LockDiff {
             added.push({ key, to: entry.version });
         } else if (previous.version !== entry.version) {
             updated.push({ key, from: previous.version, to: entry.version });
+        } else {
+            // The version stayed: who holds it, or why it is pinned, may still have changed.
+            const from = sortKeys(previous.requestedBy);
+            const to = sortKeys(entry.requestedBy);
+            const holdersChanged = from.join("\n") !== to.join("\n");
+            const kindChanged = previous.kind !== entry.kind;
+
+            if (holdersChanged || kindChanged) {
+                changed.push({
+                    key,
+                    version: entry.version,
+                    ...(holdersChanged ? { requestedBy: { from, to } } : {}),
+                    ...(kindChanged ? { kind: { from: previous.kind, to: entry.kind } } : {}),
+                });
+            }
         }
 
         // A version pinned for one holder changes on its own.
@@ -369,15 +385,49 @@ export function diffLockfiles(before: Lockfile, after: Lockfile): LockDiff {
     added.sort(byKey);
     removed.sort(byKey);
     updated.sort(byKey);
+    changed.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
 
     return {
         added,
         removed,
         updated,
+        changed,
         reposAdded,
         reposRemoved,
-        unchanged: added.length + removed.length + updated.length + reposAdded.length + reposRemoved.length === 0,
+        unchanged: added.length + removed.length + updated.length + changed.length + reposAdded.length + reposRemoved.length === 0,
     };
+}
+
+/** Who holds a pin, in words: `project` is this project itself. */
+function holdersInWords(holders: readonly string[]): string {
+    return holders.length === 0 ? "nothing" : holders.map((holder) => (holder === PROJECT_HOLDER ? "this project" : holder)).join(", ");
+}
+
+/** Why a recipe is pinned, in words. */
+function kindInWords(kind: string): string {
+    return kind === "depends" ? "a dependency" : "a subscription";
+}
+
+/**
+ * A pin whose version stayed while what holds it changed, as plain lines.
+ *
+ * ```text
+ * Keeping support/base version 1.0.0, now needed by lib/one, lib/two (before: lib/one)
+ * Keeping support/base version 1.0.0, now pinned as a subscription (before: as a dependency)
+ * ```
+ */
+export function describeEntryChange(change: LockEntryChange): string[] {
+    const lines: string[] = [];
+
+    if (change.requestedBy !== undefined) {
+        lines.push(`Keeping ${change.key} version ${change.version}, now needed by ${holdersInWords(change.requestedBy.to)} (before: ${holdersInWords(change.requestedBy.from)})`);
+    }
+
+    if (change.kind !== undefined) {
+        lines.push(`Keeping ${change.key} version ${change.version}, now pinned as ${kindInWords(change.kind.to)} (before: as ${kindInWords(change.kind.from)})`);
+    }
+
+    return lines;
 }
 
 /**
@@ -390,6 +440,7 @@ export function diffLockfiles(before: Lockfile, after: Lockfile): LockDiff {
  * Moving acme/widget down from version 1.0.0 to version 0.1.0
  * Adding workflow/shared version 1.0.0 for workflow/a alone
  * Removing tools/old, which nothing needs any more
+ * Keeping support/base version 1.0.0, now needed by lib/one, lib/two (before: lib/one)
  * ```
  */
 export function describeLockDiff(diff: LockDiff): string[] {
@@ -417,6 +468,10 @@ export function describeLockDiff(diff: LockDiff): string[] {
 
     for (const change of [...diff.removed].sort(byKey)) {
         lines.push(change.holder === undefined ? `Removing ${change.key}, which nothing needs any more` : `Removing the version ${change.from} of ${change.key} pinned for ${change.holder} alone`);
+    }
+
+    for (const change of diff.changed) {
+        lines.push(...describeEntryChange(change));
     }
 
     for (const name of diff.reposRemoved) {

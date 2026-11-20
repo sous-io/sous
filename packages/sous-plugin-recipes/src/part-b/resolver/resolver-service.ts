@@ -9,8 +9,10 @@ import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { RecipeRequest, RecipesResolver, ResolvedRecipe, ResolveOptions, ResolveResult, SubscriptionEntry } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
 import { mapLinkedRecipes, type LinkedRecipe } from "../fetch/linked-recipes.js";
-import { storeKeyOf } from "../fetch/restore.js";
+import { ensureInStore, storeKeyOf } from "../fetch/restore.js";
+import { resolvedAtPin } from "../../part-a/util.js";
 import { trustedRepos } from "../lock/lock-service.js";
+import { restoredLabel } from "../lock/lockfile-ops.js";
 import { plainSubscriptionKey, reachability } from "../lock/reachable.js";
 import { enabledSubscriptions, sortKeys } from "../support.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -28,6 +30,107 @@ export class ResolverService implements RecipesResolver {
     ) {}
 
     async resolve(requests: readonly RecipeRequest[], options: ResolveOptions = {}): Promise<ResolveResult> {
+        let result = await this.resolveOnce(requests, options);
+
+        if (options.download !== true) {
+            return result;
+        }
+
+        // The index does not always say what a version depends on; then its manifest is read from
+        // the store, so a recipe not downloaded yet is downloaded and everything resolved again.
+        // Each recipe is tried once.
+        const tried = new Set<string>();
+        const downloaded: string[] = [];
+        const failures = new Map<string, string>();
+
+        for (;;) {
+            const waiting = result.unreadable.filter((key) => !tried.has(key));
+
+            if (waiting.length === 0) {
+                break;
+            }
+
+            const got = await this.download(result.resolved, waiting, tried, failures);
+
+            if (got.length === 0) {
+                break;
+            }
+
+            downloaded.push(...got);
+            result = await this.resolveOnce(requests, options);
+        }
+
+        const unreadable = new Set(result.unreadable);
+
+        return {
+            ...result,
+            downloaded: sortKeys(new Set(downloaded)),
+            downloadFailures: sortKeys(failures.keys())
+                .filter((key) => unreadable.has(key))
+                .map((key) => ({ key, reason: failures.get(key)! })),
+        };
+    }
+
+    /**
+     * Downloads every version of the given resolved recipes that the store lacks: the shared
+     * version, then each version pinned for one holder alone. Returns what was downloaded, labelled
+     * as a restore labels it; a recipe that could not be downloaded gets its reason in `failures`.
+     */
+    private async download(resolved: readonly ResolvedRecipe[], keys: readonly string[], tried: Set<string>, failures: Map<string, string>): Promise<string[]> {
+        const trusted = trustedRepos(this.ctx);
+        const downloaded: string[] = [];
+        const deps = {
+            store: this.ctx.services.get("recipes.store"),
+            cache: this.runtime.indexCore(),
+            hosts: this.ctx.entities.list("repository-host"),
+            context: this.runtime.hostContext(),
+            freshnessSeconds: this.ctx.config.get<{ freshnessSeconds?: number }>("store")?.freshnessSeconds,
+        };
+
+        for (const key of keys) {
+            tried.add(key);
+
+            const recipe = resolved.find((entry) => entry.key === key);
+            const repo = recipe === undefined ? undefined : trusted[recipe.repo];
+
+            if (recipe === undefined || repo === undefined) {
+                continue;
+            }
+
+            const versions = [{ version: recipe }, ...(recipe.pins ?? []).map((pin) => ({ version: resolvedAtPin(recipe, pin), holder: pin.holder }))];
+
+            for (const { version, holder } of versions) {
+                try {
+                    const outcome = await ensureInStore(
+                        {
+                            key,
+                            entry: { repo: version.repo, version: version.version, hash: version.hash, requestedBy: version.requestedBy, kind: version.kind },
+                            repo: version.repo,
+                            url: repo.url,
+                            identity: version.identity,
+                            ...(repo.provider === undefined ? {} : { provider: repo.provider }),
+                        },
+                        deps,
+                    );
+
+                    if (outcome.downloaded) {
+                        const label = restoredLabel(key, { version: version.version, hash: version.hash, ...(holder === undefined ? {} : { holder }) });
+
+                        downloaded.push(label);
+                        // The next restore reports it as restored, as it does what the config build fetched.
+                        this.runtime.noteFetched([label]);
+                    }
+                } catch (error) {
+                    failures.set(key, error instanceof Error ? error.message : String(error));
+                }
+            }
+        }
+
+        return downloaded;
+    }
+
+    /** One resolve, downloading nothing. */
+    private async resolveOnce(requests: readonly RecipeRequest[], options: ResolveOptions): Promise<ResolveResult> {
         const trusted = trustedRepos(this.ctx);
         const repos: Record<string, ResolverRepo> = {};
 

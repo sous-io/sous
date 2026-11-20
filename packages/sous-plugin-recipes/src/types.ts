@@ -571,6 +571,14 @@ export interface ResolveOptions {
      * newer versions is quiet; resolving what to lock warns.
      */
     quiet?: boolean;
+    /**
+     * `boolean = false`. Downloads into this machine's recipe store every resolved recipe whose
+     * manifest could not be read (its files are not here, and its index does not record what it
+     * depends on), then resolves again, until every manifest is read or nothing more can be
+     * downloaded. The result's `downloaded` lists what was downloaded; a recipe still in
+     * `unreadable` could not be, and `downloadFailures` says why.
+     */
+    download?: boolean;
 }
 
 /** What a resolve found. */
@@ -581,6 +589,14 @@ export interface ResolveResult {
     readonly unreadable: string[];
     /** Dependency cycles, each as the keys around it. */
     readonly cycles: string[][];
+    /**
+     * With `download`: the recipes downloaded into the store to read their manifests, labelled as
+     * a restore labels them (`namespace/recipe`, or `namespace/recipe version 1.0.0 for <holder>`).
+     * The next `recipes.lock` restore reports them as restored.
+     */
+    readonly downloaded?: string[];
+    /** With `download`: why each recipe still in `unreadable` could not be downloaded. */
+    readonly downloadFailures?: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
 }
 
 /** Resolving subscriptions to versions, and keeping only what is reachable. */
@@ -604,11 +620,27 @@ export interface LockChange {
     readonly holder?: string;
 }
 
+/**
+ * A pinned recipe whose version stayed while what holds it changed: who requests it
+ * (`requestedBy`), or whether it is pinned as a subscription or as a dependency (`kind`).
+ */
+export interface LockEntryChange {
+    readonly key: string;
+    /** The version pinned, before and after. */
+    readonly version: string;
+    /** Who requested it before and after, when that changed. */
+    readonly requestedBy?: { readonly from: readonly string[]; readonly to: readonly string[] };
+    /** Why it is pinned, before and after, when that changed. */
+    readonly kind?: { readonly from: DependencyKind; readonly to: DependencyKind };
+}
+
 /** What changed between two lockfiles. */
 export interface LockDiff {
     readonly added: LockChange[];
     readonly removed: LockChange[];
     readonly updated: LockChange[];
+    /** Recipes whose version stayed, while who requests them or why they are pinned changed. */
+    readonly changed: LockEntryChange[];
     readonly reposAdded: string[];
     readonly reposRemoved: string[];
     readonly unchanged: boolean;
@@ -1189,6 +1221,8 @@ export interface SubscriptionAddResult {
     readonly diff: LockDiff;
     readonly unreadable: string[];
     readonly cycles: string[][];
+    /** The version range the subscription is recorded with; absent means any version. */
+    readonly range?: string;
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
     /** On a dry run: every question the recipes ask, from what their index records. */

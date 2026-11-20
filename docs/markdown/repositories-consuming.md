@@ -109,8 +109,15 @@ whatever this project calls that repository; one the project does not trust yet 
 trust question first, and nothing is fetched from it before the answer. The subscription is
 recorded in its canonical form, `namespace/recipe`.
 
-The whole dependency closure resolves before anything is downloaded, and only then is anything
-written; an install is whole or not at all.
+The whole dependency closure resolves before anything is written, and so is everything else that
+could make the subscription fail: every recipe it installs is downloaded into this machine's store,
+and without a terminal a required question nothing answers (no `--answer`, no value in scope, no
+default) is an error. Only then is anything written; an install is whole or not at all, and a failed
+one leaves the project as it was.
+
+Written without `@<range>`, a subscription accepts any version, so `sous update` may move it to a new
+major version; with one, it stays in that range. The plan shown before the question, and the result,
+both name the range recorded (`any version`, or `^1.2.0`).
 
 A few flags change how it runs: `--yes` answers yes to the subscribe confirmation and the trust
 question, `--answer <name>=<value>` answers a recipe's question ahead of time, `--dry-run` prints what
@@ -146,6 +153,8 @@ $ sous subscription add workflow/qa-variables
     'workflow'.
   Here is what that does:
 
+  • It is recorded with the version range 'any version', so an update may move it to any
+    newer version, a new major version included.
   • The files it ships are compiled into this project on the next build, which writes them
     into this project's agent directories.
   • Any scripts it ships can be run on this machine when an agent uses them. Sous does not
@@ -293,7 +302,8 @@ build` instead. The `Latest version` column beside it is read from the cache, or
 recipe count and its URL; `--verbose` adds a `Namespaces:` line under each row. `sous lock show`
 prints the other half: every version your lockfile pins, where it came from and who holds it. When
 that file has drifted, `sous lock rebuild` recomputes it from your subscriptions and the cached
-indexes, fetching nothing.
+indexes. It downloads a recipe only to read what it depends on when its index does not say, and
+writes nothing while one cannot be read.
 
 ## Moving to newer versions
 
