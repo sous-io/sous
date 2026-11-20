@@ -626,10 +626,18 @@ its own `config-key` entities and reads the built config.
 ```text
 $ sous config get subscriptions."tool-usage/automated-browser-tasks".enabled --layers
 conf.d/510-subscriptions.jsonc   (not set)
-conf.d/610-mac.jsonc             { "$if": { "expr": "host.platform == 'darwin'", "then": false } }
+conf.d/610-mac.jsonc             {
+                                   "$if": {
+                                     "expr": "host.platform == 'darwin'",
+                                     "then": false
+                                   }
+                                 }
                                  → false   (host.platform = "darwin")
 result                           false     (settled after 1 pass)
 ```
+
+Each layer is named in full, wrapping onto a second line when the column is too narrow for it, and each
+value is pretty-printed JSON, never cut short.
 
 ## Patches
 
@@ -893,6 +901,15 @@ The API shape is the agent's; not yet reviewed by Luke.
 (`ConfigLayer.build`, `Contribution.build`); `sous config show` and `get` take `--harness <id>` to
 print one harness's own build. From Luke's accepted design (S8): "I accept your recommendations"
 (2026-11-16). A "what if" build runs the harness builds too.
+
+### 2026-11-20: `config get --layers` shows names and values whole
+
+**What changed.** The example under "Inspecting": each layer is named in full (wrapped, never cut) and
+each value is pretty-printed JSON, never cut short.
+
+**Why.** A long contributor name was cut in the middle (`memori…argets`) and a value was cut at 80
+characters. The user chose, on gh-230 item 5 (2026-11-20), the option that shows layer names in full and
+values as pretty-printed JSON, never cut.
 
 ### 2026-11-18: Every document edit is surgical; Markdown frontmatter and plain text lines
 

@@ -9,7 +9,7 @@ import { isUtf8 } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import type { Liquid } from "liquidjs";
-import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, type ServiceContext } from "@sous-io/sous-plugin-api";
+import { BufferedReporter, LogLevel, nullReporter, type OperationDetails, ReportEntryStyle, Reporting, type ProblemDetails, type ReportedMessage, type Reporter, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { RefsParser } from "@sous-io/sous-plugin-refs/types";
 import type { VarScope } from "@sous-io/sous-plugin-variables/types";
 import { reportBackup } from "./backups.js";
@@ -103,6 +103,8 @@ export interface CompileRunResult {
     readonly produced: Set<string>;
     /** Every file read, as real paths: sources and everything they include. */
     readonly included: Set<string>;
+    /** The outputs left unwritten: by an error, or because sous did not write the file already there. */
+    readonly notWritten: Set<string>;
 }
 
 /** What a problem report says beyond its summary. */
@@ -114,6 +116,9 @@ export class CompileRun extends Reporting(Object) {
     private readonly outputs: CompiledOutput[] = [];
     private readonly produced = new Set<string>();
     private readonly included = new Set<string>();
+    private readonly notWrittenFiles = new Set<string>();
+    /** What the unit being compiled reported, held until it is known whether the unit changed anything. */
+    private unitReport: BufferedReporter | undefined;
     private nodes = new Map<string, FileNode>();
     private includeStack: string[] = [];
     private sourceComments = false;
@@ -130,7 +135,7 @@ export class CompileRun extends Reporting(Object) {
     }
 
     protected get reporter(): Reporter {
-        return this.deps.reporter;
+        return this.unitReport ?? this.deps.reporter;
     }
 
     /** Compiles every unit. */
@@ -139,7 +144,7 @@ export class CompileRun extends Reporting(Object) {
             await this.compileUnit(unit);
         }
 
-        return { outputs: this.outputs, problems: this.problems, produced: this.produced, included: this.included };
+        return { outputs: this.outputs, problems: this.problems, produced: this.produced, included: this.included, notWritten: this.notWrittenFiles };
     }
 
     /**
@@ -204,7 +209,32 @@ export class CompileRun extends Reporting(Object) {
         return this.loadFile(unit.source);
     }
 
+    /**
+     * Compiles one unit, holding back what it reports until the unit is done. A unit that changed
+     * nothing (every output unchanged, no problem) is reported at the `debug` level, so its block
+     * shows only in verbose output; any other unit's block is reported as it was written.
+     */
     private async compileUnit(unit: CompileUnit): Promise<void> {
+        const held = new BufferedReporter();
+
+        this.unitReport = held;
+
+        try {
+            await this.compileUnitHeld(unit);
+        } finally {
+            this.unitReport = undefined;
+
+            if (held.messages.every(isUnchangedEntry)) {
+                for (const entry of held.messages) {
+                    this.deps.reporter.log(LogLevel.Debug, entry.message, entry.details, entry.style);
+                }
+            } else {
+                held.flushTo(this.deps.reporter);
+            }
+        }
+    }
+
+    private async compileUnitHeld(unit: CompileUnit): Promise<void> {
         this.unit = unit;
         this.sourceComments = unit.includeSourceComments;
         this.stepStart(unit.content !== undefined ? unit.label : path.basename(unit.source));
@@ -219,6 +249,10 @@ export class CompileRun extends Reporting(Object) {
 
         if (entry === null) {
             this.recordError(`Failed to compile ${unit.label}`);
+
+            for (const output of unit.outputs) {
+                this.notWrittenFiles.add(output.destination);
+            }
 
             return;
         }
@@ -381,10 +415,16 @@ export class CompileRun extends Reporting(Object) {
                 ...(this.options.run === undefined ? {} : { run: this.options.run }),
             });
             const counted = written.action === "created" || written.action === "updated";
+            // An unchanged file's count shows only in verbose output, so it is counted only then.
+            const shownUnchanged = written.action === "unchanged" && this.deps.reporter.shows(LogLevel.Debug);
             const text = typeof file.content === "string" ? file.content : isUtf8(file.content) ? Buffer.from(file.content).toString("utf8") : undefined;
-            const tokens = counted && this.deps.countTokens && text !== undefined ? this.deps.countTokens(text) : undefined;
+            const tokens = (counted || shownUnchanged) && this.deps.countTokens && text !== undefined ? this.deps.countTokens(text) : undefined;
 
-            this.outputs.push({ ...base, ...written, ...(tokens === undefined ? {} : { tokens }) });
+            this.outputs.push({ ...base, ...written, ...(tokens === undefined || !counted ? {} : { tokens }) });
+
+            if (written.action === "skipped-untracked") {
+                this.notWrittenFiles.add(written.file);
+            }
 
             if (written.backup !== undefined) {
                 reportBackup(this.reporter, written.file, written.backup, this.options.dryRun === true);
@@ -400,6 +440,7 @@ export class CompileRun extends Reporting(Object) {
 
             this.reportWritten(written.file, written.action, tokens);
         } catch (error) {
+            this.notWrittenFiles.add(file.destination);
             this.recordError(`Failed to write ${file.destination}`, { file: file.destination }, { subject: file.destination, cause: messageOf(error) });
         }
     }
@@ -411,7 +452,7 @@ export class CompileRun extends Reporting(Object) {
                 this.operation("written", file, tokens === undefined ? {} : { tokens });
                 break;
             case "unchanged":
-                this.operation("unchanged", file);
+                this.operation("unchanged", file, tokens === undefined ? {} : { tokens });
                 break;
             case "would-create":
             case "would-update":
@@ -433,6 +474,7 @@ export class CompileRun extends Reporting(Object) {
 
     /** Says an output was not written because of an error, and what that leaves on disk. */
     private notWritten(file: string): void {
+        this.notWrittenFiles.add(file);
         const verb = this.options.dryRun ? "would not be written" : "not written";
 
         this.operation("failed", file, { note: fs.existsSync(file) ? `${verb} because of an error; the previous copy stays` : `${verb} because of an error` });
@@ -809,4 +851,13 @@ function outputModeOf(entry: FileNode): number | undefined {
 /** A problem as plain text: the summary, then its cause and hint. */
 function problemText(summary: string, facts: ProblemFacts): string {
     return [summary, facts.cause, facts.hint].filter((part): part is string => part !== undefined).join("\n  ");
+}
+
+/** Whether a held entry is part of an unchanged unit's block: its heading, its entry point, or an output left unchanged. */
+function isUnchangedEntry(entry: ReportedMessage): boolean {
+    if (entry.style === ReportEntryStyle.StepStart || entry.style === ReportEntryStyle.Variable) {
+        return true;
+    }
+
+    return entry.style === ReportEntryStyle.Operation && (entry.details as OperationDetails | undefined)?.action === "unchanged";
 }

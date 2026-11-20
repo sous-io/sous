@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { LogLevel, ReportEntryStyle } from "@sous-io/sous-plugin-api";
 import { loadState } from "../src/state.js";
 import { compileOnce, copyFixture, errorsOf, makeCompiler, makeProject, type TestProject } from "./helpers.js";
 
@@ -178,6 +179,33 @@ describe("compiler.compile", () => {
 
         expect(fs.statSync(dest).mtimeMs).toBe(first);
         expect(result.outputs[0]?.action).toBe("unchanged");
+    });
+
+    /**
+     * A unit whose outputs are all unchanged reports its whole block (heading, entry point and the
+     * unchanged line) at the debug level, so only verbose output shows it; a unit that wrote a file
+     * reports its block as before.
+     *
+     * second compile, nothing changed -> step, entry point and "unchanged" all at "debug"
+     */
+    it("should report an unchanged unit's block only at the debug level", async () => {
+        project = makeProject();
+        const dir = copyFixture(project, "simple");
+        const dest = project.at("out", "entry.md");
+        const config = single(path.join(dir, "entry.md"), dest);
+
+        const first = await compileOnce(project, config);
+        const firstBlock = first.compiler.reporter.messages.filter((entry) => entry.style !== ReportEntryStyle.OperationEnd);
+
+        expect(firstBlock.some((entry) => entry.style === ReportEntryStyle.StepStart && entry.level === LogLevel.Info)).toBe(true);
+        expect(firstBlock.some((entry) => entry.style === ReportEntryStyle.Operation && entry.level === LogLevel.Info)).toBe(true);
+
+        const { compiler } = await compileOnce(project, config);
+        const blockStyles: string[] = [ReportEntryStyle.StepStart, ReportEntryStyle.Variable, ReportEntryStyle.Operation];
+        const block = compiler.reporter.messages.filter((entry) => blockStyles.includes(entry.style));
+
+        expect(block.map((entry) => entry.style)).toEqual([ReportEntryStyle.StepStart, ReportEntryStyle.Variable, ReportEntryStyle.Operation]);
+        expect(block.every((entry) => entry.level === LogLevel.Debug)).toBe(true);
     });
 
     /** `rebuild` rewrites every output. */

@@ -7,6 +7,7 @@ import type { Memory } from "@sous-io/sous-plugin-memories/types";
 import { LogLevel, type Reporter } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
 import type { LockDiff, ResolvedLink, RestoreReport, RetiredRecipe, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
+import type { CompiledOutput } from "@sous-io/sous-plugin-compiler/types";
 import type { BuildPrepareResult, UnansweredWarning } from "./types.js";
 
 /** Warns about memories no output included, or says nothing when there are none. */
@@ -295,4 +296,47 @@ export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): 
 
 function lowerFirst(text: string): string {
     return text.length === 0 ? text : text[0]!.toLowerCase() + text.slice(1);
+}
+
+/** What a build did to its outputs, counted for {@link filesSummaryLine}. */
+export interface FilesSummaryInput {
+    /** Every output the compile handled. */
+    readonly outputs: readonly Pick<CompiledOutput, "file" | "action">[];
+    /** The outputs left unwritten (an error, or a file sous did not write already there). */
+    readonly notWritten?: readonly string[];
+    /** The files the build removed (or would remove); a file written again afterwards is not counted. */
+    readonly removed?: readonly string[];
+    readonly dryRun: boolean;
+}
+
+/**
+ * The one line a build reports before `Done.`: how many outputs were written, and of those how
+ * many are new and how many updated, then how many were unchanged. Removed and not-written outputs
+ * join only when there are some.
+ *
+ * ```ts
+ * filesSummaryLine({ outputs, dryRun: false });
+ * // "Files: 2 written (1 new, 1 updated), 13 unchanged."
+ * filesSummaryLine({ outputs, removed: ["/work/app/OLD.md"], dryRun: true });
+ * // "Files: 2 would be written (1 new, 1 updated), 13 unchanged, 1 would be removed."
+ * ```
+ */
+export function filesSummaryLine(input: FilesSummaryInput): string {
+    const count = (...actions: CompiledOutput["action"][]) => input.outputs.filter((output) => actions.includes(output.action)).length;
+    const created = count("created", "would-create");
+    const updated = count("updated", "would-update");
+    const written = created + updated;
+    const breakdown = [created > 0 ? `${created} new` : "", updated > 0 ? `${updated} updated` : ""].filter((part) => part !== "").join(", ");
+    // A file removed and then written again (a rebuild clears every output first) counts as written only.
+    const writtenFiles = new Set(input.outputs.filter((output) => output.action !== "skipped-untracked").map((output) => output.file));
+    const removed = new Set((input.removed ?? []).filter((file) => !writtenFiles.has(file))).size;
+    const notWritten = new Set(input.notWritten ?? []).size;
+    const parts = [
+        `${written} ${input.dryRun ? "would be written" : "written"}${breakdown === "" ? "" : ` (${breakdown})`}`,
+        `${count("unchanged")} unchanged`,
+        ...(removed > 0 ? [`${removed} ${input.dryRun ? "would be removed" : "removed"}`] : []),
+        ...(notWritten > 0 ? [`${notWritten} not written`] : []),
+    ];
+
+    return `Files: ${parts.join(", ")}.`;
 }

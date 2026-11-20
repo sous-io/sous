@@ -9,6 +9,28 @@ const SGR_PATTERN = /\u001B\[[0-9;]*m/g;
 /** The width prose is wrapped to when the output is not a terminal or never said how wide it is. */
 export const DEFAULT_WRAP_COLUMNS = 100;
 
+/**
+ * The width a table is laid out in when the output is not a terminal and `COLUMNS` is not set: wide
+ * enough that a piped or recorded table keeps each row on one line, so `grep` finds whole rows.
+ */
+export const PIPED_TABLE_COLUMNS = 2000;
+
+/**
+ * The width the `COLUMNS` environment variable names: a whole number above zero, or undefined when
+ * it is unset or holds anything else.
+ *
+ * ```ts
+ * columnsFromEnvironment({ COLUMNS: "160" }); // 160
+ * columnsFromEnvironment({ COLUMNS: "wide" }); // undefined
+ * ```
+ */
+export function columnsFromEnvironment(env: Readonly<Record<string, string | undefined>> | undefined): number | undefined {
+    const text = env?.COLUMNS?.trim() ?? "";
+    const columns = /^\d+$/.test(text) ? Number(text) : 0;
+
+    return columns > 0 ? columns : undefined;
+}
+
 /** How far short of the right edge text stops. */
 export const RIGHT_MARGIN = 2;
 

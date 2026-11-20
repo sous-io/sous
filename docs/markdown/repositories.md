@@ -289,6 +289,8 @@ $ sous build
 ▷ SKILL.tpl.md:
     Entry Point: ~/.sous/cache/github.com/my-team/agent-recipes/workflow/task-files/1.0.2/skills/start-task/SKILL.tpl.md
   ✓ /home/me/my-project/.claude/skills/start-task/SKILL.md (~1,996 tokens)
+
+  Files: 1 written (1 new), 7 unchanged.
 ```
 
 Skills go to `<project root>/.claude/skills`, the skills directory the built-in Claude Code plugin names, and the

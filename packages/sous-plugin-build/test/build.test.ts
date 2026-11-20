@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, IntentOutputs, type ItemList, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/sous-plugin-api";
+import { ConfigError, IntentOutputs, type ItemList, NonInteractiveError, NotFoundError, ReportEntryStyle, scriptedPrompter, type VariableSet } from "@sous-io/sous-plugin-api";
 import type { CompilerPruneResult } from "@sous-io/sous-plugin-compiler/types";
 import type { BuildResult, ClearResult, CompileCommandResult } from "../src/types.js";
 import { entry, harness, plugin, target } from "./helpers.js";
@@ -62,8 +62,12 @@ describe("the build intent", () => {
 
         expect(failed.exitCode).toBe(1);
         expect(failed.toPlain()).toMatchObject({ ok: false, watching: false });
-        expect(failed.toArray().map((output) => output.title)).toEqual(["Command Variables", undefined]);
-        expect(failed.toArray()[0]!.result!.toPlain()).toMatchObject({ "Dry Run": true });
+        // The Command Variables open the output as a report (standard error), not after "Done." in the result.
+        expect(failed.toArray().map((output) => output.title)).toEqual([undefined]);
+        const [variables] = h.reporter.styled(ReportEntryStyle.CommandVariables);
+        expect((variables!.message as VariableSet).toObject()).toMatchObject({ "Dry Run": true });
+        expect(h.reporter.messages.indexOf(variables!)).toBe(0);
+        expect(h.reporter.styled(ReportEntryStyle.OperationSummary).map((entry) => entry.message)).toEqual(["Files: 0 would be written, 0 unchanged."]);
         expect((await h.run<BuildResult>("build")).ok).toBe(false);
         expect(h.world.pruneCalls).toEqual([]);
 
@@ -443,7 +447,7 @@ describe("the compile intent", () => {
     /**
      * compile compiles every target, without preparing or pruning.
      *
-     * sous compile --strict; // -> compiler.compile { strict: true }; no prune, no resolve
+     * sous compile --strict; // -> compiler.compile { strict: true, reportEnd: false }; no prune, no resolve
      */
     it("should compile without preparing or pruning", async () => {
         const h = await harness({
@@ -455,7 +459,7 @@ describe("the compile intent", () => {
         const result = await h.run<CompileCommandResult>("compile", { strict: true });
 
         expect(result.ok).toBe(true);
-        expect(h.world.compileCalls).toEqual([{ strict: true }]);
+        expect(h.world.compileCalls).toEqual([{ strict: true, reportEnd: false }]);
         expect(h.world.pruneCalls).toEqual([]);
         expect(h.world.resolveCalls).toEqual([]);
     });

@@ -10,7 +10,7 @@
 
 import type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide } from "@sous-io/sous-plugin-api";
 import { createStyle, type Style } from "./style.js";
-import { DEFAULT_WRAP_COLUMNS, displayWidth, terminalColumns, wrapText } from "./text.js";
+import { displayWidth, PIPED_TABLE_COLUMNS, stripAnsi, terminalColumns, wrapText } from "./text.js";
 
 export type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide };
 
@@ -28,7 +28,11 @@ export interface TableOptions<Row extends Record<string, unknown>> {
     gap?: number;
     /** Whether to print the heading row and the rule under it. Defaults to true. */
     header?: boolean;
-    /** The stream the width is read from. Default: a stream that is not a terminal. */
+    /**
+   * The stream the width is read from. Default: a stream that is not a terminal. A stream that
+   * is not a terminal may still name a width (the `COLUMNS` environment variable); without one the
+   * table is laid out in {@link PIPED_TABLE_COLUMNS}.
+   */
     stream?: { columns?: number; isTTY?: boolean };
     /** The colors. Default: none. */
     style?: Style;
@@ -79,11 +83,13 @@ export function renderTable<Row extends Record<string, unknown>>(
     const style = options.style ?? createStyle(false);
 
     // A width the caller named describes a window of known size, so columns may be
-    // hidden to fit it. Without one, only a real terminal is measured; piped and
-    // recorded output always gets the full table at the default width, so a script
-    // reading it never loses a column to the size of somebody's window.
-    const measured =
-        options.width ?? (stream.isTTY === true ? terminalColumns(stream) : DEFAULT_WRAP_COLUMNS);
+    // hidden to fit it. Without one, a real terminal is measured. Piped and recorded
+    // output is laid out in the width its stream names (the `COLUMNS` the reporter
+    // read), else in {@link PIPED_TABLE_COLUMNS}, and never loses a column, so a script
+    // reading it always sees everything.
+    const known =
+        options.width ?? (stream.isTTY === true ? terminalColumns(stream) : pipedColumns(stream));
+    const measured = known ?? PIPED_TABLE_COLUMNS;
     const mayHide = options.width !== undefined || stream.isTTY === true;
     const budget = Math.max(1, Math.floor(measured) - indentWidth);
 
@@ -92,6 +98,9 @@ export function renderTable<Row extends Record<string, unknown>>(
         gap,
         showHeader,
         mayHide,
+        // Leftover width is shared out only in a window of known width; the wide piped
+        // default would otherwise pad a flexing column with spaces to its edge.
+        fill: known !== undefined,
     });
 
     const lines: string[] = [];
@@ -123,6 +132,11 @@ export function renderTable<Row extends Record<string, unknown>>(
     return lines;
 }
 
+/** The width a stream that is not a terminal names, or undefined when it names none. */
+function pipedColumns(stream: { columns?: number }): number | undefined {
+    return typeof stream.columns === "number" && stream.columns > 0 ? stream.columns : undefined;
+}
+
 // --- Laying the columns out ----------------------------------------------------------------------
 
 /** What the fitting pass needs to know about the window it is fitting to. */
@@ -131,6 +145,8 @@ interface FitInput {
     gap: number;
     showHeader: boolean;
     mayHide: boolean;
+    /** Whether leftover width goes to the columns that flex. */
+    fill: boolean;
 }
 
 /** The outcome of the fitting pass: what is shown, how wide, and what was left out. */
@@ -168,7 +184,7 @@ function fitColumns<Row extends Record<string, unknown>>(
         const targets = visible.map((column, index) =>
             Math.max(naturalWidth(column, rows, input.showHeader), floors[index]!)
         );
-        const flexes = visible.map((column) => Math.max(0, column.flex ?? 0));
+        const flexes = visible.map((column) => (input.fill ? Math.max(0, column.flex ?? 0) : 0));
         const ranks = visible.map((column) => PRIORITY_RANK[column.priority ?? "high"]);
         const cellBudget = Math.max(
             visible.length,
@@ -364,7 +380,10 @@ function naturalWidth<Row extends Record<string, unknown>>(
     showHeader: boolean
 ): number {
     let widest = showHeader ? displayWidth(column.header) : 0;
-    for (const row of rows) widest = Math.max(widest, displayWidth(cellText(row, column)));
+    // A cell holding several lines (pretty-printed JSON, say) is as wide as its widest line.
+    for (const row of rows) {
+        for (const line of cellText(row, column).split("\n")) widest = Math.max(widest, displayWidth(line));
+    }
     return Math.max(1, widest);
 }
 
@@ -419,7 +438,7 @@ function renderRow<Row extends Record<string, unknown>>(
         const width = widths[index]!;
         const text = cellText(row, column);
         return (column.overflow ?? "wrap") === "wrap"
-            ? wrapCell(text, width)
+            ? limitLines(wrapCell(text, width), width, column.maxLines)
             : [truncateToWidth(text, width, truncateSideOf(column))];
     });
 
@@ -466,6 +485,39 @@ function wrapCell(text: string, width: number): string[] {
         }
     }
     return lines;
+}
+
+/** What ends the last line of a cell whose column's `maxLines` left some of it out. */
+const MORE_HIDDEN = "...";
+
+/**
+ * Keeps a wrapped cell to its column's `maxLines`. When lines are left out, the last line
+ * kept ends in `...`, shortened at a space where it can be so a word is not cut.
+ *
+ * @param lines - The cell's wrapped lines.
+ * @param width - The column's width.
+ * @param maxLines - The most lines the cell may take; undefined (or below one) for no limit.
+ *
+ * @example
+ * limitLines(["one two", "three four", "five six"], 10, 2);
+ * // -> ["one two", "three..."]
+ */
+function limitLines(lines: string[], width: number, maxLines: number | undefined): string[] {
+    if (maxLines === undefined || maxLines < 1 || lines.length <= maxLines) return lines;
+
+    const kept = lines.slice(0, maxLines);
+    const last = kept[maxLines - 1]!;
+    const room = Math.max(0, width - MORE_HIDDEN.length);
+    let cut = sliceVisible(last, 0, room).trimEnd();
+
+    // Break at the last space that fits, unless the line is one long word.
+    if (displayWidth(last) > room) {
+        const space = stripAnsi(cut).lastIndexOf(" ");
+        if (space > 0) cut = sliceVisible(cut, 0, space).trimEnd();
+    }
+
+    kept[maxLines - 1] = `${cut}${MORE_HIDDEN}`;
+    return kept;
 }
 
 /**

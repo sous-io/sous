@@ -50,6 +50,9 @@ $ sous build
   ✓ .claude/skills/about-sous-repos/SKILL.md (~1,579 tokens)
   ✓ .claude/skills/about-sous-recipes/SKILL.md (~1,639 tokens)
   ✓ .claude/skills/create-skill/SKILL.md (~655 tokens)
+
+  Files: 7 written (7 new), 0 unchanged.
+
 ✓ Done.
 ```
 
@@ -335,6 +338,9 @@ $ sous build
     restored: workflow/task-files
 ▶ Building:
   ✓ .claude/skills/about-task-files/SKILL.md (~942 tokens)
+
+  Files: 1 written (1 new), 7 unchanged.
+
 ✓ Done.
 ```
 

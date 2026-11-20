@@ -28,7 +28,7 @@ await engine.frontEnd("cli").start(["config", "show"]);
 - `src/plugin.ts`, `src/front-end.ts`: the plugin and the front end that takes over after the config is built.
 - `src/command-tree.ts`, `src/flags.ts`, `src/parse.ts`: command tree, flags from schemas, argument parsing.
 - `src/help.ts`, `src/completion.ts`: help pages and completions.
-- `src/views/show.ts`: `showOutputs`, the `--json` / reporter switch. There are no per-intent views: an intent builds its own outputs. `src/views/` also holds the shared drawing helpers (tables, colors, text wrapping).
+- `src/views/show.ts`: `showOutputs`, the `--json` / reporter switch. There are no per-intent views: an intent builds its own outputs. `src/views/` also holds the shared drawing helpers (tables, colors, text wrapping). A table fits a terminal's width; sent elsewhere it keeps every column and is laid out in the width `COLUMNS` names, else `PIPED_TABLE_COLUMNS` (2000, `src/views/text.ts`).
 - `src/help-page.ts`: `HelpPage`, the payload the `help` intent and `--help` return; the reporter paints it, `toText()` gives it plain.
 - `src/terminal/`: the layout and the per-style rendering `TerminalReporter` uses (`render-entry.ts` draws results, payloads and errors).
 - `src/terminal-reporter.ts`, `src/terminal-prompter.ts`, `src/errors.ts`: output, questions, exit codes.

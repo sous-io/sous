@@ -170,6 +170,7 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
             ok: errors === 0 && (!strict || allProblems.every((problem) => problem.level !== "warning")),
             outputs: result.outputs,
             problems: allProblems,
+            notWritten: [...result.notWritten],
             included: [...result.included],
             durationMs: performance.now() - started,
         };
