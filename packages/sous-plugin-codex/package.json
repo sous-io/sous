@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/sous-plugin-codex",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Everything sous knows about Codex: its harness, its memories file (AGENTS.override.md) and its skills folder. Off until a project turns it on.",
   "type": "module",
   "license": "Apache-2.0",
