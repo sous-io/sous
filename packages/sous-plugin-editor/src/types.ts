@@ -198,6 +198,11 @@ export interface EditorHistory {
     entries: HistoryEntry[];
     /** Files Sous created because they were missing, relative to the project root when inside it. */
     createdFiles: string[];
+    /**
+     * For each created file, the missing parent folders Sous created to hold it, top down. They are
+     * removed with the file when it is rolled back, if empty and no folder entry wants them.
+     */
+    createdFolders: Record<string, string[]>;
 }
 
 // ---------------------------------------------------------------------------------------------

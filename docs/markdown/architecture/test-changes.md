@@ -2005,3 +2005,9 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** the `describe("--env-file")` block of `src/ask.spec.ts` is now `describe("--save-locally and --save-shared")`; its tests are unchanged.
 - **Changed** `e2e/scenarios/04-variables.mjs`: "--env-file .sous/.env.local writes the answer to the machine-local file" is now "--save-locally writes the answer to the machine-local file", and "an --env-file that is not one of the two allowed files fails naming both" is now "--save-locally and --save-shared together fail naming both".
 - **New** "should store every answer in the file a save switch names" (`test/plugin.test.ts`).
+
+### A rolled-back file takes the folders Sous created for it (sous-plugin-editor; gh-270)
+
+- **Changed** "should create starter files and folders and roll them back safely" (`src/apply.spec.ts`): `directories.created` also lists `.kw`, the folder created to hold `.kw/descriptor.json`, and the rollback removes `.kw`.
+  - **Why:** a new file's missing parent folders are now created, recorded and rolled back like a declared folder's.
+- **New** in `src/apply.spec.ts`: "should remove the parent folders it created for a starter file", "should keep a parent folder that existed, holds other files or is still wanted", "should remove the .claude folder a set created settings.json in" and "should read a history without createdFolders as recording no folders".

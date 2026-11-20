@@ -15,7 +15,7 @@ export const HISTORY_FILE_NAME = "sous.edits.json";
 
 /** An empty history. */
 export function emptyHistory(): EditorHistory {
-    return { version: 1, entries: [], createdFiles: [] };
+    return { version: 1, entries: [], createdFiles: [], createdFolders: {} };
 }
 
 /** A path as the history writes it: relative to the project root when inside it. */
@@ -55,6 +55,10 @@ export function readHistory(file: string, root: string): EditorHistory {
         version: 1,
         entries: value.entries.map((entry: HistoryEntry) => ({ ...entry, file: fromStored(entry.file, root) })),
         createdFiles: (value.createdFiles ?? []).map((created) => fromStored(created, root)),
+        // A history written before folders were recorded has none.
+        createdFolders: Object.fromEntries(
+            Object.entries(value.createdFolders ?? {}).map(([created, dirs]) => [fromStored(created, root), dirs.map((dir) => fromStored(dir, root))]),
+        ),
     };
 }
 
@@ -64,6 +68,11 @@ export function writeHistory(file: string, root: string, history: EditorHistory)
         version: 1,
         entries: history.entries.map((entry) => ({ ...entry, file: toStored(entry.file, root) })),
         createdFiles: [...new Set(history.createdFiles.map((created) => toStored(created, root)))].sort(),
+        createdFolders: Object.fromEntries(
+            Object.entries(history.createdFolders)
+                .map(([created, dirs]): [string, string[]] => [toStored(created, root), dirs.map((dir) => toStored(dir, root))])
+                .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        ),
     };
 
     fs.mkdirSync(path.dirname(file), { recursive: true });

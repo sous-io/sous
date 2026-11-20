@@ -118,7 +118,8 @@ edits:
 
 `ensureFileExists` writes the file only when it is missing, so the project's later edits stay. If
 the recipe goes away, the file is backed up and removed, and each folder Sous created is removed if it
-is empty; a folder that was already there, or that holds anything, stays.
+is empty, including the folders Sous created to hold a new file (`.claude/` for a new
+`.claude/settings.json`); a folder that was already there, or that holds anything, stays.
 
 ## Operations
 

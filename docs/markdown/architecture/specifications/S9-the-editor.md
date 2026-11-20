@@ -330,8 +330,10 @@ or by the history, in one pass:
    ignored. A `backupBeforeChange` entry copies the file first.
 
 Folders come first and last: `ensureDirectoryExists` creates each missing level before the files,
-recording each one; a rollback removes the recorded levels after the files, deepest first, and only
-those that are empty. A folder that was already there is never removed.
+recording each one, and a file Sous creates gets its missing parent folders created the same way,
+recorded with the file. A rollback removes the recorded levels after the files (a file's levels
+when the file itself is removed), deepest first, and only those that are empty and that no declared
+`ensureDirectoryExists` entry still wants. A folder that was already there is never removed.
 
 > "if the directory was already there, the rollback should not delete it (this aligns with other
 > things we've already discussed). If the directory is not-empty, then it should not be deleted."
@@ -375,7 +377,8 @@ those that are empty. A folder that was already there is never removed.
 
 `.sous/sous.edits.json` (or `editor.historyFile`), git-ignored: for each applied entry its identity,
 declarer, file, `rollback` and `backupOnRemoval`, and for each operation its canonical name, its
-parameters and what `up` recorded; and the files Sous created. Paths inside the project are
+parameters and what `up` recorded; the files Sous created; and, for each created file, the parent
+folders Sous created to hold it (`createdFolders`; a history written without it records none). Paths inside the project are
 relative to its root. Backups go to `.sous/backups/<YYYY-MM-DD>/<HHMM-SS>/<path from the project
 root>`, as the compiler's do (files outside the project under `outside-project/`).
 
@@ -622,3 +625,11 @@ with CRLF line breaks, now puts back exactly the text there was; a YAML string n
 quoting or block style its old value only needed; a JSONC object among one-line neighbours is
 written on one line; and orders and `replacePattern` are undone (above). What was not fixed is in
 Open Questions. The agent's work.
+
+### 2026-11-20: A rolled-back file takes the folders Sous created for it (gh-270)
+
+A file Sous created was written with every missing parent folder created on the way, and none of
+those folders was recorded, so rolling the file back left them behind, empty: a `set` that created
+`.claude/settings.json` left an empty `.claude/`. The editor now creates a new file's parent folders
+level by level, records the levels it created under the file in the history's `createdFolders`, and
+removes them with the file, under the rule for folders above. The agent's fix of the reported bug.

@@ -234,7 +234,14 @@ export async function applyEdits(
     const previousById = new Map(history.entries.map((entry) => [entry.identity, entry]));
     const undeclared = history.entries.filter((entry) => !declaredIds.has(entry.identity));
     const toUndo = options.undo ? undeclared : [];
-    const next: EditorHistory = { version: 1, entries: options.undo ? [] : [...undeclared], createdFiles: [...history.createdFiles] };
+    const next: EditorHistory = {
+        version: 1,
+        entries: options.undo ? [] : [...undeclared],
+        createdFiles: [...history.createdFiles],
+        createdFolders: { ...history.createdFolders },
+    };
+    // Parent folders Sous created for a file it now removes: removed in step 3 with the folder entries'.
+    const fileFolders: string[] = [];
     const kept = new Map<string, HistoryEntry>();
     const files: EditedFile[] = [];
     const assertions: AssertionOutcome[] = [];
@@ -550,17 +557,30 @@ export async function applyEdits(
             backups.push(dryRun ? "(a backup)" : env.backup(file));
         }
 
+        // The missing parent folders of a new file, recorded so they go when the file does.
+        const madeFolders = finalText !== undefined ? createDirectories([path.dirname(file)], dryRun) : [];
+
+        for (const dir of madeFolders) {
+            reporter.debug(`${dryRun ? "Would create" : "Created"} the folder ${display(dir, root)} to hold ${shown}.`);
+        }
+
+        directories.created.push(...madeFolders);
+
         if (!dryRun) {
             if (finalText === undefined) {
                 fs.rmSync(file, { force: true });
             } else {
-                fs.mkdirSync(path.dirname(file), { recursive: true });
                 fs.writeFileSync(file, finalText, "utf8");
             }
         }
 
         if (action === "created" && !next.createdFiles.includes(file)) next.createdFiles.push(file);
-        if (removing || action === "removed") next.createdFiles = next.createdFiles.filter((created) => created !== file);
+        if (action === "created" && madeFolders.length > 0) next.createdFolders[file] = madeFolders;
+        if (removing || action === "removed") {
+            next.createdFiles = next.createdFiles.filter((created) => created !== file);
+            fileFolders.push(...(next.createdFolders[file] ?? []));
+            delete next.createdFolders[file];
+        }
 
         reporter.debug(`${dryRun ? "Would have " : ""}${action} ${shown}${backups.length > 0 ? ` (backed up to ${backups.join(", ")})` : ""}.`);
         files.push({ file: shown, action, ...(backups.length > 0 ? { backups } : {}) });
@@ -568,7 +588,7 @@ export async function applyEdits(
 
     // 3. Folders no entry wants any more: removed last, deepest first, only if empty.
     const folderEntries = toUndo.filter((entry) => entry.file === "");
-    const candidates: string[] = [];
+    const candidates: string[] = [...fileFolders];
 
     for (const entry of folderEntries) {
         if (!entry.rollback) continue;
@@ -614,6 +634,10 @@ export async function applyEdits(
     const stillNamed = new Set(next.entries.map((entry) => entry.file));
 
     next.createdFiles = next.createdFiles.filter((file) => stillNamed.has(file));
+
+    for (const file of Object.keys(next.createdFolders)) {
+        if (!next.createdFiles.includes(file)) delete next.createdFolders[file];
+    }
 
     // A project that never used the editor gets no history file: an empty one would be a new,
     // unignored file in `.sous/` after every build (the ignore lines are added only for a project
