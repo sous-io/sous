@@ -217,7 +217,7 @@ describe("the subscription outputs", () => {
         const text = JSON.stringify(reporter.messages);
 
         expect(text).not.toContain("The variables it publishes are asked about afterwards");
-        expect(text).toContain("that require an answer and have none yet are asked about afterwards");
+        expect(text).toContain("that require an answer and have none yet are asked about before anything is written");
     });
 
     /** A build that failed ends the command with exit code 1 and an error saying what is recorded. */

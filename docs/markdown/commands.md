@@ -636,9 +636,11 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 
 - `subscription add` (or `sous subscribe`) subscribes, then builds so the recipe's files are on disk. Answer a
   recipe's questions ahead of time with `--answer <name>=<value>` or `--answers-file <path>`, and let it install
-  the sous plugins it requires with `--install-plugins`. It checks everything before it writes anything: every
-  recipe it installs is downloaded first, and without a terminal a required question nothing answers fails it.
-  A failed subscription leaves the project as it was. Without `@<range>` the subscription accepts any version,
+  the sous plugins it requires with `--install-plugins`. It checks everything before it writes anything: a
+  repository it has to trust is trusted in memory only, every recipe it installs is downloaded, and the recipes'
+  questions are asked (without a terminal, a required question nothing answers fails it). Only then are the
+  trust, the subscription, the lockfile and the answers written, so a failed subscription, a declined question
+  or Ctrl-C leaves the project as it was. Without `@<range>` the subscription accepts any version,
   so an update may move it to a new major version; the plan shown before the question, and the result, name
   the range recorded.
 - `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The

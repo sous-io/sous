@@ -2068,3 +2068,12 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **New** `sous/test/integration/lockfile-unread-recipes.test.ts` (doctor, lock rebuild and build with an empty recipe store) and `sous/test/integration/subscription-add-checks-first.test.ts` (a failed subscription writes nothing; the recorded range is shown).
 - **Changed** "should refuse to install a recipe whose question nothing answers" (`sous/test/integration/repositories.test.ts`): it expects "Nothing was written." and no longer unsubscribes afterwards.
   - **Why:** the subscription now fails before anything is written, so there is nothing to put back.
+
+### Subscription add holds trust and answers until everything has passed (sous-plugin-recipes, sous; gh-230 item 1)
+
+- **Changed** "should subscribe and run the follow-ups" (`sous-plugin-recipes/src/part-a/intents/intents.spec.ts`) is now "should subscribe, ask before writing, and run the build": a stand-in `recipe-answers.asking` holds the answers, which are written after the lockfile and 510; only `build` runs through `ctx.run`. **Changed** "should refresh the config before vars.ask and again before build" is now "should refresh the config after writing and before the build". **Replaced** "should write nothing when a required question cannot be asked" with "should write nothing when a question fails".
+  - **Why:** `subscription add` asks its recipes' questions through `recipe-answers.asking` before it writes anything, instead of running `vars.ask` after writing.
+- **Changed** "should not promise questions before subscribing" (`sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`): the plan says the questions are asked before anything is written.
+- **Changed** `sous/test/utils/in-process.ts`: `runInProcess` takes an optional `answer` for typed questions; one that throws stands for Ctrl-C.
+- **Changed** "should refuse to install a recipe whose question nothing answers" (`sous/test/integration/repositories.test.ts`): it checks the lockfile is unchanged instead of expecting "Nothing was written." (the error is `vars.ask`'s own now). **New** "should not record trust in a repository when the subscription fails".
+- **New** in `sous/test/integration/subscription-add-checks-first.test.ts`: "should write nothing when a question is interrupted" and "should ask before writing, then write the answer with the subscription".

@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo, gitIn, writeFixtureFile } from "../utils/fixture-repo.js";
 import { readManagedLayer, SUBSCRIPTIONS_LAYER_FILENAME } from "../utils/managed-layer.js";
+import { runInProcess } from "../utils/in-process.js";
 import { binPath } from "../utils/sous-bin.js";
 
 /** Per-test budget: every one of these boots the real CLI several times. */
@@ -89,6 +90,7 @@ beforeAll(async () => {
     { namespace: "acme", name: "fancy", version: "1.0.0", files: { "skills/fancy/SKILL.md": "# fancy\n" }, variables: [REGION] },
     { namespace: "acme", name: "gadget", version: "1.0.0", files: { "skills/gadget/SKILL.md": "# gadget\n" }, variables: [REGION] },
     { namespace: "acme", name: "plain", version: "1.4.0", files: { "skills/plain/SKILL.md": "# plain\n" } },
+    { namespace: "acme", name: "asker", version: "1.0.0", files: { "skills/asker/SKILL.md": "# asker\n" }, variables: [REGION] },
   ]);
   // The index still offers these versions, but their tags and folders are gone, so they cannot be downloaded.
   gitIn(repo, "tag", "-d", "acme/widget@1.0.0");
@@ -156,9 +158,69 @@ describe("a failed sous subscription add", () => {
 
       expect(result.status, result.output).toBe(1);
       expect(result.stderr).toContain("One variable still needs an answer, and there is no terminal to ask on.");
-      expect(result.stderr).toContain("Nothing was written.");
       expect(result.stderr).toContain("region (acme/gadget)");
       expect(snapshot()).toEqual(before);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * In a terminal, the recipe's questions are asked before anything is
+   * written, so interrupting one (Ctrl-C) leaves the project exactly as it was.
+   *
+   * sous subscription add acme/asker   (a terminal; Ctrl-C at "Which region does the agent deploy to?")
+   * // -> fails; no 510 entry, no lockfile change, no state change, no answer
+   */
+  it(
+    "should write nothing when a question is interrupted",
+    async () => {
+      const before = snapshot();
+      const run = await runInProcess(
+        project,
+        { SOUS_HOME: sousHome },
+        "subscription.add",
+        { ref: "acme/asker" },
+        () => true,
+        () => {
+          throw new Error("Interrupted (Ctrl-C).");
+        }
+      );
+
+      expect(run.error?.message).toBe("Interrupted (Ctrl-C).");
+      expect(run.asked).toContain(REGION.prompt);
+      expect(snapshot()).toEqual(before);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The question comes before every write, and its answer is written with
+   * the subscription.
+   *
+   * sous subscription add acme/asker --no-build   (a terminal; answers "eu-west-1")
+   * // -> when asked: no 510 entry yet; afterwards: subscribed, SOUS_VAR_REGION=eu-west-1 stored
+   */
+  it(
+    "should ask before writing, then write the answer with the subscription",
+    async () => {
+      const seenWhenAsked: string[] = [];
+      const run = await runInProcess(
+        project,
+        { SOUS_HOME: sousHome },
+        "subscription.add",
+        { ref: "acme/asker", noBuild: true },
+        () => true,
+        () => {
+          seenWhenAsked.push(...Object.keys(subscriptions()));
+
+          return "eu-west-1";
+        }
+      );
+
+      expect(run.error).toBeUndefined();
+      expect(seenWhenAsked).not.toContain("acme/asker");
+      expect(subscriptions()["acme/asker"]).toBeDefined();
+      expect(Object.values(snapshot()).join("\n")).toContain("=eu-west-1");
     },
     CLI_TIMEOUT
   );

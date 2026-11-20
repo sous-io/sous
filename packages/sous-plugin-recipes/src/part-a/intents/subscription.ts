@@ -4,13 +4,15 @@
  * pinned versions forward, and the internal `recipe.plan-update`, which plans that and writes nothing
  * (ported from `subscription-service.ts` and `src/commands/subscription/`).
  *
- * Subscribing asks nothing about variables itself: it subscribes, then runs `vars.ask` and `build`
- * through `ctx.run`. `enable` and `disable` overwrite only `enabled` in
+ * Subscribing checks everything before it writes anything (#230 item 1): repositories it needs are
+ * trusted in memory (a "what if" config), its recipes are downloaded, and their questions are asked
+ * through `recipe-answers.asking`, which holds the answers. Only then are the trust, the
+ * subscription, the lockfile and the answers written, and `build` runs through `ctx.run`. `enable` and `disable` overwrite only `enabled` in
  * `conf.d/510-subscriptions.jsonc`, keeping every other field. Sous always reads the merged
  * config, so a later layer that sets `enabled: false` switches a subscription off.
  */
 
-import { LogLevel, SousError, type BuiltConfig, type Context, type Reporter, type Sous } from "@sous-io/sous-plugin-api";
+import { LogLevel, SousError, type BuiltConfig, type Context, type IntentOutputs, type Reporter, type Sous } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { NamedRef, SousRef } from "@sous-io/sous-plugin-refs/types";
 import semver from "semver";
@@ -52,11 +54,11 @@ import {
     writeSubscriptionEntry,
 } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
-import { checkAnswerable, checkProvidedAnswers } from "../provided-answers.js";
+import { checkProvidedAnswers, holdAnswers } from "../provided-answers.js";
 import { planQuestions } from "../questions.js";
-import { lockDiffLines } from "../outputs.js";
+import { lockDiffLines, type RanFollowUp } from "../outputs.js";
 import { downloadRecipes, ensureRequiredPlugins } from "../required-plugins.js";
-import { needUrlError } from "../trust.js";
+import { needUrlError, trustEntry } from "../trust.js";
 import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, resolvedAtPin, sortBytewise } from "../util.js";
 import { publishedOrRetired } from "../../part-b/support.js";
@@ -107,8 +109,56 @@ async function rebuild(ctx: Context): Promise<Context | undefined> {
 
 // --- subscription.add -----------------------------------------------------------------------------
 
-/** What the written ref names, fully qualified, and any repository trusted to settle it. */
-async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Promise<{ ref: NamedRef; trusted: string[]; ctx: Context }> {
+/**
+ * The repositories a subscription was told to trust, held in memory until everything else has
+ * passed (#230 item 1): the rest of the command reads a "what if" config that trusts them, and
+ * they are written to `conf.d/500-repos.jsonc` only with the subscription itself.
+ */
+type PendingTrust = MissingRepo[];
+
+/**
+ * A context whose config trusts the pending repositories too, built in memory: nothing is written.
+ * Its services (the resolver, the index cache, the store) read the repositories as trusted.
+ */
+async function trustingInMemory(ctx: Context, pending: PendingTrust): Promise<Context> {
+    const built = await ctx.engine.buildConfig({
+        extraContributors: [
+            {
+                id: "recipes/pending-trust",
+                contribute: (config) => {
+                    for (const repo of pending) {
+                        config.atPath(["repos", repo.name]).set(trustEntry(repo));
+                    }
+                },
+            },
+        ],
+    });
+
+    return Object.create(ctx, {
+        config: { value: built },
+        services: { value: built.services },
+        entities: { value: built.entities },
+    }) as Context;
+}
+
+/**
+ * Asks whether to trust repositories, writing nothing: a repository with no URL fails now, and the
+ * accepted ones join `pending`.
+ */
+async function decideTrust(ctx: Context, missing: readonly MissingRepo[], input: SubscriptionAddInput, pending: PendingTrust): Promise<void> {
+    const needUrl = missing.filter((repo) => repo.url === undefined).map((repo) => repo.name);
+
+    await ctx.services.get("recipes.trust").decide(missing, { ...(input.yes === undefined ? {} : { yes: input.yes }), ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }) }, ctx);
+
+    if (needUrl.length > 0) {
+        throw needUrlError(needUrl);
+    }
+
+    pending.push(...missing);
+}
+
+/** What the written ref names, fully qualified, and any repository it has to trust (held in `pending`). */
+async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context, pending: PendingTrust): Promise<{ ref: NamedRef; ctx: Context }>{
     const readings = readingsOf(ctx, input.ref);
     const short = readings.find(isShortNamed);
 
@@ -118,13 +168,13 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
             const key = ctx.services.get("refs.format").key(short);
 
             if (key === key.toLowerCase()) {
-                return { ref: short, trusted: [], ctx };
+                return { ref: short, ctx };
             }
         }
 
         const catalog = await loadCatalog(ctx);
 
-        return { ref: await pickNamed(ctx, catalog, readings.filter(isShortNamed), input, short), trusted: [], ctx };
+        return { ref: await pickNamed(ctx, catalog, readings.filter(isShortNamed), input, short), ctx };
     }
 
     const located = readings.filter((reading): reading is NamedRef => (reading.kind === "namespace" || reading.kind === "recipe") && locationOf(reading) !== undefined);
@@ -137,7 +187,6 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
 
     const trust = ctx.services.get("recipes.trust");
     let current = ctx;
-    const trusted: string[] = [];
 
     // Readings in a repository the project trusts come first (#204 bug 31): on GitLab a nested group
     // reads several ways, and the first listed is the one '--accept-first' takes.
@@ -156,26 +205,21 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
 
         const location = locationOf(chosen)!;
         const name = proposeRepoName(Object.keys(trustedRepos(ctx.config)), location.identity);
-        const done = await trust.confirm(
-            [{ name, url: location.url, identity: location.identity, provider: location.provider, requiredBy: [{ ref: input.ref.trim(), requestedBy: PROJECT_HOLDER }] }],
-            { ...(input.yes === undefined ? {} : { yes: input.yes }), ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }) },
-            ctx,
-        );
 
-        trusted.push(...done.added);
+        await decideTrust(ctx, [{ name, url: location.url, identity: location.identity, provider: location.provider, requiredBy: [{ ref: input.ref.trim(), requestedBy: PROJECT_HOLDER }] }], input, pending);
 
+        // A dry run reads nothing from a repository the project does not trust.
         if (input.dryRun === true) {
-            return { ref: chosen, trusted, ctx };
+            return { ref: chosen, ctx };
         }
 
-        ctx.configChanged();
-        current = await refreshed(ctx);
+        current = await trustingInMemory(ctx, pending);
     }
 
-    const checkedNow = trusted.length > 0;
+    const checkedNow = pending.length > 0;
     const catalog = await loadCatalog(current, { latest: checkedNow });
 
-    return { ref: await pickNamed(current, catalog, located, input, located[0]!, checkedNow), trusted, ctx: current };
+    return { ref: await pickNamed(current, catalog, located, input, located[0]!, checkedNow), ctx: current };
 }
 
 /** Where a named ref says its repository lives. */
@@ -234,7 +278,7 @@ export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: Nam
                 : `It is recorded with the version range '${range}', so an update moves it only to versions in that range.`,
             "The files it ships are compiled into this project's agent directories on the next build.",
             "Any scripts it ships can be run on this machine when an agent uses them. Sous does not run them itself, and cannot vouch for what they do.",
-            "Variables it publishes that require an answer and have none yet are asked about afterwards, and the answers are written to this project's env files.",
+            "Variables it publishes that require an answer and have none yet are asked about before anything is written, and the answers are written to this project's env files with the subscription.",
             "Its dependencies are pinned in this project's lockfile at the versions resolved now. A dependency in a repository this project does not trust is asked about by name first.",
             ...moves.map(
                 (move) =>
@@ -323,9 +367,9 @@ async function resolveClosure(
     input: SubscriptionAddInput,
     ref: NamedRef,
     start: Context,
+    pending: PendingTrust,
     builtInRange?: string,
-): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; trusted: string[]; ctx: Context }> {
-    const trusted: string[] = [];
+): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; ctx: Context }> {
     let ctx = start;
 
     for (let round = 0; ; round++) {
@@ -342,31 +386,26 @@ async function resolveClosure(
                 throw new SousError(`Resolving '${input.ref}' kept turning up repositories to trust: ${missing.map((repo) => repo.name).join(", ")}.`);
             }
 
-            return { resolved: result.resolved, unreadable: result.unreadable, cycles: result.cycles, trusted, ctx };
+            return { resolved: result.resolved, unreadable: result.unreadable, cycles: result.cycles, ctx };
         }
 
-        const done = await ctx.services.get("recipes.trust").confirm(missing, { ...(input.yes === undefined ? {} : { yes: input.yes }), ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }) }, ctx);
-
-        if (done.needUrl.length > 0) {
-            throw needUrlError(done.needUrl);
-        }
-
-        trusted.push(...done.added);
+        await decideTrust(ctx, missing, input, pending);
 
         if (input.dryRun === true) {
-            ctx.reporter.dryRun(`A dry run trusts nothing, so what ${sortBytewise(done.added).join(", ")} would add is not resolved.`);
+            ctx.reporter.dryRun(`A dry run trusts nothing, so what ${sortBytewise(missing.map((repo) => repo.name)).join(", ")} would add is not resolved.`);
 
-            return { resolved: result.resolved, unreadable: result.unreadable, cycles: result.cycles, trusted, ctx };
+            return { resolved: result.resolved, unreadable: result.unreadable, cycles: result.cycles, ctx };
         }
 
-        ctx.configChanged();
-        ctx = await refreshed(ctx);
+        // Trusted in memory only; written with the subscription once everything has passed.
+        ctx = await trustingInMemory(start, pending);
     }
 }
 
 /** `subscription.add`. */
 export async function addSubscription(input: SubscriptionAddInput, ctx: Context): Promise<SubscriptionAddResult> {
-    const written = await resolveWrittenRef(input, ctx);
+    const pending: PendingTrust = [];
+    const written = await resolveWrittenRef(input, ctx, pending);
     const format = ctx.services.get("refs.format");
     const key = format.key(written.ref);
     const canonical = format.format(written.ref);
@@ -388,7 +427,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
         }
     }
 
-    const alone = await resolveClosure(input, written.ref, written.ctx, builtInRange);
+    const alone = await resolveClosure(input, written.ref, written.ctx, pending, builtInRange);
     const current = alone.ctx;
     const settled = await resolveWithOthers(current, input, key, written.ref, alone.resolved, builtInRange);
     const closure = { ...alone, resolved: settled.resolved };
@@ -400,7 +439,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
         key,
         ...(input.ref.trim() === canonical ? {} : { resolvedFrom: input.ref.trim() }),
         resolved: closure.resolved,
-        trusted: [...written.trusted, ...closure.trusted],
+        trusted: pending.map((repo) => repo.name),
         unreadable: closure.unreadable,
         cycles: closure.cycles,
         ...(range === undefined ? {} : { range }),
@@ -409,17 +448,16 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
 
     // Everything is checked before anything is written (#230 item 1), so a failed subscription
     // leaves the project exactly as it was: every recipe it installs is downloaded first, an answer
-    // given up front that names nothing or does not fit fails, and so does a variable it requires
-    // that cannot be answered without a terminal.
+    // given up front that names nothing or does not fit fails, and the recipes' questions are asked
+    // now, with the answers held until the subscription is written (a declined question, a question
+    // that cannot be asked without a terminal, or Ctrl-C leaves nothing behind).
     if (input.dryRun !== true) {
         await requireDownloaded(current, closure.resolved, canonical);
     }
 
     await checkProvidedAnswers(current, closure.resolved, input, input.dryRun !== true);
 
-    if (input.dryRun !== true) {
-        await checkAnswerable(current, closure.resolved, input);
-    }
+    const held = input.dryRun === true ? undefined : await holdAnswers(current, closure.resolved, input);
 
     // A recipe requiring a plugin that is not installed is refused, unless it is installed now.
     const installed = await ensureRequiredPlugins(current, closure.resolved, input, input.ref.trim());
@@ -433,6 +471,10 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
             questions: await planQuestions(current, closure.resolved),
         };
     }
+
+    // Every check passed: the repositories trusted along the way, the subscription, the lockfile and
+    // the answers are written now.
+    await ctx.services.get("recipes.trust").record(pending);
 
     if (isBuiltInEntry(builtIn)) {
         // Clears the opt-out `remove` or `disable` wrote, rather than replacing sous's entry with one of the user's.
@@ -449,13 +491,16 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
 
     const diff = await writeLock(current, after);
 
+    await held?.write();
     ctx.configChanged();
-    await rebuild(current);
+    await rebuild(ctx);
 
-    // A recipe whose index does not record its questions may ask some, so vars.ask runs for it too.
-    const asking = closure.resolved.filter((recipe) => recipe.variables === undefined || recipe.variables.length > 0).map((recipe) => recipe.key);
+    const asked: RanFollowUp =
+        held === undefined
+            ? { intent: "vars.ask", skipped: "no plugin provides vars.ask" }
+            : { intent: "vars.ask", result: held.outputs.toPlain(), outputs: held.outputs as IntentOutputs<object> };
 
-    return { ...result, diff, followUps: [...installFollowUp, await askFollowUp(ctx, input, asking), await buildFollowUp(ctx, input)] };
+    return { ...result, diff, followUps: [...installFollowUp, asked, await buildFollowUp(ctx, input)] };
 }
 
 /**

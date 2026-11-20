@@ -909,8 +909,10 @@ After:
   `sous-plugin-recipes`, one way.
 - `renderFacts`, `formatQuestionPlan` and the update plan become the outputs of the intents that
   own their data.
-- Subscribing no longer asks anything itself. The `subscription.add` intent subscribes, then runs
-  `vars.ask` and `build` through `ctx.run`. Every front end calls the same intent.
+- Subscribing no longer asks anything itself. The `subscription.add` intent has
+  `recipe-answers.asking` ask its recipes' questions before it writes anything, holding the answers
+  in memory, then writes the subscription and the answers together and runs `build` through
+  `ctx.run`. Every front end calls the same intent.
 
 ### repos and the compiler
 

@@ -430,6 +430,54 @@ describe("the repositories consumer surface", () => {
   );
 
   /**
+   * A repository trusted along the way is recorded only with the subscription
+   * itself, once everything else has passed (#230 item 1). Here the person
+   * trusts the vendor repository, but it cannot be read (no network), so the
+   * subscription fails, and the repository is not left trusted.
+   *
+   * sous subscription add workflow/needs-vendor   (a terminal; yes to both questions; offline)
+   * // -> fails; 500-repos.jsonc has no vendor-recipes, and there is no lockfile
+   */
+  it(
+    "should not record trust in a repository when the subscription fails",
+    async () => {
+      const reposFile = path.join(sousDir, "conf.d", "500-repos.jsonc");
+      const reposBefore = fs.readFileSync(reposFile, "utf8");
+      const gitProtocols = process.env.GIT_ALLOW_PROTOCOL;
+      const realFetch = globalThis.fetch;
+
+      // Offline: nothing reaches GitHub, over HTTP or git.
+      process.env.GIT_ALLOW_PROTOCOL = "file";
+      globalThis.fetch = (() => Promise.reject(new Error("offline"))) as typeof fetch;
+
+      try {
+        const run = await runInProcess(
+          projectRoot,
+          { SOUS_HOME: sousHome, GITHUB_TOKEN: "offline-test-token", GIT_ALLOW_PROTOCOL: "file" },
+          "subscription.add",
+          { ref: "workflow/needs-vendor" },
+          () => true
+        );
+
+        expect(run.error).toBeDefined();
+        expect(run.asked.some((message) => message.startsWith("Do you trust"))).toBe(true);
+      } finally {
+        globalThis.fetch = realFetch;
+
+        if (gitProtocols === undefined) {
+          delete process.env.GIT_ALLOW_PROTOCOL;
+        } else {
+          process.env.GIT_ALLOW_PROTOCOL = gitProtocols;
+        }
+      }
+
+      expect(fs.readFileSync(reposFile, "utf8")).toBe(reposBefore);
+      expect(fs.existsSync(path.join(sousDir, "sous.lock.json"))).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * Once the second repository is added, the same subscription resolves the
    * whole closure: the recipe the project asked for, plus the build dependency
    * it declares, each pinned at an exact version.
@@ -517,6 +565,8 @@ describe("the repositories consumer surface", () => {
   it(
     "should refuse to install a recipe whose question nothing answers",
     () => {
+      const lockfile = path.join(projectRoot, ".sous", "sous.lock.json");
+      const lockBefore = fs.existsSync(lockfile) ? fs.readFileSync(lockfile, "utf8") : undefined;
       const result = sous(projectRoot, "subscribe", "workflow/answers", "--yes");
       const output = result.stdout + result.stderr;
 
@@ -524,8 +574,8 @@ describe("the repositories consumer surface", () => {
       expect(output).toContain("deployUrl");
       expect(output).toContain("SOUS_VAR_WORKFLOW_ANSWERS_DEPLOY_URL");
 
-      // Nothing was installed (#230 item 1): the project is as it was.
-      expect(output).toContain("Nothing was written.");
+      // Nothing was installed (#230 item 1): the lockfile is as it was.
+      expect(fs.existsSync(lockfile) ? fs.readFileSync(lockfile, "utf8") : undefined).toBe(lockBefore);
     },
     CLI_TIMEOUT
   );
