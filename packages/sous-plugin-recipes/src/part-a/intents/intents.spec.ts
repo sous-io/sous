@@ -159,6 +159,28 @@ interface Setup {
     entities?: Record<string, Array<{ id: string }>>;
 }
 
+/**
+ * A stand-in for `recipe-answers.asking` and `recipe-answers.definitions`: `hold` records what it was
+ * asked and when, then either fails (as a question nobody can answer does) or holds one answer whose
+ * `write` is recorded.
+ */
+function askingStandIn(events: string[], fails?: Error) {
+    return {
+        "recipe-answers.definitions": { listSync: () => [], combine: (variables: unknown[]) => variables },
+        "recipe-answers.asking": {
+            hold: vi.fn(async (variables: Array<{ key: string }>, input: { within: readonly string[]; answer?: readonly string[] }) => {
+                events.push(`ask ${variables.map((variable) => variable.key).join(",")} within ${input.within.join(",")}${input.answer === undefined ? "" : ` answer ${input.answer.join(",")}`}`);
+
+                if (fails !== undefined) {
+                    throw fails;
+                }
+
+                return { outputs: IntentOutputs.of({ answered: [] }), empty: false, write: async () => void events.push("write answers") };
+            }),
+        },
+    };
+}
+
 function setup(options: Setup = {}) {
     const indexes = new Map(Object.entries(options.indexes ?? { r: index({ "workflow/task-files": ["1.0.0", "1.1.0"], "workflow/reviews": ["0.1.0"], "tools/helper": ["2.0.0"] }) }));
     const managed = memoryManaged(options.managed ?? {});
@@ -546,10 +568,14 @@ describe("subscription.add", () => {
         expect(await prompts("0.2.34")).not.toContain("core");
     });
 
-    /** Subscribing resolves, writes the lockfile and conf.d/510, then runs vars.ask and build through ctx.run. */
-    it("should subscribe and run the follow-ups", async () => {
+    /**
+     * Subscribing resolves, asks the recipes' questions and holds the answers, writes the lockfile
+     * and conf.d/510, then the answers, then runs the build through ctx.run.
+     */
+    it("should subscribe, ask before writing, and run the build", async () => {
+        const events: string[] = [];
         const indexes = { r: index({ "workflow/task-files": ["1.0.0", "1.1.0"] }, { "workflow/task-files@1.1.0": ["apiUrl"] }) };
-        const { config, managed, lock } = setup({ indexes });
+        const { config, managed, lock } = setup({ indexes, services: askingStandIn(events) });
         const ctx = context(config, { intents: ["vars.ask", "build"] });
         const result = await addSubscription({ ref: "workflow/task-files@^1.0.0", yes: true, answer: ["apiUrl=https://x"] }, ctx);
 
@@ -557,36 +583,79 @@ describe("subscription.add", () => {
         expect(lock.current.recipes["workflow/task-files"]).toMatchObject({ version: "1.1.0", requestedBy: ["project"] });
         expect(lock.current.repos.r).toEqual({ url: "https://github.com/acme/r", identity: "github.com/acme/r" });
         expect((managed.files["510-subscriptions.jsonc"] as { subscriptions: Record<string, unknown> }).subscriptions["workflow/task-files"]).toMatchObject({ range: "^1.0.0", addedBy: "user" });
-        expect(ctx.run).toHaveBeenNthCalledWith(1, "vars.ask", { within: ["workflow/task-files"], answer: ["apiUrl=https://x"] });
-        expect(ctx.run).toHaveBeenNthCalledWith(2, "build", {});
+        expect(events).toEqual(["ask workflow/task-files.apiUrl within workflow/task-files answer apiUrl=https://x", "write answers"]);
+        expect(result.followUps.map((entry) => entry.intent)).toEqual(["vars.ask", "build"]);
+        expect(ctx.run).toHaveBeenCalledTimes(1);
+        expect(ctx.run).toHaveBeenCalledWith("build", {});
         expect(ctx.emit).toHaveBeenCalledWith("recipes.locked", expect.objectContaining({ path: "/project/.sous/sous.lock.json" }));
     });
 
     /**
-     * After writing, subscribing refreshes the chain's config (ctx.refreshConfig()), so vars.ask
-     * and build see the new subscription; it refreshes again after vars.ask, so build sees the
-     * answers.
+     * A question that fails (nobody to ask it, declined, or interrupted with Ctrl-C) fails the
+     * subscription before anything is written (#230 item 1): no 510 entry, no lockfile change.
+     *
+     * addSubscription({ ref: "workflow/task-files", yes: true })   // the question throws
+     * // -> throws; nothing written; nothing run
      */
-    it("should refresh the config before vars.ask and again before build", async () => {
+    it("should write nothing when a question fails", async () => {
+        const events: string[] = [];
+        const interrupted = new Error("Interrupted");
         const indexes = { r: index({ "workflow/task-files": ["1.0.0"] }, { "workflow/task-files@1.0.0": ["apiUrl"] }) };
-        const { config } = setup({ indexes });
+        const { config, managed, lock } = setup({ indexes, services: askingStandIn(events, interrupted) });
+        const ctx = context(config, { intents: ["vars.ask", "build"] });
+
+        await expect(addSubscription({ ref: "workflow/task-files", yes: true }, ctx)).rejects.toBe(interrupted);
+        expect(events).toEqual(["ask workflow/task-files.apiUrl within workflow/task-files"]);
+        expect(managed.files).toEqual({});
+        expect(lock.current.recipes).toEqual({});
+        expect(ctx.emit).not.toHaveBeenCalled();
+        expect(ctx.run).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The range a subscription is recorded with is in the plan shown before the question and in
+     * the result: none means any version (#230 item 3).
+     *
+     * addSubscription({ ref: "workflow/reviews" })        // -> "... the version range 'any version', ..."
+     * addSubscription({ ref: "workflow/reviews@^0.1.0" }) // -> "... the version range '^0.1.0', ..."
+     */
+    it("should say the version range the subscription is recorded with", async () => {
+        const plan = async (ref: string) => {
+            const ctx = context(setup().config, { intents: ["vars.ask", "build"] });
+            const result = await addSubscription({ ref, dryRun: true }, ctx);
+
+            return { notice: ctx.reporter.at("notice").join("\n"), result };
+        };
+        const any = await plan("workflow/reviews");
+        const ranged = await plan("workflow/reviews@^0.1.0");
+
+        expect(any.notice).toContain("It is recorded with the version range 'any version', so an update may move it to any newer version, a new major version included.");
+        expect(any.result.range).toBeUndefined();
+        expect(ranged.notice).toContain("It is recorded with the version range '^0.1.0', so an update moves it only to versions in that range.");
+        expect(ranged.result.range).toBe("^0.1.0");
+    });
+
+    /**
+     * After writing the subscription and the answers, subscribing refreshes the chain's config
+     * (ctx.refreshConfig()), so the build sees both.
+     */
+    it("should refresh the config after writing and before the build", async () => {
+        const events: string[] = [];
+        const indexes = { r: index({ "workflow/task-files": ["1.0.0"] }, { "workflow/task-files@1.0.0": ["apiUrl"] }) };
+        const { config } = setup({ indexes, services: askingStandIn(events) });
         const next = { ...config, buildNumber: 99 } as typeof config;
         const ctx = context(config, { intents: ["vars.ask", "build"], next });
-        const seen: Array<{ intent: string; buildNumber: number; refreshes: number }> = [];
         const refresh = ctx.refreshConfig as unknown as { mock: { calls: unknown[] } };
 
         ctx.run.mockImplementation(async (intent: string) => {
-            seen.push({ intent, buildNumber: ctx.config.buildNumber, refreshes: refresh.mock.calls.length });
+            events.push(`${intent} on build ${ctx.config.buildNumber} after ${refresh.mock.calls.length} refresh`);
 
             return IntentOutputs.of({ ran: intent });
         });
 
         await addSubscription({ ref: "workflow/task-files", yes: true }, ctx);
 
-        expect(seen).toEqual([
-            { intent: "vars.ask", buildNumber: 99, refreshes: 1 },
-            { intent: "build", buildNumber: 99, refreshes: 2 },
-        ]);
+        expect(events).toEqual(["ask workflow/task-files.apiUrl within workflow/task-files", "write answers", "build on build 99 after 1 refresh"]);
     });
 
     /** A one-word ref is settled against the indexes; a dry run writes and runs nothing. */

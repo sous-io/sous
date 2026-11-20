@@ -13,7 +13,7 @@ function fakeContext(): Context & { reporter: BufferedReporter } {
     return { project: undefined, config: { get: () => undefined }, reporter: new BufferedReporter() } as unknown as Context & { reporter: BufferedReporter };
 }
 
-const unchanged: LockDiff = { added: [], removed: [], updated: [], reposAdded: [], reposRemoved: [], unchanged: true };
+const unchanged: LockDiff = { added: [], removed: [], updated: [], changed: [], reposAdded: [], reposRemoved: [], unchanged: true };
 
 describe("the browsing outputs", () => {
     /** Every browsing command opens with its Command Variables, then the listing as a titled table. */
@@ -44,6 +44,20 @@ describe("the browsing outputs", () => {
 
         expect((variables?.result as VariableSet).toObject()).toEqual({ Reading: "each repository, upstream", Showing: "only what this project has installed" });
         expect((table?.result as Table).empty).toBe("This project has installed no recipe from the repositories it trusts.");
+    });
+
+    /**
+     * A recipe's description takes at most three lines in the listing; the renderer ends the third
+     * with "..." when more is hidden.
+     *
+     * recipeListOutputs(ctx, {}, []) -> the "What it is" column has maxLines 3
+     */
+    it("should keep a recipe's description to three lines", () => {
+        const [, table] = recipeListOutputs(fakeContext(), {}, []).toArray();
+        const description = (table?.result as Table).columns.find((column) => column.key === "description");
+
+        expect(description?.overflow).toBe("wrap");
+        expect(description?.maxLines).toBe(3);
     });
 
     /** A linked recipe adds the note that explains the marker. */
@@ -203,7 +217,7 @@ describe("the subscription outputs", () => {
         const text = JSON.stringify(reporter.messages);
 
         expect(text).not.toContain("The variables it publishes are asked about afterwards");
-        expect(text).toContain("that require an answer and have none yet are asked about afterwards");
+        expect(text).toContain("that require an answer and have none yet are asked about before anything is written");
     });
 
     /** A build that failed ends the command with exit code 1 and an error saying what is recorded. */

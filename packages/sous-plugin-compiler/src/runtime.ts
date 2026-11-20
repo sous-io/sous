@@ -12,6 +12,7 @@ import type { VarScope, VariablesResolver } from "@sous-io/sous-plugin-variables
 import { buildAliasMap, type AliasMap } from "./aliases.js";
 import { BackupClock, Backups } from "./backups.js";
 import type { IncludeEnvironment, ViewMap } from "./includes.js";
+import { withHarnessFiles } from "./harness-files.js";
 import { DEFAULT_STATE_FILE } from "./schema.js";
 import { StateStore } from "./state.js";
 import type { AliasesSettings, CompilationSettings, NamespaceResolver } from "./types.js";
@@ -59,8 +60,9 @@ export class CompilerRuntime {
         return { plugin, config, services, entities, project, env };
     }
 
+    /** The compilation settings, with the files of the targets carried from a harness's build. */
     settings(): CompilationSettings {
-        return compilationSettings(this.source.config);
+        return withHarnessFiles(compilationSettings(this.source.config), this.source.config);
     }
 
     /**

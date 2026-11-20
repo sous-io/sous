@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { nullReporter } from "@sous-io/sous-plugin-api";
+import { BufferedReporter, nullReporter } from "@sous-io/sous-plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadStrategy, RepositoryTokenSource } from "../../types.js";
 import { IndexReadError, readFailureSentence, readThroughChain, StrategyMemoryFile, type ChainRead } from "./read-chain.js";
@@ -147,7 +147,6 @@ describe("readThroughChain", () => {
                 "Fix one of these:",
                 "  export GITLAB_TOKEN=<a token with read_repository>",
                 "  set up git access to gitlab.com (an SSH key, or a credential helper)",
-                "A token reads only the index. Recipe files are downloaded with git, so building also needs git access.",
             ].join("\n"),
         );
     });
@@ -216,7 +215,6 @@ describe("readThroughChain: fixes chosen from what the attempts said (#204 bug 2
         );
 
         expect(error.failure.fixes).toEqual(["check that this machine can reach gitlab.com, and set HTTPS_PROXY if this network needs a proxy"]);
-        expect(error.message).not.toContain("A token reads only the index");
     });
 
     /**
@@ -232,7 +230,6 @@ describe("readThroughChain: fixes chosen from what the attempts said (#204 bug 2
         expect(error.failure.fixes).toEqual([
             "check the URL: git reached gitlab.com/acme/recipes, but it has no sous.index.json, so it is not a sous recipe repository, or nothing in it has been released yet",
         ]);
-        expect(error.message).not.toContain("A token reads only the index");
     });
 
     /**
@@ -336,5 +333,162 @@ describe("readThroughChain: current reads (#133)", () => {
         await expect(readThroughChain({ ...readOf(github({ api: "403: rate limited", git: "Permission denied (publickey)" })), current: true }, memory, ctx)).resolves.toMatchObject({ strategy: "http" });
 
         expect(order).toEqual(["http-api", "git", "http"]);
+    });
+});
+
+describe("readThroughChain: a refused token (#230 item 7)", () => {
+    /** A token strategy that refuses every token but `good` with a 401, recording each token it was sent. */
+    function refusing(good: string | undefined, seen: string[]): RepositoryReadStrategy {
+        return {
+            id: "http-token",
+            label: "HTTP with token",
+            usesToken: true,
+            async read(request) {
+                seen.push(request.token?.value ?? "none");
+
+                return request.token?.value === good ? { ok: true, text: "{}", ref: request.ref } : { ok: false, reason: "401: the token was refused", status: 401 };
+            },
+        };
+    }
+
+    /** A token source that finds `value`. */
+    function source(id: string, label: string, value: string | undefined, fix?: string): RepositoryTokenSource {
+        return {
+            id,
+            label,
+            token: async () => undefined,
+            find: async () => (value === undefined ? { missing: `${label}: none` } : { token: { value, source: label } }),
+            ...(fix === undefined ? {} : { fix: () => fix }),
+        } as RepositoryTokenSource;
+    }
+
+    const env = () => source("env", "GITLAB_TOKEN", "wrong", "export GITLAB_TOKEN=<a token with read_repository>");
+
+    /**
+     * After a 401, the next token source's token is sent to the same strategy; when it works, one
+     * warning names where the refused token came from and how to fix it, and the source that worked
+     * is remembered.
+     *
+     * // GITLAB_TOKEN "wrong" -> 401; git credential fill "right" -> 200
+     * // warning: "GITLAB_TOKEN holds a token fake.test refused (401: the token was refused), so sous read ..."
+     */
+    it("should try the next token source after a refusal and warn once that the first was refused", async () => {
+        const seen: string[] = [];
+        const reporter = new BufferedReporter();
+        const warned = new Set<string>();
+        const read = readOf([refusing("right", seen), strategy("git", "ok")], [env(), source("git-credential", "git credential fill", "right")]);
+
+        const outcome = await readThroughChain(read, memory, { reporter } as unknown as RepositoryHostContext, { warned });
+
+        expect(seen).toEqual(["wrong", "right"]);
+        expect(outcome).toMatchObject({ strategy: "http-token", token: { value: "right" }, refusedTokens: ["wrong"] });
+        expect(memory.strategy("fake.test/acme/recipes")).toMatchObject({ strategy: "http-token", tokenSource: "git credential fill" });
+        expect(reporter.at("warning")).toEqual([
+            "GITLAB_TOKEN holds a token fake.test refused (401: the token was refused), so sous read fake.test/acme/recipes with HTTP with token, using the token from git credential fill. " +
+                "Replace the token in GITLAB_TOKEN with one that can read the repository (export GITLAB_TOKEN=<a token with read_repository>), or unset GITLAB_TOKEN.",
+        ]);
+
+        await readThroughChain(read, memory, { reporter } as unknown as RepositoryHostContext, { warned });
+
+        expect(reporter.at("warning")).toHaveLength(1);
+    });
+
+    /**
+     * When every token is refused and git works, the warning still names the refused token; a source
+     * that hands back the same token (glab returning GITLAB_TOKEN) is not tried again.
+     *
+     * // GITLAB_TOKEN "wrong" -> 401; glab "wrong" -> skipped; git -> ok
+     */
+    it("should warn about a refused token when git succeeds, and skip a repeated token", async () => {
+        const seen: string[] = [];
+        const reporter = new BufferedReporter();
+        const read = readOf([refusing(undefined, seen), strategy("git", "ok")], [env(), source("glab", "glab", "wrong")]);
+
+        expect(await readThroughChain(read, memory, { reporter } as unknown as RepositoryHostContext)).toMatchObject({ strategy: "git" });
+        expect(seen).toEqual(["wrong"]);
+        expect(reporter.at("warning")[0]).toContain("so sous read fake.test/acme/recipes with GIT.");
+    });
+
+    /**
+     * When everything fails, each attempt names the token it sent, and the fix replaces the refused
+     * token rather than asking to export the variable already set.
+     *
+     * // HTTP with token  401: the token was refused (the token from GITLAB_TOKEN)
+     * // fixes: ["replace the token in GITLAB_TOKEN with one that can read fake.test/acme/recipes: fake.test refused it", ...]
+     */
+    it("should name each refused token's source in the error", async () => {
+        const read = readOf([refusing(undefined, []), strategy("git", "Permission denied (publickey)")], [env()]);
+        const error = await readThroughChain(read, memory, ctx).then(
+            () => expect.unreachable() as never,
+            (failure: IndexReadError) => failure,
+        );
+
+        expect(error.failure.attempts[0]).toEqual({ strategy: "HTTP with token", reason: "401: the token was refused (the token from GITLAB_TOKEN)" });
+        expect(error.failure.fixes[0]).toBe("replace the token in GITLAB_TOKEN with one that can read fake.test/acme/recipes: fake.test refused it");
+        expect(error.failure.fixes).not.toContain("export GITLAB_TOKEN=<a token with read_repository>");
+    });
+});
+
+describe("readThroughChain: how long a remembered strategy stays first (#230 item 10)", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    /**
+     * A remembered strategy goes first for `memorySeconds` from when it became first, however often
+     * it works since; after that, the host's order is tried first again.
+     *
+     * // git remembered since day 0, memory 7 days: day 3 -> git first; day 8 -> http first
+     */
+    it("should put a remembered strategy first only until its time runs out", async () => {
+        const strategies = [strategy("http", "ok"), strategy("git", "ok")];
+        const start = new Date("2026-11-01T00:00:00.000Z");
+
+        memory.remember("fake.test/acme/recipes", { strategy: "git", tokenSource: null, lastSuccess: start.toISOString(), lastDurationMs: 1, since: start.toISOString() });
+
+        await readThroughChain(readOf(strategies), memory, ctx, { now: () => new Date(start.getTime() + 3 * DAY), memorySeconds: 7 * 86400 });
+
+        expect(order).toEqual(["git"]);
+        expect(memory.strategy("fake.test/acme/recipes")?.since).toBe(start.toISOString());
+
+        order = [];
+        await readThroughChain(readOf(strategies), memory, ctx, { now: () => new Date(start.getTime() + 8 * DAY), memorySeconds: 7 * 86400 });
+
+        expect(order).toEqual(["http"]);
+        expect(memory.strategy("fake.test/acme/recipes")).toMatchObject({ strategy: "http", since: new Date(start.getTime() + 8 * DAY).toISOString() });
+    });
+
+    /**
+     * A record written before `since` existed goes first no longer, and `0` never puts one first.
+     *
+     * // { strategy: "git" } with no since -> http first
+     */
+    it("should not put a record without a start, or with no memory time, first", async () => {
+        const strategies = [strategy("http", "ok"), strategy("git", "ok")];
+
+        memory.remember("fake.test/acme/recipes", { strategy: "git", tokenSource: null, lastSuccess: new Date().toISOString(), lastDurationMs: 1 });
+        await readThroughChain(readOf(strategies), memory, ctx);
+        expect(order).toEqual(["http"]);
+
+        order = [];
+        memory.remember("fake.test/acme/recipes", { strategy: "git", tokenSource: null, lastSuccess: new Date().toISOString(), lastDurationMs: 1, since: new Date().toISOString() });
+        await readThroughChain(readOf(strategies), memory, ctx, { memorySeconds: 0 });
+        expect(order).toEqual(["http"]);
+    });
+
+    /**
+     * The download's clone URL is kept beside the read strategy: forgetting one leaves the other.
+     *
+     * rememberDownload(id, { url }); remember(id, undefined); // -> { download: { url } }
+     */
+    it("should keep the download record when the read strategy is forgotten", () => {
+        const now = new Date().toISOString();
+
+        memory.remember("fake.test/acme/recipes", { strategy: "git", tokenSource: null, lastSuccess: now, lastDurationMs: 1, since: now });
+        memory.rememberDownload("fake.test/acme/recipes", { url: "git@fake.test:acme/recipes.git", lastSuccess: now, since: now });
+        memory.remember("fake.test/acme/recipes", undefined);
+
+        expect(memory.read()["fake.test/acme/recipes"]).toEqual({ download: { url: "git@fake.test:acme/recipes.git", lastSuccess: now, since: now } });
+
+        memory.rememberDownload("fake.test/acme/recipes", undefined);
+        expect(memory.read()["fake.test/acme/recipes"]).toBeUndefined();
     });
 });

@@ -1,14 +1,14 @@
 /**
- * Checking the answers a subscription was given up front (`--answer`, `--answers-file`) before
- * anything is written, as before the refactor: an answer whose name nothing declares, or that does
- * not fit its definition, fails the run with the project unchanged. Storing them is `vars.ask`'s
- * job, after subscribing.
+ * The answers of a subscription, settled before anything is written (#230 item 1). An answer given
+ * up front (`--answer`, `--answers-file`) whose name nothing declares, or that does not fit its
+ * definition, fails the run with the project unchanged; then the recipes' questions are asked
+ * through `recipe-answers.asking`, which holds the answers until the subscription is written.
  *
- * The reading and matching are `recipe-answers.preanswers`'s; without that plugin nothing is
- * checked here.
+ * The reading, matching and asking are `recipe-answers`'s; without that plugin nothing is checked
+ * or asked here.
  */
 
-import { SousError, type Context } from "@sous-io/sous-plugin-api";
+import { SousError, type Context, type IntentOutputs } from "@sous-io/sous-plugin-api";
 import type { AnswerFlags, ResolvedRecipe } from "../types.js";
 import { definedVariables, type DefinedLike } from "./questions.js";
 
@@ -21,6 +21,19 @@ interface PreanswersLike {
 /** The part of `recipe-answers.definitions` read here, by shape. */
 interface DefinitionsLike {
     listSync(): DefinedLike[];
+    combine(variables: readonly DefinedLike[]): DefinedLike[];
+}
+
+/** Answers asked for and held in memory (`recipe-answers`'s `HeldAnswers`), by shape. */
+export interface HeldAnswersLike {
+    readonly outputs: IntentOutputs<object>;
+    readonly empty: boolean;
+    write(): Promise<void>;
+}
+
+/** The part of `recipe-answers.asking` read here, by shape. */
+interface AskingLike {
+    hold(variables: readonly DefinedLike[], input: { within: readonly string[]; answer?: readonly string[]; answersFile?: string }, ctx: Context): Promise<HeldAnswersLike>;
 }
 
 /**
@@ -62,4 +75,44 @@ export async function checkProvidedAnswers(ctx: Context, resolved: readonly Reso
 
         throw error;
     }
+}
+
+
+/**
+ * Asks the questions of a subscription's recipes now, before anything is written, as `vars.ask`
+ * would after subscribing: what they require and nothing answers, after the answers given up front.
+ * The answers are held in memory; the caller writes them with the subscription. Throws as `vars.ask`
+ * does when a question cannot be asked (no terminal), or when one is declined or interrupted, with
+ * nothing written. `undefined` when no plugin asks. The recipes' files must be on this machine
+ * already, or their index must record their questions.
+ */
+export async function holdAnswers(ctx: Context, resolved: readonly ResolvedRecipe[], flags: AnswerFlags): Promise<HeldAnswersLike | undefined> {
+    if (!ctx.services.has("recipe-answers.asking") || !ctx.services.has("recipe-answers.definitions")) {
+        return undefined;
+    }
+
+    const definitions = ctx.services.get("recipe-answers.definitions" as never) as DefinitionsLike;
+    const { defined } = await definedVariables(ctx, resolved);
+    // The active recipes' definitions too, so a name they share is settled as `vars.ask` settles it;
+    // an active recipe these define again is left out, since its new version replaces it.
+    const replaced = new Set(defined.map((variable) => `${variable.recipe.namespace}/${variable.recipe.name}`));
+    let active: DefinedLike[] = [];
+
+    try {
+        active = definitions.listSync().filter((variable) => !replaced.has(`${variable.recipe.namespace}/${variable.recipe.name}`));
+    } catch {
+        active = [];
+    }
+
+    const asking = ctx.services.get("recipe-answers.asking" as never) as AskingLike;
+
+    return asking.hold(
+        definitions.combine([...active, ...defined]),
+        {
+            within: resolved.map((recipe) => recipe.key),
+            ...(flags.answer === undefined ? {} : { answer: flags.answer }),
+            ...(flags.answersFile === undefined ? {} : { answersFile: flags.answersFile }),
+        },
+        ctx,
+    );
 }

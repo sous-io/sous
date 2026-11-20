@@ -297,7 +297,39 @@ describe("the doctor check for migrations", () => {
         expect(outputs.exitCode).toBeUndefined();
         expect(result.problems).toBe(0);
         expect(result.checks[0]?.found.status).toBe("pending");
-        expect(result.checks[0]?.found.details).toEqual([`${whereQuestion.message} Answer it with --answer memories.location=<move|keep> (--yes takes move).`]);
+        expect(result.checks[0]?.found.details).toEqual([
+            { text: "Migrate to 1.1.0 [sous 1.1.0] asks:", details: [`${whereQuestion.message} Answer it with --answer memories.location=<move|keep> (--yes takes move).`] },
+        ]);
+    });
+
+    /**
+     * Without a terminal, every waiting migration is listed by name with its own questions, and
+     * one that asks nothing says why it waits; the closing line says nothing failed but that they
+     * wait, and the exit code stays 0 (#265).
+     *
+     * three pending migrations, the last one asking; sous doctor --dry-run </dev/null
+     * // -> "3 migrations are waiting to run, because sous could not ask the question below without a terminal."
+     * // -> "Nothing failed, but 3 migrations are waiting for an answer. Nothing was changed (--dry-run)."
+     */
+    it("should list each waiting migration with its own questions, and say so in the closing line", async () => {
+        const waiting = await engineWith({
+            lock: { lockfile: emptyLock("1.0.0") },
+            migrations: [recording([], "1.0.5"), recording([], "1.0.8"), recording([], "1.1.0", { questions: [whereQuestion] })],
+        });
+        const outputs = await waiting.submit("doctor", { only: ["migrations"], dryRun: true });
+        const result = outputs.toPlain() as { problems: number; pending: number; checks: Array<{ found: { status: string; summary: string; details?: unknown[] } }> };
+        const text = outputs.toText();
+
+        expect(outputs.exitCode).toBeUndefined();
+        expect(result).toMatchObject({ problems: 0, pending: 3 });
+        expect(result.checks[0]?.found.summary).toBe("3 migrations are waiting to run, because sous could not ask the question below without a terminal.");
+        expect(result.checks[0]?.found.details).toEqual([
+            "Migrate to 1.0.5 [sous 1.0.5]: it asks nothing, and waits because migrations run in order and none runs until every question is answered.",
+            "Migrate to 1.0.8 [sous 1.0.8]: it asks nothing, and waits because migrations run in order and none runs until every question is answered.",
+            { text: "Migrate to 1.1.0 [sous 1.1.0] asks:", details: [`${whereQuestion.message} Answer it with --answer memories.location=<move|keep> (--yes takes move).`] },
+        ]);
+        expect(text).toContain("Nothing failed, but 3 migrations are waiting for an answer. Nothing was changed (--dry-run).");
+        expect(text).not.toContain("No problem was found");
     });
 
     /**

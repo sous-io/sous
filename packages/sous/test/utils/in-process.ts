@@ -29,7 +29,8 @@ export interface InProcessRun {
 
 /**
  * Runs `intent` with `input` in the project at `projectRoot`. Every yes-or-no question is answered
- * by `confirm`; any other question fails, as it would with nobody to answer it.
+ * by `confirm`; a typed answer by `answer`, when given (one that throws stands for Ctrl-C); any other
+ * question fails, as it would with nobody to answer it.
  */
 export async function runInProcess(
     projectRoot: string,
@@ -37,6 +38,7 @@ export async function runInProcess(
     intent: string,
     input: Record<string, unknown>,
     confirm: (message: string) => boolean,
+    answer?: (message: string) => string,
 ): Promise<InProcessRun> {
     const printed: string[] = [];
     const asked: string[] = [];
@@ -47,7 +49,19 @@ export async function runInProcess(
     });
     const prompter: Prompter = {
         interactive: true,
-        askValue: (question) => Promise.reject(new Error(`unexpected question: ${question.message}`)),
+        askValue: (question) => {
+            if (answer === undefined) {
+                return Promise.reject(new Error(`unexpected question: ${question.message}`));
+            }
+
+            asked.push(question.message);
+
+            try {
+                return Promise.resolve(answer(question.message));
+            } catch (error) {
+                return Promise.reject(error);
+            }
+        },
         askChoice: (question) => Promise.reject(new Error(`unexpected question: ${question.message}`)),
         confirm: (question) => {
             asked.push(question.message);

@@ -50,6 +50,9 @@ $ sous build
   ✓ .claude/skills/about-sous-repos/SKILL.md (~1,579 tokens)
   ✓ .claude/skills/about-sous-recipes/SKILL.md (~1,639 tokens)
   ✓ .claude/skills/create-skill/SKILL.md (~655 tokens)
+
+  Files: 7 written (7 new), 0 unchanged.
+
 ✓ Done.
 ```
 
@@ -175,7 +178,10 @@ sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
   wrote .gitignore
 ```
 
-The output goes on with what `sous init` writes and with its first build, which compiles the
+On GitLab (an `origin` remote on GitLab, or `--host gitlab`) the scaffold writes `.gitlab-ci.yml` instead of
+`.github/workflows/sous-release.yml`, and warns that its release job needs a masked CI/CD variable named
+`SOUS_RELEASE_TOKEN`; see [the scaffolded workflow](repositories-authoring.md#the-scaffolded-workflow). The
+output goes on with what `sous init` writes and with its first build, which compiles the
 memories file. The scaffold validates as written, and every file it leaves is heavily commented. `sous.repo.yaml`
 declares the namespaces and lists every recipe folder; each folder's `sous.recipe.yaml` is one
 recipe, with its own version.
@@ -332,6 +338,9 @@ $ sous build
     restored: workflow/task-files
 ▶ Building:
   ✓ .claude/skills/about-task-files/SKILL.md (~942 tokens)
+
+  Files: 1 written (1 new), 7 unchanged.
+
 ✓ Done.
 ```
 

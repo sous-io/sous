@@ -330,3 +330,44 @@ describe("renderTable()", () => {
     expect(lines).toEqual(["Name", "----"]);
   });
 });
+
+describe("renderTable() maxLines", () => {
+  /**
+   * A wrapped column with `maxLines` keeps that many lines; when text is left out, the last line
+   * kept ends in "...", cut at a space so no word is split.
+   *
+   * renderTable([{ key: "text", header: "Text", maxLines: 3 }], [{ text: "one two ... twelve" }], { width: 10 });
+   * // -> ["Text", "----------", "one two", "three four", "five..."]
+   */
+  it("should keep a cell to maxLines lines and end the last with ...", () => {
+    const text = "one two three four five six seven eight nine ten eleven twelve";
+    const lines = render([{ key: "text", header: "Text", maxLines: 3 }], [{ text }], { width: 10 });
+
+    expect(lines).toEqual(["Text", "----------", "one two", "three four", "five..."]);
+  });
+
+  /**
+   * A cell that fits in maxLines is shown whole, with no "...".
+   *
+   * renderTable([{ key: "text", header: "Text", maxLines: 3 }], [{ text: "one two" }], { width: 10 });
+   * // -> ["Text", "-------", "one two"]
+   */
+  it("should leave a cell that fits within maxLines alone", () => {
+    const lines = render([{ key: "text", header: "Text", maxLines: 3 }], [{ text: "one two" }], { width: 10 });
+
+    expect(lines).toEqual(["Text", "-------", "one two"]);
+  });
+
+  /**
+   * A cell holding several lines (pretty-printed JSON) is as wide as its widest line, not as
+   * the whole text, and each line is kept with its indentation.
+   *
+   * renderTable([{ key: "v", header: "Value" }], [{ v: "{\n  \"a\": 1\n}" }], { width: 40 });
+   * // -> ["Value", "--------", "{", "  \"a\": 1", "}"]
+   */
+  it("should measure and keep a cell of several lines line by line", () => {
+    const lines = render([{ key: "v", header: "Value" }], [{ v: '{\n  "a": 1\n}' }], { width: 40 });
+
+    expect(lines).toEqual(["Value", "--------", "{", '  "a": 1', "}"]);
+  });
+});

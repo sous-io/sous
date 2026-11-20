@@ -9,7 +9,7 @@
 
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/sous-plugin-compiler/types";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
-import type { LockDiff, RestoreReport, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
+import type { LockDiff, RestoreReport, RetiredRecipe, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
 import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 
@@ -121,6 +121,11 @@ export interface BuildPrepareResult {
      * says why.
      */
     readonly followsSous?: ReadonlyArray<{ readonly key: string; readonly subscription: string; readonly version: string }>;
+    /**
+     * The pinned recipes built here that their repository retired, with the replacements it offers,
+     * as the cached indexes say. Absent when there are none.
+     */
+    readonly retired?: readonly RetiredRecipe[];
 }
 
 /** The warning for required variables nothing answered. */

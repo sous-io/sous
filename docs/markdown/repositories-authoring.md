@@ -29,7 +29,9 @@ $ sous repo init ./my-recipes --name my-recipes --namespace workflow
 
 `--name` is the repository's short name (default: the directory's own name), `--namespace` the one namespace to
 declare (default: the repository's name), `--force` overwrites a repository that already exists, and `--dry-run`
-lists the files without writing them. Names are lowercase kebab-case, so `My-Recipes` yields `my-recipes`. Every
+lists the files without writing them. `--host` names the repository host whose release automation to add:
+`github` writes `.github/workflows/sous-release.yml`, and `gitlab` writes `.gitlab-ci.yml`. Without it, the host is
+read from the directory's `origin` remote, and is `github` when there is none. Names are lowercase kebab-case, so `My-Recipes` yields `my-recipes`. Every
 file is read back through the schemas sous uses on published repositories, so the scaffold validates. The scaffold
 is files only: run `git init`, commit it, and add the remote you publish from before releasing, since
 `sous repo release` reads and writes tags and fails in a directory git does not track.
@@ -375,9 +377,28 @@ uncommitted, because a tag names one commit and the index records what each reci
 refuses when git does not know who is committing: set `git config user.name` and `git config user.email` first, or
 give that identity to the account a continuous integration job runs as (the scaffolded workflow already does).
 
+### Retire or move a recipe
+
+To retire a recipe, remove its folder and its line under `recipes` in `sous.repo.yaml`; never delete its
+tags. The next release keeps every version it published in the index, marked retired, so projects that pin
+it keep building. To point subscribers somewhere, name replacements under `retired`:
+
+```yaml
+retired:
+  acme/widget:
+    replacements:
+      - acme/gadget                         # a recipe this repository publishes
+      - github://other/recipes/tools/widget # a recipe in another repository
+```
+
+A recipe that moved to another repository is retired the same way, naming its new home. Like every index
+change, a retirement reaches the index with the next release that publishes a version. The fields and what
+the release checks are in [Retired recipes](repositories-file-formats.md#retired-recipes); what a
+subscriber sees is in [Retired recipes](repositories-consuming.md#retired-recipes).
+
 ### The scaffolded workflow
 
-`sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its two presets,
+On GitHub, `sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its two presets,
 calling the CLI from npm so nothing is installed into the repository. On a **pull request** it runs
 `npx --yes @sous-io/sous repo release --check`, which only reads, so it is safe on an untrusted branch and
 fails the pull request when a manifest is wrong or a published version changed, and notes how the merge will
@@ -386,6 +407,18 @@ runs `npx --yes @sous-io/sous repo release --ci --push --yes`; edit the workflow
 default branch has another name. `--ci` accepts the plan on its own, the redundant `--yes` keeping the file
 working with an older published sous. Both jobs check out with `fetch-depth: 0`, so existing tags are visible
 and no version is cut twice; the release job also takes `contents: write` and sets a git identity for the commit.
+
+On GitLab, it writes `.gitlab-ci.yml` with the same two jobs: `check` on a merge request and `release` on a push to
+the default branch. GitLab's job token cannot push, so the release job pushes with a project access token (the
+`write_repository` scope and the Maintainer role) saved as a masked CI/CD variable named `SOUS_RELEASE_TOKEN`, under
+**Settings, CI/CD, Variables**. `sous repo init` warns about it, and the release job checks for it before it
+commits or tags, failing with a message that names it when it is not set:
+
+```text
+Warning: The release job in .gitlab-ci.yml needs a masked CI/CD variable named SOUS_RELEASE_TOKEN, holding a
+  project access token with the write_repository scope and the Maintainer role. Until it is set, every release
+  job fails before it commits or tags. Set it in the GitLab project under Settings, CI/CD, Variables.
+```
 
 ## Edit a repository in place
 
@@ -539,7 +572,8 @@ answer the two questions at a terminal (Tab opens your editor for a longer descr
 commit message. The body is your description followed by a changelog sous generates by comparing the manifests
 your change carries with the default branch:
 
-- recipes added, and recipes retired (a renamed recipe shows as one of each);
+- recipes added, and recipes retired with the replacements `sous.repo.yaml` names for each (a renamed recipe
+  shows as one of each);
 - version changes;
 - recipes whose files changed without a version raise, with a warning that a release run with `--ci` (as the
   scaffolded workflow runs it after a merge) refuses a changed recipe whose version was not raised;

@@ -1,15 +1,15 @@
 import fs from "node:fs";
 import "@sous-io/sous-plugin-memories/types";
 import path from "node:path";
-import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/sous-plugin-api";
+import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError, VariableSet } from "@sous-io/sous-plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/sous-plugin-compiler/types";
-import type { SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
+import type { RetiredRecipe, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
 import { checksFailedError, runHandlerPurpose } from "@sous-io/sous-plugin-handlers";
 import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
-import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
+import { filesSummaryLine, prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportRetired, reportUnincludedMemories, skippedLine } from "./report.js";
 import type {
     BuildInput,
     BuildPrepareResult,
@@ -40,16 +40,28 @@ import type {
  * so neither did the recipes it needs.
  */
 export async function build(input: BuildInput, ctx: Context): Promise<IntentOutputs<BuildResult>> {
+    reportCommandVariables(input, ctx, "build");
+
     const result = await runBuild(input, ctx);
 
-    return buildOutputs(input, ctx, result);
+    return buildOutputs(result);
+}
+
+/** What `build` and `compile` return: the result as data. A build with errors ends with exit code 1. */
+function buildOutputs<T extends { readonly ok: boolean }>(result: T): IntentOutputs<T> {
+    return new IntentOutputs<T>([new IntentOutput<T>({ data: result })], result.ok ? {} : { exitCode: 1 }) as IntentOutputs<T>;
 }
 
 /**
- * What `build` and `compile` return: the "Command Variables" block (with the flags that change the
- * run), then the result as data. A build with errors ends with exit code 1.
+ * Reports the "Command Variables" block (with the flags that change the run) before anything else,
+ * when the build is the command itself: a build's output is all progress, so the block opens it
+ * rather than following `Done.`. A build another command runs reports none; that command has its own.
  */
-function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | CompileCommandInput, ctx: Context, result: T): IntentOutputs<T> {
+function reportCommandVariables(input: BuildInput | CompileCommandInput, ctx: Context, command: "build" | "compile"): void {
+    if (ctx.chain?.intent !== command || (input as BuildInput).changedFiles !== undefined) {
+        return;
+    }
+
     const flags: Record<string, unknown> = {};
     const given = input as Record<string, unknown>;
 
@@ -67,7 +79,11 @@ function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | Co
         }
     }
 
-    return new IntentOutputs<T>([commandVariables(ctx, flags), new IntentOutput<T>({ data: result })], result.ok ? {} : { exitCode: 1 }) as IntentOutputs<T>;
+    const block = commandVariables(ctx, flags).result;
+
+    if (block instanceof VariableSet) {
+        ctx.reporter.commandVariables(block.entries);
+    }
 }
 
 /** Runs a build and gives its result. */
@@ -96,8 +112,16 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         prepared = (await ctx.run("build.prepare", { dryRun })).toPlain();
         reportPrepared(prepared, ctx.reporter);
 
+        // A retired recipe the project subscribes to by name: in a terminal, its replacements are
+        // offered; anywhere else the warning names the commands that swap it.
+        const asking = !dryRun && input.watch !== true && ctx.prompter.interactive;
+
+        reportRetired(prepared.retired, ctx.reporter, asking);
+
+        const swapped = asking && (await offerReplacements(ctx, prepared.retired ?? []));
+
         // The lockfile now pins other recipes: rebuild the config, so this build compiles them.
-        if (!prepared.locked.unchanged && !dryRun) {
+        if ((swapped || !prepared.locked.unchanged) && !dryRun) {
             if (ctx.chain && !ctx.chain.parallel) {
                 await ctx.refreshConfig();
                 // What is skipped was worked out before the new pins were fetched: work it out again.
@@ -193,6 +217,15 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         const errors = compiled.problems.filter((problem) => problem.level === "error").length;
         const failedAssertions = edits === undefined || edits.ok ? 0 : failedAssertionCount(edits);
 
+        ctx.reporter.operationSummary(
+            filesSummaryLine({
+                outputs: compiled.outputs,
+                notWritten: compiled.notWritten ?? [],
+                removed: [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])],
+                dryRun,
+            }),
+        );
+
         if (errors > 0) {
             ctx.reporter.operationEnd(`Done with ${errors} error(s).`, false);
         } else if (failedAssertions > 0) {
@@ -281,7 +314,9 @@ export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefi
  * locking, restoring and checking upstream.
  */
 export async function compile(input: CompileCommandInput, ctx: Context): Promise<IntentOutputs<CompileCommandResult>> {
-    return buildOutputs(input, ctx, await runCompile(input, ctx));
+    reportCommandVariables(input, ctx, "compile");
+
+    return buildOutputs(await runCompile(input, ctx));
 }
 
 /** Compiles every target and gives the result. */
@@ -307,12 +342,19 @@ async function runCompile(input: CompileCommandInput, ctx: Context): Promise<Com
             ...(input.rebuild ? { rebuild: true } : {}),
             ...(dryRun ? { dryRun: true } : {}),
             ...(partial ? { changedFiles: input.changedFiles } : {}),
+            // "Done." is printed below, after the summary of the files.
+            reportEnd: false,
         })
     ).toPlain();
 
     if (!partial) {
         warnUnincludedMemories(ctx, compiled);
     }
+
+    const errors = compiled.problems.filter((problem) => problem.level === "error").length;
+
+    ctx.reporter.operationSummary(filesSummaryLine({ outputs: compiled.outputs, notWritten: compiled.notWritten ?? [], dryRun }));
+    ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
 
     const watching = input.watch === true;
 
@@ -425,6 +467,58 @@ export async function clear(input: ClearInput, ctx: Context): Promise<IntentOutp
     const result = (await ctx.run("compiler.prune", { all: true, report: false, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
     return removalOutputs<ClearResult>({ ...result, confirmed: true });
+}
+
+/**
+ * Offers the replacements of each retired recipe the project subscribes to by name, one question
+ * each; nothing changes on a no. A yes subscribes to it (`subscription.add`, which asks before
+ * adding a repository the project has not added, as `sous repo add` does). Once one is added, the
+ * old subscription may be removed, unless a replacement under the same name took its place.
+ * Returns whether any subscription changed.
+ */
+async function offerReplacements(ctx: Context, retired: readonly RetiredRecipe[]): Promise<boolean> {
+    let changed = false;
+
+    for (const recipe of retired) {
+        const subscription = recipe.subscription;
+
+        if (subscription === undefined || recipe.replacements.length === 0) {
+            continue;
+        }
+
+        let added = 0;
+        let sameName = false;
+
+        for (const replacement of recipe.replacements) {
+            const take = await ctx.prompter.confirm({ message: `Subscribe to '${replacement.ref}' in place of '${recipe.key}'?`, default: false });
+
+            if (!take) {
+                continue;
+            }
+
+            try {
+                // Already answered; only a repository the project has not added is asked about again.
+                await ctx.run("subscription.add", { ref: replacement.ref, noBuild: true, ...(replacement.repo === undefined ? {} : { yes: true }) });
+                ctx.reporter.notice(`Subscribed to '${replacement.ref}' in place of '${recipe.key}'.`);
+                added += 1;
+                sameName ||= replacement.key === recipe.key;
+                changed = true;
+            } catch (error) {
+                ctx.reporter.problem(`Sous did not subscribe to '${replacement.ref}'.`, { subject: replacement.ref, cause: error instanceof Error ? error.message : String(error) });
+            }
+        }
+
+        if (added === 0 || sameName) {
+            continue;
+        }
+
+        if (await ctx.prompter.confirm({ message: `Remove the subscription to '${subscription}'?`, default: true })) {
+            await ctx.run("subscription.remove", { ref: subscription, noBuild: true });
+            ctx.reporter.notice(`Removed the subscription to '${subscription}'.`);
+        }
+    }
+
+    return changed;
 }
 
 /** The result of preparing nothing, for a partial rebuild. */

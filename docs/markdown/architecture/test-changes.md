@@ -1997,3 +1997,83 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should compile only the targets that read a changed file" (`targets.test.ts`): the target naming the missing `@later.md` is compiled and its output holds `@later.md`, instead of reporting "Include not found".
 - **Replaced** the `looksLikeIncludeLine` and `isIncludeLine` cases in `sous-plugin-compiler/src/paths.spec.ts` with cases for `importPath`, `isIncludableFile`, `isSousIncludeForm` and the new `isIncludeLine`; `looksLikeIncludeLine` and `INCLUDE_LINE_PATTERN` are gone.
 - **New** `sous-plugin-compiler/src/markdown.spec.ts` (the rows of the comparison with Claude Code), `sous-plugin-compiler/src/globs.spec.ts` (the 21-row order table), "includes anywhere in Markdown text" and "should leave a glob's binary matches out" in `includes.test.ts`, and "should order a recipe's memories like a glob include" in `sous-plugin-memories/src/listing.spec.ts`.
+
+### `vars ask --save-locally` and `--save-shared` replace `--env-file` (sous-plugin-recipe-answers; gh-263, gh-230 item 11)
+
+- **Removed** `sous-plugin-recipe-answers/src/env-file.spec.ts` ("resolveEnvFile()"), with the resolver it tested.
+  - **Why:** Node 22 and later claim `--env-file` anywhere on their command line, so the flag never reached sous; two switches name the two files instead, and nothing is left to resolve.
+- **Changed** the `describe("--env-file")` block of `src/ask.spec.ts` is now `describe("--save-locally and --save-shared")`; its tests are unchanged.
+- **Changed** `e2e/scenarios/04-variables.mjs`: "--env-file .sous/.env.local writes the answer to the machine-local file" is now "--save-locally writes the answer to the machine-local file", and "an --env-file that is not one of the two allowed files fails naming both" is now "--save-locally and --save-shared together fail naming both".
+- **New** "should store every answer in the file a save switch names" (`test/plugin.test.ts`).
+
+### A rolled-back file takes the folders Sous created for it (sous-plugin-editor; gh-270)
+
+- **Changed** "should create starter files and folders and roll them back safely" (`src/apply.spec.ts`): `directories.created` also lists `.kw`, the folder created to hold `.kw/descriptor.json`, and the rollback removes `.kw`.
+  - **Why:** a new file's missing parent folders are now created, recorded and rolled back like a declared folder's.
+- **New** in `src/apply.spec.ts`: "should remove the parent folders it created for a starter file", "should keep a parent folder that existed, holds other files or is still wanted", "should remove the .claude folder a set created settings.json in" and "should read a history without createdFolders as recording no folders".
+
+### Plugin uninstall and migrate handlers refused; report lines and ids name their source (sous-plugin-handlers; gh-288)
+
+- **Changed** in `test/plugin.test.ts`: every expected report line now starts with who reported it (`sous-plugin-a (check: a/needs-jq): ran a/needs-jq`, `acme/tool (migrate: migrate): migrated from 1.0.0 to 2.0.0`), a thrown error reads `<who>: failed: <error>`, and a recipe handler's id includes its file (`z/last/afterBuild/h.js#two`). The `migrate` and `uninstall` tests filter lines with `includes` instead of `startsWith`.
+  - **Why:** report lines name the recipe or plugin and the handler, and ids name the file, as #288 asked.
+- **New** in `test/plugin.test.ts`: "should refuse a plugin's uninstall handler..." and "...migrate handler...", "should name the file in the id of each of two same-named handlers", and "should name the recipe and the handler on every line it reports" (configure).
+
+### `repo init` on GitLab: the token warning, the contribute address, no "What to do next" (sous-plugin-authoring, sous-plugin-gitlab; gh-230 item 9, gh-159)
+
+- **New** "should warn with the host's file warning and suggest a contribute address in the host's shape" (`sous-plugin-authoring/src/scaffold/scaffold.spec.ts`).
+- **Changed** "should write a pipeline that checks merge requests and releases the default branch" (`sous-plugin-gitlab/src/proposals.spec.ts`): it also expects the file's `SOUS_RELEASE_TOKEN` warning and the host's `fileUrl` shape. **New** "should fail the release job naming SOUS_RELEASE_TOKEN before anything is committed", which runs the job's check with and without the variable.
+
+### Retired recipes stay in the index and name their replacements (sous-plugin-formats, sous-plugin-authoring, sous-plugin-recipes, sous-plugin-build)
+
+- **Changed** "should warn about release tags for a recipe that is no longer published" (`sous-plugin-authoring/src/release/index-builder.spec.ts`) is now "should leave out a tagged version whose folder the tag does not hold": the warning says the version is left out of the index because sous could not find the recipe's folder at the tag.
+  - **Why:** a recipe the repository no longer lists is now retired and kept in the index under `retired` (ADR 0042), so its tags are no longer orphans; only a tag whose tree does not list the recipe has nothing to rebuild from.
+- **Changed** "should say a removed recipe leaves the index at the next release that publishes" (`sous-plugin-authoring/src/release/release.spec.ts`) is now "should say a removed recipe is recorded as retired at the next release that publishes": `--check` says "the recipe 'core/other' is retired, and the index does not record it as retired yet" instead of "the index still publishes 'core/other', which this repository does not".
+  - **Why:** the next release keeps the removed recipe under `retired` rather than dropping it (ADR 0042).
+- **Changed** the stand-in `recipes.lock` services in `sous-plugin-recipes/test/part-a/helpers.ts` and `sous-plugin-build/test/helpers.ts` gain `retired()`; the build's `World` gains `retired`.
+- **New** retired-recipe cases in `sous-plugin-formats` (`index-file.spec.ts`, `repo-manifest.spec.ts`), `sous-plugin-authoring` (`index-builder.spec.ts`, "buildIndex() and retired recipes"), `sous-plugin-recipes` (`restore.spec.ts`, `resolve.spec.ts`, `lock-service.spec.ts`) and `sous-plugin-build` (`build.test.ts`, "the build intent and retired recipes"; `prepare.test.ts`).
+
+### Refused tokens, strategy memory, self-managed GitLab and token downloads (sous-plugin-recipes, sous-lib-repository-hosts, sous-plugin-refs, sous-plugin-gitlab)
+
+- **Changed** "should describe error statuses" (`sous-lib-repository-hosts/src/http-strategy.spec.ts`) and "should give reasons and fixes when a private repository cannot be read" (`sous-plugin-github/src/host.spec.ts`): each failed HTTP outcome also carries the HTTP `status`.
+  - **Why:** a 401 or 403 to a token sends the next token source's token (#230 item 7), so the read chain needs the status, not only the reason's words.
+- **Changed** "should word the combined error the same way for every host, through the hosts' find and fix methods" (`sous-plugin-recipes/src/part-b/index-cache/read-chain.spec.ts`): the error no longer ends with "A token reads only the index. Recipe files are downloaded with git, so building also needs git access." **Removed** the two `not.toContain("A token reads only the index")` checks in "should offer only the network fix when every attempt could not connect" and "should say the repository has no index, and offer no token, when git reached it", since the line no longer exists anywhere.
+  - **Why:** the token sous finds is now handed to git for an HTTPS recipe download (#213), so a token alone builds and the line would be false.
+- **Changed** the stand-in index cache in "should remove work directories an interrupted download left more than an hour ago" (`sous-plugin-recipes/src/part-b/fetch/restore-sweep.spec.ts`): it adds `downloadFirst` and `noteDownload`, which a download now calls to try the clone URL that worked first and to remember it.
+- **New** in `read-chain.spec.ts`: a refused token sends the next source's token and warns once per command; a repeated token is passed over; the error names each refused token's source; a remembered strategy stays first only for `memorySeconds` from `since`; the download record survives forgetting the read strategy.
+- **Changed** "should refuse nonsense store settings" (`sous-plugin-recipes/src/part-a/config-keys.spec.ts`): it also checks the new `store.strategyMemorySeconds` (a negative number is refused, `0` is accepted).
+- **New** in `sous-plugin-recipes/src/part-b/fetch/restore.spec.ts`: the download gets the token and, the second time, the clone URL that worked first.
+- **New** in `sous-lib-repository-hosts/src/recipe-tree.spec.ts`: the remembered URL is tried first and the URL that cloned is returned; a token reaches an HTTPS clone only through `GIT_CONFIG_*` environment variables; `tokenEnvironment()`.
+- **New** in `sous-plugin-refs/src/locations/locations.spec.ts`: an HTTPS port stays on the host and an SSH port is kept apart; `buildCanonicalRepository()` keeps the HTTPS port and a sub-path out of the SSH URL.
+- **New** `sous-plugin-gitlab/src/instance.spec.ts`: host matching with or without a port; HTTPS and SSH ports in clone URLs and API addresses; a sub-path from the `hosts` option, or asked of the server once, remembered and reported; SSH downloads without the sub-path; revalidating with `X-Gitlab-Content-Sha256`.
+
+### Build output, piped tables and `config get --layers` (sous-plugin-build, sous-plugin-cli, sous-plugin-compiler, sous-plugin-inspect, sous-plugin-recipes; gh-230 items 4, 5 and 6)
+
+- **Changed** "should return ok false on a compile error and let the next build succeed" (`sous-plugin-build/test/build.test.ts`): the build's result is the data alone (titles `[undefined]`, was `["Command Variables", undefined]`); the test now finds the Command Variables, with `Dry Run`, as the first reported message (`ReportEntryStyle.CommandVariables`), and the files line `Files: 0 would be written, 0 unchanged.` (`ReportEntryStyle.OperationSummary`).
+  - **Why:** the block printed to standard output after `Done.`; a build now reports it first, on standard error.
+- **Changed** "should compile without preparing or pruning" (`build.test.ts`): `compiler.compile` is called with `{ strict: true, reportEnd: false }` (was `{ strict: true }`).
+  - **Why:** `sous compile` reports the files line and `Done.` itself, as `sous build` does.
+- **Changed** "a second build reports every output unchanged and rewrites nothing" (`e2e/scenarios/01-basics.mjs`): it expects the files line `Files: 0 written, N unchanged.` and no `(unchanged` block, instead of an `(unchanged)` line.
+  - **Why:** an unchanged file's block now prints only with `--debug`; the summary line counts it.
+- **New** "should report an unchanged unit's block only at the debug level" (`sous-plugin-compiler/test/compilation.test.ts`), the `filesSummaryLine()` cases (`sous-plugin-build/src/report.spec.ts`), "should draw an operation's summary under its heading, before Done." and the two piped-width cases (`sous-plugin-cli/src/terminal-reporter.spec.ts`), the `maxLines` cases (`sous-plugin-cli/src/views/table.spec.ts`), "should keep a recipe's description to three lines" (`sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`) and `sous-plugin-inspect/src/outputs.spec.ts`.
+
+### Lockfiles are never written while a recipe is unread; doctor counts what waits; subscription add checks first (sous-plugin-recipes, sous-plugin-doctor, sous-plugin-build, sous-plugin-migrations, sous-plugin-handlers, sous; gh-291, gh-265, gh-230 items 1 and 3)
+
+- **Changed** the `LockDiff` stand-ins (`sous-plugin-recipes/test/part-a/helpers.ts`, `sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`, `sous-plugin-build/test/helpers.ts`, `sous-plugin-handlers/test/stand-ins.ts`, `sous-plugin-doctor/test/doctor.test.ts`): each diff has `changed: []`.
+  - **Why:** `LockDiff.changed` lists pins whose holders (`requestedBy`) or `kind` changed while the version stayed.
+- **Changed** "should lock a new subscription and mark the config changed" (`sous-plugin-build/test/prepare.test.ts`): the resolve is asked with `download: true`. The build stand-in's world gains `unreadable`. **New** "should not write the lockfile while a recipe cannot be read".
+- **Changed** "should refresh the config before vars.ask and again before build" (`sous-plugin-recipes/src/part-a/intents/intents.spec.ts`): the required question is answered with `--answer`.
+  - **Why:** without a terminal, a required question nothing answers now fails `subscription add` before anything is written. **New** "should write nothing when a required question cannot be asked" and "should say the version range the subscription is recorded with".
+- **Changed** "should pass doctor's answers to the migrations, and not fail while one waits for an answer" (`sous-plugin-migrations/test/migrations.test.ts`): the waiting migration is a detail item `{ text, details }` with its question under it. **New** "should list each waiting migration with its own questions, and say so in the closing line".
+- **New** in `sous-plugin-doctor/test/doctor.test.ts`: the closing line counting what waits, nested details and notes, an unreadable recipe reported with no fix and nothing written, and the downloads and holder changes the lockfile check reports. **New** in `sous-plugin-recipes/src/part-b/lock/lockfile-ops.spec.ts`: a holder or kind change on a pin whose version stayed.
+- **New** `sous/test/integration/lockfile-unread-recipes.test.ts` (doctor, lock rebuild and build with an empty recipe store) and `sous/test/integration/subscription-add-checks-first.test.ts` (a failed subscription writes nothing; the recorded range is shown).
+- **Changed** "should refuse to install a recipe whose question nothing answers" (`sous/test/integration/repositories.test.ts`): it expects "Nothing was written." and no longer unsubscribes afterwards.
+  - **Why:** the subscription now fails before anything is written, so there is nothing to put back.
+
+### Subscription add holds trust and answers until everything has passed (sous-plugin-recipes, sous; gh-230 item 1)
+
+- **Changed** "should subscribe and run the follow-ups" (`sous-plugin-recipes/src/part-a/intents/intents.spec.ts`) is now "should subscribe, ask before writing, and run the build": a stand-in `recipe-answers.asking` holds the answers, which are written after the lockfile and 510; only `build` runs through `ctx.run`. **Changed** "should refresh the config before vars.ask and again before build" is now "should refresh the config after writing and before the build". **Replaced** "should write nothing when a required question cannot be asked" with "should write nothing when a question fails".
+  - **Why:** `subscription add` asks its recipes' questions through `recipe-answers.asking` before it writes anything, instead of running `vars.ask` after writing.
+- **Changed** "should not promise questions before subscribing" (`sous-plugin-recipes/src/part-a/intents/outputs.spec.ts`): the plan says the questions are asked before anything is written.
+- **Changed** `sous/test/utils/in-process.ts`: `runInProcess` takes an optional `answer` for typed questions; one that throws stands for Ctrl-C.
+- **Changed** "should refuse to install a recipe whose question nothing answers" (`sous/test/integration/repositories.test.ts`): it checks the lockfile is unchanged instead of expecting "Nothing was written." (the error is `vars.ask`'s own now). **New** "should not record trust in a repository when the subscription fails".
+- **New** in `sous/test/integration/subscription-add-checks-first.test.ts`: "should write nothing when a question is interrupted" and "should ask before writing, then write the answer with the subscription".

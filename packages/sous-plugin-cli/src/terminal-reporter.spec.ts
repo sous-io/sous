@@ -488,3 +488,81 @@ describe("TerminalReporter", () => {
         expect(stderr.text).not.toContain("Caused by");
     });
 });
+
+describe("TerminalReporter summary and widths", () => {
+    /**
+     * An operation's summary closes the open step: it sits under the operation's heading, with a
+     * blank line on each side, just before "Done.". An unchanged file with a token count shows the
+     * word first: "(unchanged, ~1,240 tokens)".
+     *
+     * reporter.operationSummary("Files: 0 written, 1 unchanged.");
+     * // "  Files: 0 written, 1 unchanged."
+     */
+    it("should draw an operation's summary under its heading, before Done.", () => {
+        const { stderr, reporter } = make();
+
+        reporter.operationStart("Building the project");
+        reporter.stepStart("SKILL.tpl.md");
+        reporter.operation("unchanged", "/a/SKILL.md", { tokens: 1240 });
+        reporter.operationSummary("Files: 0 written, 1 unchanged.");
+        reporter.operationEnd("Done.");
+        reporter.finish();
+
+        expect(stderr.text).toBe(
+            [
+                "▶ Building the project:",
+                " ",
+                "  ▷ SKILL.tpl.md",
+                "    ⊘ /a/SKILL.md (unchanged, ~1,240 tokens)",
+                " ",
+                "  Files: 0 written, 1 unchanged.",
+                " ",
+                "Done.",
+                " ",
+                " ",
+                "",
+            ].join("\n"),
+        );
+    });
+
+    const wide = [
+        { key: "name", header: "Name" },
+        { key: "text", header: "Text", flex: 1 },
+    ];
+    const longRow = { name: "a", text: "word ".repeat(60).trim() };
+
+    /**
+     * Output that is not a terminal follows `COLUMNS` when it is set: a 299-character cell wraps to
+     * a 60-column table.
+     *
+     * COLUMNS=60, piped -> no line longer than 60 characters
+     */
+    it("should lay a piped table out in the width COLUMNS names", () => {
+        const stdout = stream();
+        const reporter = new TerminalReporter({ stdout, stderr: stream(), color: false, env: { COLUMNS: "60" } });
+
+        reporter.result(new IntentOutputs(new IntentOutput({ result: new Table(wide, [longRow]) })));
+
+        const lines = stdout.text.split("\n").filter((line) => line !== "");
+
+        expect(lines.length).toBeGreaterThan(3);
+        for (const line of lines) expect(line.length).toBeLessThanOrEqual(60);
+    });
+
+    /**
+     * Without `COLUMNS`, a piped table is laid out 2000 columns wide, so each row stays on one line
+     * and no flexing column is padded out to that width.
+     *
+     * piped, COLUMNS unset -> ["  Name  Text", "  ----  ----...", "  a     word word ... word"]
+     */
+    it("should keep each row of a piped table on one line when COLUMNS is not set", () => {
+        const stdout = stream();
+        const reporter = new TerminalReporter({ stdout, stderr: stream(), color: false, env: {} });
+
+        reporter.result(new IntentOutputs(new IntentOutput({ result: new Table(wide, [longRow]) })));
+
+        const lines = stdout.text.split("\n").filter((line) => line !== "");
+
+        expect(lines).toEqual(["  Name  Text", `  ----  ${"-".repeat(longRow.text.length)}`, `  a     ${longRow.text}`]);
+    });
+});

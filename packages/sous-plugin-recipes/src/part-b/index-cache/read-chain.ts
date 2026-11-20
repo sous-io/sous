@@ -15,8 +15,12 @@ import type {
     RepositoryReadOutcome,
     RepositoryReadStrategy,
     RepositoryToken,
+    RepositoryTokenSource,
 } from "../../types.js";
+import { DEFAULT_STRATEGY_MEMORY_SECONDS } from "../constants.js";
 import { messageOf } from "../support.js";
+
+export { DEFAULT_STRATEGY_MEMORY_SECONDS };
 
 /** What sous remembers about reading one repository (`read-strategies.json`). */
 export interface RememberedStrategy {
@@ -24,10 +28,41 @@ export interface RememberedStrategy {
     tokenSource: string | null;
     lastSuccess: string;
     lastDurationMs: number;
+    /**
+     * When this strategy became the one tried first. It stays first until `store.strategyMemorySeconds`
+     * after this, however often it works since; then the better-ranked ones are tried first again.
+     */
+    since?: string;
 }
 
+/** What sous remembers about downloading one repository's recipes: the clone URL that worked. */
+export interface RememberedDownload {
+    url: string;
+    lastSuccess: string;
+    /** When this URL became the one tried first; it stays first as long as a read strategy does. */
+    since: string;
+}
+
+/** Everything remembered about one repository: how its index was read, and how its recipes were downloaded. */
+export type RememberedRepository = Partial<RememberedStrategy> & { download?: RememberedDownload };
+
 /** The remembered strategies, by repository identity. */
-export type StrategyMemory = Record<string, RememberedStrategy>;
+export type StrategyMemory = Record<string, RememberedRepository>;
+
+/**
+ * Whether a choice remembered `since` then still goes first `now`.
+ *
+ * ```ts
+ * stillFirst("2026-11-01T00:00:00Z", new Date("2026-11-05T00:00:00Z"), 7 * 86400); // true
+ * stillFirst("2026-11-01T00:00:00Z", new Date("2026-11-09T00:00:00Z"), 7 * 86400); // false
+ * stillFirst(undefined, new Date(), 7 * 86400);                                     // false
+ * ```
+ */
+export function stillFirst(since: string | undefined, now: Date, memorySeconds: number): boolean {
+    const at = since === undefined ? Number.NaN : Date.parse(since);
+
+    return Number.isFinite(at) && now.getTime() - at < memorySeconds * 1000;
+}
 
 /** Reads and writes `$SOUS_HOME/cache/read-strategies.json`. A missing or damaged file is an empty memory. */
 export class StrategyMemoryFile {
@@ -43,17 +78,51 @@ export class StrategyMemoryFile {
         }
     }
 
-    remember(identity: string, entry: RememberedStrategy | undefined): void {
-        const memory = this.read();
+    /** The read strategy remembered for a repository, or `undefined`. */
+    strategy(identity: string): RememberedStrategy | undefined {
+        const entry = this.read()[identity];
 
-        if (entry === undefined) {
+        return typeof entry?.strategy === "string" ? (entry as RememberedStrategy) : undefined;
+    }
+
+    /** Records the read strategy that worked, or with `undefined` forgets it; the download stays. */
+    remember(identity: string, entry: RememberedStrategy | undefined): void {
+        this.update(identity, (current) => {
+            const download = current?.download;
+
+            if (entry === undefined) {
+                return download === undefined ? undefined : { download };
+            }
+
+            return download === undefined ? { ...entry } : { ...entry, download };
+        });
+    }
+
+    /** Records the clone URL that worked, or with `undefined` forgets it; the read strategy stays. */
+    rememberDownload(identity: string, download: RememberedDownload | undefined): void {
+        this.update(identity, (current) => {
+            const rest: RememberedRepository = { ...current };
+
+            delete rest.download;
+
+            const next = download === undefined ? rest : { ...rest, download };
+
+            return Object.keys(next).length === 0 ? undefined : next;
+        });
+    }
+
+    private update(identity: string, change: (current: RememberedRepository | undefined) => RememberedRepository | undefined): void {
+        const memory = this.read();
+        const next = change(memory[identity]);
+
+        if (next === undefined) {
             if (!Object.hasOwn(memory, identity)) {
                 return;
             }
 
             delete memory[identity];
         } else {
-            memory[identity] = entry;
+            memory[identity] = next;
         }
 
         try {
@@ -85,7 +154,13 @@ export interface ChainRead {
 }
 
 /** What a successful read gave, and how. */
-export type ChainOutcome = Extract<RepositoryReadOutcome, { ok: true }> & { readonly strategy: string };
+export type ChainOutcome = Extract<RepositoryReadOutcome, { ok: true }> & {
+    readonly strategy: string;
+    /** The token the read sent, when it sent one. */
+    readonly token?: RepositoryToken;
+    /** The values of the tokens the host refused on the way. */
+    readonly refusedTokens?: readonly string[];
+};
 
 /** The column an attempt's reason starts in, after its strategy's label. */
 const ATTEMPT_LABEL_WIDTH = 19;
@@ -102,21 +177,16 @@ const ATTEMPT_LABEL_WIDTH = 19;
  * Fix one of these:
  *   export GITLAB_TOKEN=<a token with read_repository>
  *   set up git access to gitlab.com (an SSH key, or a credential helper)
- * A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
  * ```
  *
- * Any one fix reads the index, but only git access downloads recipe files, so the last line says so
- * whenever the fixes offer a token.
+ * Any one fix reads the index and downloads recipe files: a token found is handed to git for an
+ * HTTPS download too (#213).
  */
 export function formatReadFailure(failure: IndexReadFailure): string {
     const lines = [`could not read ${failure.repo}.`, ...failure.attempts.map((attempt) => `  ${attempt.strategy.padEnd(ATTEMPT_LABEL_WIDTH)}  ${attempt.reason}`)];
 
     if (failure.fixes.length > 0) {
         lines.push("Fix one of these:", ...failure.fixes.map((fix) => `  ${fix}`));
-    }
-
-    if (failure.fixes.some((fix) => /token|auth login/i.test(fix))) {
-        lines.push("A token reads only the index. Recipe files are downloaded with git, so building also needs git access.");
     }
 
     return lines.join("\n");
@@ -144,70 +214,163 @@ export class IndexReadError extends ConfigError {
     }
 }
 
-/** Reads one file through the host's chain of strategies. Throws an {@link IndexReadError} when all fail. */
-export async function readThroughChain(read: ChainRead, memory: StrategyMemoryFile, ctx: RepositoryHostContext, now: () => Date = () => new Date()): Promise<ChainOutcome> {
-    const remembered = memory.read()[read.identity];
-    const strategies = ordered(read.host.readStrategies, remembered?.strategy, read.current === true);
+/** How a read through the chain behaves, besides the read itself. */
+export interface ChainOptions {
+    readonly now?: () => Date;
+    /** How long a remembered strategy stays first (`store.strategyMemorySeconds`). Default seven days. */
+    readonly memorySeconds?: number;
+    /**
+     * The refused tokens already warned about in this process, as `<identity> <source>`; a refused
+     * token is warned about once per command.
+     */
+    readonly warned?: Set<string>;
+}
+
+/** Whether a failed attempt was the host refusing the token it was sent (401 or 403). */
+function tokenRefused(outcome: RepositoryReadOutcome): boolean {
+    return !outcome.ok && (outcome.status === 401 || outcome.status === 403);
+}
+
+/**
+ * Reads one file through the host's chain of strategies. Throws an {@link IndexReadError} when all fail.
+ *
+ * A token the host refuses (401 or 403) sends the next token source's token to the same strategy.
+ * When the read then works some other way, one warning names where the refused token came from and
+ * how to replace it:
+ *
+ * ```text
+ * GITLAB_TOKEN holds a token gitlab.com refused (401: the token was refused), so sous read
+ * gitlab.com/acme/recipes with HTTP with token, using the token from git credential fill. Replace
+ * the token in GITLAB_TOKEN with one that can read the repository (export GITLAB_TOKEN=<a token
+ * with read_repository>), or unset GITLAB_TOKEN.
+ * ```
+ */
+export async function readThroughChain(read: ChainRead, memory: StrategyMemoryFile, ctx: RepositoryHostContext, settings: ChainOptions = {}): Promise<ChainOutcome> {
+    const now = settings.now ?? (() => new Date());
+    const remembered = memory.strategy(read.identity);
+    const first = remembered !== undefined && stillFirst(remembered.since, now(), settings.memorySeconds ?? DEFAULT_STRATEGY_MEMORY_SECONDS) ? remembered.strategy : undefined;
+    const strategies = ordered(read.host.readStrategies, first, read.current === true);
     const attempts: Array<{ strategy: string; reason: string }> = [];
     /** Each failed attempt's strategy, with whether it sent a token, for the fixes. */
     const failed: Array<{ strategy: RepositoryReadStrategy; reason: string; withToken: boolean }> = [];
-    let token: TokenSearch | undefined;
+    const tokens = new TokenFinder(read, ctx);
+    /** The token sent to token strategies until the host refuses it. */
+    let token: RepositoryToken | undefined;
+    let searched = false;
 
     for (const strategy of strategies) {
-        let found: RepositoryToken | undefined;
+        let outcome: RepositoryReadOutcome | undefined;
+        let sent: RepositoryToken | undefined;
 
-        if (strategy.usesToken) {
-            token ??= await findToken(read, ctx);
-            found = token.found;
+        // A token strategy is tried with each token the host does not refuse, until one works.
+        for (;;) {
+            if (strategy.usesToken) {
+                if (!searched) {
+                    token = await tokens.next();
+                    searched = true;
+                }
 
-            if (found === undefined) {
-                const reason = `no token found (${token.tried.join("; ") || "no token sources"})`;
+                if (token === undefined) {
+                    if (tokens.refused.length === 0) {
+                        const reason = `no token found (${tokens.tried.join("; ") || "no token sources"})`;
 
-                attempts.push({ strategy: strategy.label, reason });
-                failed.push({ strategy, reason, withToken: false });
+                        attempts.push({ strategy: strategy.label, reason });
+                        failed.push({ strategy, reason, withToken: false });
+                    }
+
+                    outcome = undefined;
+                    break;
+                }
+            }
+
+            sent = strategy.usesToken ? token : undefined;
+
+            const started = now().getTime();
+
+            outcome = await attempt(strategy, read, sent, ctx);
+
+            if (outcome.ok) {
+                // A strategy used only for current reads is not what ordinary reads should try first.
+                if (strategy.onlyForCurrentReads !== true) {
+                    const kept = remembered?.strategy === strategy.id && first === strategy.id && remembered.since !== undefined;
+
+                    memory.remember(read.identity, {
+                        strategy: strategy.id,
+                        tokenSource: sent?.source ?? null,
+                        lastSuccess: now().toISOString(),
+                        lastDurationMs: Math.max(0, now().getTime() - started),
+                        since: kept ? remembered.since! : now().toISOString(),
+                    });
+                }
+
+                warnRefused(read, tokens, strategy, sent, ctx, settings.warned);
+
+                return {
+                    ...outcome,
+                    strategy: strategy.id,
+                    ...(sent === undefined ? {} : { token: sent }),
+                    ...(tokens.refused.length === 0 ? {} : { refusedTokens: tokens.refused.map((one) => one.token.value) }),
+                };
+            }
+
+            const reason = sent === undefined ? outcome.reason : `${outcome.reason} (the token from ${sent.source})`;
+
+            attempts.push({ strategy: strategy.label, reason });
+            failed.push({ strategy, reason: outcome.reason, withToken: sent !== undefined });
+
+            if (sent !== undefined && tokenRefused(outcome)) {
+                tokens.refuse(sent, outcome.reason);
+                token = await tokens.next();
                 continue;
             }
+
+            break;
         }
-
-        const started = now().getTime();
-        let outcome: RepositoryReadOutcome;
-
-        try {
-            outcome = await strategy.read(
-                {
-                    repository: read.repository,
-                    path: read.path,
-                    ref: read.ref ?? "HEAD",
-                    ...(read.etag === undefined ? {} : { etag: read.etag }),
-                    ...(found === undefined ? {} : { token: found }),
-                },
-                ctx,
-            );
-        } catch (error) {
-            outcome = { ok: false, reason: messageOf(error) };
-        }
-
-        if (outcome.ok) {
-            // A strategy used only for current reads is not what ordinary reads should try first.
-            if (strategy.onlyForCurrentReads !== true) {
-                memory.remember(read.identity, {
-                    strategy: strategy.id,
-                    tokenSource: found?.source ?? null,
-                    lastSuccess: now().toISOString(),
-                    lastDurationMs: Math.max(0, now().getTime() - started),
-                });
-            }
-
-            return { ...outcome, strategy: strategy.id };
-        }
-
-        attempts.push({ strategy: strategy.label, reason: outcome.reason });
-        failed.push({ strategy, reason: outcome.reason, withToken: found !== undefined });
     }
 
     memory.remember(read.identity, undefined);
 
-    throw new IndexReadError({ repo: read.identity, attempts, fixes: fixesFor(read, { failed, ...(token === undefined ? {} : { token }) }) });
+    throw new IndexReadError({ repo: read.identity, attempts, fixes: fixesFor(read, { failed, token: tokens.summary() }) });
+}
+
+/** One strategy's read, a throw turned into a failed outcome. */
+async function attempt(strategy: RepositoryReadStrategy, read: ChainRead, token: RepositoryToken | undefined, ctx: RepositoryHostContext): Promise<RepositoryReadOutcome> {
+    try {
+        return await strategy.read(
+            {
+                repository: read.repository,
+                path: read.path,
+                ref: read.ref ?? "HEAD",
+                ...(read.etag === undefined ? {} : { etag: read.etag }),
+                ...(token === undefined ? {} : { token }),
+            },
+            ctx,
+        );
+    } catch (error) {
+        return { ok: false, reason: messageOf(error) };
+    }
+}
+
+/** Warns once per command about each token the host refused before the read worked another way. */
+function warnRefused(read: ChainRead, tokens: TokenFinder, strategy: RepositoryReadStrategy, sent: RepositoryToken | undefined, ctx: RepositoryHostContext, warned: Set<string> | undefined): void {
+    for (const refused of tokens.refused) {
+        const key = `${read.identity} ${refused.token.source}`;
+
+        if (warned?.has(key)) {
+            continue;
+        }
+
+        warned?.add(key);
+
+        const how = sent === undefined ? `with ${strategy.label}` : `with ${strategy.label}, using the token from ${sent.source}`;
+        const fix = safely(() => read.host.tokenSources?.find((source) => source.id === refused.sourceId)?.fix?.(read.repository));
+        const variable = refused.sourceId === "env" ? `, or unset ${refused.token.source}` : "";
+
+        ctx.reporter.warning(
+            `${refused.token.source} holds a token ${read.repository.host} refused (${refused.reason}), so sous read ${read.identity} ${how}. ` +
+                `Replace the token in ${refused.token.source} with one that can read the repository${fix === undefined ? "" : ` (${fix})`}${variable}.`,
+        );
+    }
 }
 
 /**
@@ -237,46 +400,113 @@ interface TokenSearch {
     tried: string[];
     /** The ids of the sources that looked and found nothing (a CLI that is not installed is not one). */
     empty: string[];
+    /** The tokens the host refused, each with its source's id and the host's answer. */
+    refused?: ReadonlyArray<RefusedToken>;
 }
 
-/** The first token a token source finds, and what each source said. */
-async function findToken(read: ChainRead, ctx: RepositoryHostContext): Promise<TokenSearch> {
-    const tried: string[] = [];
-    const empty: string[] = [];
+/** A token the host refused. */
+interface RefusedToken {
+    readonly token: RepositoryToken;
+    readonly sourceId: string;
+    readonly reason: string;
+}
 
-    for (const source of read.host.tokenSources ?? []) {
+/**
+ * The token sources, asked one at a time: `next()` gives the next token found, skipping a token
+ * whose value the host already refused (glab hands back `GITLAB_TOKEN` when it is set).
+ */
+export class TokenFinder {
+    readonly tried: string[] = [];
+    readonly empty: string[] = [];
+    readonly refused: RefusedToken[] = [];
+    private index = 0;
+    private current: { token: RepositoryToken; sourceId: string } | undefined;
+
+    /**
+     * @param skip - Token values already refused, which are passed over.
+     */
+    constructor(
+        private readonly read: Pick<ChainRead, "host" | "repository">,
+        private readonly ctx: RepositoryHostContext,
+        private readonly skip: readonly string[] = [],
+    ) {}
+
+    /** The next token a source finds, or `undefined` when no source is left. */
+    async next(): Promise<RepositoryToken | undefined> {
+        const sources = this.read.host.tokenSources ?? [];
+
+        while (this.index < sources.length) {
+            const source = sources[this.index++]!;
+            const found = await this.ask(source);
+
+            if (found !== undefined && !this.skip.includes(found.value) && !this.refused.some((refused) => refused.token.value === found.value)) {
+                this.current = { token: found, sourceId: source.id };
+
+                return found;
+            }
+        }
+
+        this.current = undefined;
+
+        return undefined;
+    }
+
+    /** Records that the host refused a token. */
+    refuse(token: RepositoryToken, reason: string): void {
+        const sourceId = this.current?.token === token ? this.current.sourceId : (this.read.host.tokenSources ?? []).find((source) => source.label === token.source)?.id ?? token.source;
+
+        this.refused.push({ token, sourceId, reason });
+    }
+
+    /** What the search found, for the fixes. */
+    summary(): TokenSearch {
+        return {
+            ...(this.current === undefined ? {} : { found: this.current.token, foundBy: this.current.sourceId }),
+            tried: this.tried,
+            empty: this.empty,
+            refused: this.refused,
+        };
+    }
+
+    /** One source's token, recording why it has none. */
+    private async ask(source: RepositoryTokenSource): Promise<RepositoryToken | undefined> {
         try {
             if (source.find !== undefined) {
-                const lookup = await source.find(read.repository, ctx);
+                const lookup = await source.find(this.read.repository, this.ctx);
 
                 if ("token" in lookup && lookup.token.value.length > 0) {
-                    return { found: lookup.token, foundBy: source.id, tried, empty };
+                    return lookup.token;
                 }
 
                 // A source that says nothing (a CLI that is not installed) is left out of the error.
                 if ("missing" in lookup && lookup.missing !== undefined) {
-                    tried.push(lookup.missing);
-                    empty.push(source.id);
+                    this.tried.push(lookup.missing);
+                    this.empty.push(source.id);
                 }
 
-                continue;
+                return undefined;
             }
 
-            const found = await source.token(read.repository, ctx);
+            const found = await source.token(this.read.repository, this.ctx);
 
             if (found !== undefined && found.value.length > 0) {
-                return { found, foundBy: source.id, tried, empty };
+                return found;
             }
 
-            tried.push(`${source.label}: none`);
-            empty.push(source.id);
+            this.tried.push(`${source.label}: none`);
+            this.empty.push(source.id);
         } catch (error) {
-            tried.push(`${source.label}: ${messageOf(error)}`);
-            empty.push(source.id);
+            this.tried.push(`${source.label}: ${messageOf(error)}`);
+            this.empty.push(source.id);
         }
-    }
 
-    return { tried, empty };
+        return undefined;
+    }
+}
+
+/** The first token a token source finds, passing over the values in `skip`, or `undefined`. */
+export async function findToken(read: Pick<ChainRead, "host" | "repository">, ctx: RepositoryHostContext, skip: readonly string[] = []): Promise<RepositoryToken | undefined> {
+    return new TokenFinder(read, ctx, skip).next();
 }
 
 /** What an attempt's reason says went wrong, for choosing the fixes. */
@@ -324,7 +554,7 @@ export function attemptKind(reason: string): AttemptKind {
 /** What the attempts of a failed read saw, for choosing the fixes. */
 export interface ReadAttempts {
     readonly failed: ReadonlyArray<{ readonly strategy: RepositoryReadStrategy; readonly reason: string; readonly withToken: boolean }>;
-    readonly token?: Pick<TokenSearch, "found" | "foundBy" | "empty">;
+    readonly token?: Pick<TokenSearch, "found" | "foundBy" | "empty" | "refused">;
 }
 
 /**
@@ -374,6 +604,11 @@ export function fixesFor(read: Pick<ChainRead, "host" | "repository"> & Partial<
     const token = attempts?.token;
     const refused = failed.some((attempt) => attempt.withToken && attemptKind(attempt.reason) === "refused");
 
+    // Each token the host refused is named by where it came from, never as a variable to export.
+    for (const one of token?.refused ?? []) {
+        add(`replace the token in ${one.token.source} with one that can read ${where}: ${read.repository.host} refused it`);
+    }
+
     if (refused && token?.found !== undefined) {
         add(`replace the token in ${token.found.source} with one that can read ${where}: ${read.repository.host} refused it`);
     }
@@ -383,7 +618,7 @@ export function fixesFor(read: Pick<ChainRead, "host" | "repository"> & Partial<
     for (const source of sources) {
         // The source of a refused token is set already; a source that never looked (a CLI that is
         // not installed) has nothing to offer.
-        if (token !== undefined && (source.id === token.foundBy || !token.empty.includes(source.id))) {
+        if (token !== undefined && (source.id === token.foundBy || token.refused?.some((one) => one.sourceId === source.id) === true || !token.empty.includes(source.id))) {
             continue;
         }
 

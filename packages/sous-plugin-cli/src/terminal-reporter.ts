@@ -3,7 +3,7 @@ import type { OutputStream } from "./io.js";
 import { BLANK, Layout } from "./terminal/layout.js";
 import { type Rendered, renderEntry, type RenderState } from "./terminal/render-entry.js";
 import { colorEnabled, createStyle, type Style } from "./views/style.js";
-import { displayWidth, terminalColumns } from "./views/text.js";
+import { columnsFromEnvironment, displayWidth, terminalColumns } from "./views/text.js";
 
 /** A stream the reporter writes to; a terminal also says how wide it is. */
 export type ReporterStream = OutputStream & { readonly columns?: number };
@@ -20,7 +20,10 @@ export interface TerminalReporterOptions {
     readonly color?: boolean;
     /** The environment `NO_COLOR`, `FORCE_COLOR` and `TERM` are read from. Default: none set. */
     readonly env?: Environment;
-    /** The width output is laid out in. Default: a terminal's own width, else 100. */
+    /**
+     * The width output is laid out in. Default: a terminal's own width; for output that is not a
+     * terminal, the width `COLUMNS` names, else 100 for prose and 2000 for a table.
+     */
     readonly columns?: number;
     /** Sends every message to standard error, so standard output holds only the result. */
     readonly json?: boolean;
@@ -45,8 +48,9 @@ class Sink {
         color: boolean,
         columns: number,
         readonly spacing: Spacing,
+        tableColumns?: number,
     ) {
-        this.layout = new Layout(createStyle(color), columns, stream.isTTY === true);
+        this.layout = new Layout(createStyle(color), columns, stream.isTTY === true, tableColumns);
     }
 
     get blanks(): number {
@@ -121,8 +125,17 @@ export class TerminalReporter extends BaseReporter {
         // Two terminal streams are one screen, so they share the count of blank lines.
         const shared = new Spacing();
         const sameScreen = options.stdout.isTTY === true && options.stderr.isTTY === true;
+        // A terminal says how wide it is. Output that is not a terminal follows `COLUMNS` when it is
+        // set; otherwise prose wraps at the default width and a table is laid out wide.
+        const named = options.columns ?? columnsFromEnvironment(env);
         const sinkOf = (stream: ReporterStream) =>
-            new Sink(stream, options.color ?? colorEnabled(stream, env), options.columns ?? (stream.isTTY === true ? terminalColumns(stream) : terminalColumns(undefined)), sameScreen ? shared : new Spacing());
+            new Sink(
+                stream,
+                options.color ?? colorEnabled(stream, env),
+                options.columns ?? (stream.isTTY === true ? terminalColumns(stream) : (named ?? terminalColumns(undefined))),
+                sameScreen ? shared : new Spacing(),
+                stream.isTTY === true ? undefined : named,
+            );
 
         this.err = sinkOf(options.stderr);
         this.out = options.json === true ? this.err : sinkOf(options.stdout);

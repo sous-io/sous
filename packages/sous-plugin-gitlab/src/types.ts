@@ -24,7 +24,12 @@ export type GitlabTokenSourceId = "env" | "git-credential" | "glab";
 
 /** This plugin's options (`plugins.options."@sous-io/sous-plugin-gitlab"`). */
 export interface GitlabPluginOptions {
-    /** More hosts that are GitLab (self-managed instances), besides `gitlab.com`. */
+    /**
+     * More hosts that are GitLab (self-managed instances), besides `gitlab.com`. An entry matches
+     * a URL with or without a port. It may name the HTTPS port (`git.example.com:8443`), used for an
+     * SSH URL's HTTPS and API addresses, and the sub-path GitLab is installed under
+     * (`git.example.com/gitlab`), which skips asking the server for it.
+     */
     hosts?: string[];
     /** The environment variables a token is read from, in order. Default `["GITLAB_TOKEN"]`. */
     tokenVariables?: string[];

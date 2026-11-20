@@ -17,7 +17,6 @@ import {
 } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
-import { resolveEnvFile } from "./env-file.js";
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
@@ -28,6 +27,7 @@ import { describeSelection, resolveSelection, SEE_ALL } from "./selection.js";
 import { answerFileFor, buildLadder, displayValue, hiddenValue } from "./sources.js";
 import type {
     DefinedVariable,
+    RecipeAnswersAsking,
     VariableDetail,
     VariableListing,
     VarsAskInput,
@@ -122,17 +122,72 @@ function storeFor(ctx: Context): AnswerStore {
     };
 }
 
+/**
+ * The env file every answer of the run goes to: `--save-locally` picks `.sous/.env.local`,
+ * `--save-shared` picks `.sous/.env`, neither leaves each answer to its own file, and both is an error.
+ */
+function chosenEnvFile(input: VarsAskInput): EnvFileKind | undefined {
+    if (input.saveLocally === true && input.saveShared === true) {
+        throw new ConfigError("--save-locally and --save-shared cannot be used together: each names a different file for every answer of the run.");
+    }
+
+    return input.saveLocally === true ? "local" : input.saveShared === true ? "shared" : undefined;
+}
+
+/** `vars.ask`. */
+/**
+ * An answer store that writes nothing yet: every answer and mapping record is held, in order, and
+ * written through the real store by `write()`. The ladder still records each answer, so the rest of
+ * the run plans as though it were stored.
+ */
+function holdingStore(real: AnswerStore): AnswerStore & { readonly held: number; write(): Promise<void> } {
+    const writes: Array<() => Promise<unknown>> = [];
+
+    return {
+        envPath: (file) => real.envPath(file),
+        mappingPath: () => real.mappingPath(),
+        writeAnswer: async (file, envName, value, comment) => {
+            writes.push(() => real.writeAnswer(file, envName, value, comment));
+        },
+        writeMapping: async (envName, target) => {
+            writes.push(() => real.writeMapping(envName, target));
+
+            return real.mappingPath();
+        },
+        get held() {
+            return writes.length;
+        },
+        write: async () => {
+            for (const one of writes.splice(0)) {
+                await one();
+            }
+        },
+    };
+}
+
 /** `vars.ask`. */
 export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<IntentOutputs<VarsAskResult>> {
+    return (await askOnce(input, ctx, storeFor(ctx))).outputs;
+}
+
+/** `recipe-answers.asking`: asks now, writes when told to. */
+export const asking: RecipeAnswersAsking = {
+    async hold(variables, input, ctx) {
+        const store = holdingStore(storeFor(ctx));
+        const asked = await askOnce({ within: [...input.within], ...(input.answer === undefined ? {} : { answer: [...input.answer] }), ...(input.answersFile === undefined ? {} : { answersFile: input.answersFile }), ...(input.yes === true ? { yes: true } : {}) }, ctx, store, variables);
+
+        return { outputs: asked.outputs, empty: store.held === 0, write: () => store.write() };
+    },
+};
+
+/**
+ * One `vars.ask` run over `store`: the variables of the active recipes (or of `--file`), or the
+ * `variables` given, which may belong to recipes that are not active yet.
+ */
+async function askOnce(input: VarsAskInput, ctx: Context, store: AnswerStore, defined?: readonly DefinedVariable[]): Promise<{ outputs: IntentOutputs<VarsAskResult> }> {
     const dryRun = input.dryRun === true;
     const hidden = hiddenValue(ctx.services);
-
-    const store = storeFor(ctx);
-    const root = ctx.project?.root ?? ctx.cwd ?? ".";
-    const envFile =
-        input.envFile === undefined
-            ? undefined
-            : resolveEnvFile(input.envFile, { shared: store.envPath("shared"), local: store.envPath("local") }, root, ctx.cwd ?? root);
+    const envFile = chosenEnvFile(input);
 
     const reportSettings = (): void =>
         ctx.reporter.variables([
@@ -154,7 +209,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
     const preanswers = ctx.services.get("recipe-answers.preanswers");
     const provided = await preanswers.read(input.answersFile === undefined ? input : { ...input, answersFile: resolveUserPath(input.answersFile, ctx) });
-    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
+    const variables = defined === undefined ? await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) }) : [...defined];
 
     if (variables.length === 0) {
         // A given answer naming a variable nothing defines is a typo until shown otherwise.
@@ -164,7 +219,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
         const empty: VarsAskResult = { answered: [], inherited: [], skipped: [], dryRun };
 
-        return new IntentOutputs([
+        return { outputs: new IntentOutputs([
                 new IntentOutput({ title: "Answering variables" }),
                 new IntentOutput({
                     result: new TextBlock(
@@ -172,7 +227,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
                     ),
                     style: ReportEntryStyle.Note,
                 }),
-        ]).withData(empty);
+        ]).withData(empty) };
     }
 
     const ladder = ladderFor(ctx);
@@ -211,7 +266,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
     const entries = result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0 || report.wouldAsk.length > 0 ? askReportOutputs(result, hidden) : [];
 
-    return new IntentOutputs([new IntentOutput({ title: "Answering variables" }), ...entries]).withData(result);
+    return { outputs: new IntentOutputs([new IntentOutput({ title: "Answering variables" }), ...entries]).withData(result) };
 }
 
 /** `vars.list`, and `sous vars <name>`. */
@@ -319,7 +374,8 @@ export const varsIntents: IntentDefinition[] = [
                 dryRun: { type: "boolean", default: false, description: "Report what would be asked and written, without writing anything" },
                 answer: { type: "array", items: { type: "string" }, description: "Answer a variable ahead of its question, as <name>=<value>" },
                 answersFile: { type: "string", description: "Read answers from a YAML, JSON or .env file of name: value pairs" },
-                envFile: { type: "string", description: "Write every answer of this run to this env file: .sous/.env (committed) or .sous/.env.local (this machine only)" },
+                saveLocally: { type: "boolean", default: false, description: "Store every answer of this run in .sous/.env.local, which is gitignored and stays on this machine" },
+                saveShared: { type: "boolean", default: false, description: "Store every answer of this run in .sous/.env, which is committed and shared with everyone on the project" },
                 yes: { type: "boolean", default: false, description: "Answer yes to storing a secret or machine-specific answer in the committed .sous/.env" },
             },
             additionalProperties: false,
@@ -338,7 +394,7 @@ export const varsIntents: IntentDefinition[] = [
                 "sous vars ask --file ./questions.yaml",
                 "sous vars ask --answer apiUrl=https://api.example.com",
                 "sous vars ask --answers-file ./answers.yaml",
-                "sous vars ask --env-file .env.local",
+                "sous vars ask --save-locally",
             ],
             // `within` is how subscribing asks for the recipes it installed; not a flag for people.
             flags: { within: { hidden: true }, yes: { short: "y", aliases: ["force"] } },

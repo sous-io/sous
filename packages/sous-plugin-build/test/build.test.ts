@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, type ItemList, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/sous-plugin-api";
+import { ConfigError, IntentOutputs, type ItemList, NonInteractiveError, NotFoundError, ReportEntryStyle, scriptedPrompter, type VariableSet } from "@sous-io/sous-plugin-api";
 import type { CompilerPruneResult } from "@sous-io/sous-plugin-compiler/types";
 import type { BuildResult, ClearResult, CompileCommandResult } from "../src/types.js";
 import { entry, harness, plugin, target } from "./helpers.js";
@@ -62,8 +62,12 @@ describe("the build intent", () => {
 
         expect(failed.exitCode).toBe(1);
         expect(failed.toPlain()).toMatchObject({ ok: false, watching: false });
-        expect(failed.toArray().map((output) => output.title)).toEqual(["Command Variables", undefined]);
-        expect(failed.toArray()[0]!.result!.toPlain()).toMatchObject({ "Dry Run": true });
+        // The Command Variables open the output as a report (standard error), not after "Done." in the result.
+        expect(failed.toArray().map((output) => output.title)).toEqual([undefined]);
+        const [variables] = h.reporter.styled(ReportEntryStyle.CommandVariables);
+        expect((variables!.message as VariableSet).toObject()).toMatchObject({ "Dry Run": true });
+        expect(h.reporter.messages.indexOf(variables!)).toBe(0);
+        expect(h.reporter.styled(ReportEntryStyle.OperationSummary).map((entry) => entry.message)).toEqual(["Files: 0 would be written, 0 unchanged."]);
         expect((await h.run<BuildResult>("build")).ok).toBe(false);
         expect(h.world.pruneCalls).toEqual([]);
 
@@ -320,11 +324,130 @@ describe("the build intent", () => {
     });
 });
 
+describe("the build intent and retired recipes", () => {
+    const retired = {
+        key: "acme/widget",
+        repo: "recipes",
+        version: "0.1.2",
+        requestedBy: ["project"],
+        subscription: "acme/widget",
+        replacements: [
+            { key: "acme/gadget", ref: "recipes:acme/gadget", repo: "recipes", identity: "github.com/acme/recipes" },
+            { key: "tools/widget", ref: "https://github.com/other/recipes/tools/widget", identity: "github.com/other/recipes" },
+        ],
+    };
+
+    /** Stand-ins for `subscription.add` and `subscription.remove` that record what they were asked. */
+    function subscriptions(calls: Array<{ intent: string; input: unknown }>) {
+        return plugin("test-subscriptions", (sous) => {
+            for (const intent of ["subscription.add", "subscription.remove"]) {
+                sous.intents.add({
+                    intent,
+                    internal: true,
+                    handle: async (input) => {
+                        calls.push({ intent, input });
+
+                        return IntentOutputs.of({});
+                    },
+                });
+            }
+        });
+    }
+
+    /**
+     * With no terminal, a build never asks: it warns that the recipe was retired, names each
+     * replacement (saying which repository the project has not added), and names the commands
+     * that swap the subscription (#81, #178).
+     */
+    it("should warn and name the swap commands when it cannot ask", async () => {
+        const calls: Array<{ intent: string; input: unknown }> = [];
+        const h = await harness({ world: (world) => void (world.retired = [retired]), extra: [subscriptions(calls)] });
+
+        await h.run<BuildResult>("build");
+
+        const warnings = h.reporter.at("warning").join("\n");
+
+        expect(warnings).toContain("The repository 'recipes' retired 'acme/widget'. This project still builds it at the pinned version, and it gets no more updates:");
+        expect(warnings).toContain("Pinned version: 0.1.2");
+        expect(warnings).toContain("Replacement: recipes:acme/gadget");
+        expect(warnings).toContain("Replacement: https://github.com/other/recipes/tools/widget, in a repository this project has not added");
+        expect(warnings).toContain("To swap it, run 'sous subscription remove acme/widget', then 'sous subscribe' with each replacement you want.");
+        expect(calls).toEqual([]);
+    });
+
+    /**
+     * In a terminal, each replacement is offered in turn; a yes subscribes to it (asking about a
+     * repository the project has not added, which `subscription.add` does), and once one is added
+     * the old subscription may be removed.
+     *
+     * answers: gadget yes, other no, remove yes
+     * // -> subscription.add recipes:acme/gadget, subscription.remove acme/widget
+     */
+    it("should offer each replacement in a terminal, then the removal", async () => {
+        const calls: Array<{ intent: string; input: unknown }> = [];
+        const h = await harness({ world: (world) => void (world.retired = [retired]), extra: [subscriptions(calls)] });
+        const prompter = scriptedPrompter([true, false, true]);
+
+        await h.engine.submit({ intent: "build", input: {} }, { reporter: h.reporter, prompter });
+
+        expect(prompter.asked).toEqual([
+            "Subscribe to 'recipes:acme/gadget' in place of 'acme/widget'?",
+            "Subscribe to 'https://github.com/other/recipes/tools/widget' in place of 'acme/widget'?",
+            "Remove the subscription to 'acme/widget'?",
+        ]);
+        expect(calls).toEqual([
+            { intent: "subscription.add", input: { ref: "recipes:acme/gadget", noBuild: true, yes: true } },
+            { intent: "subscription.remove", input: { ref: "acme/widget", noBuild: true } },
+        ]);
+        expect(h.reporter.at("warning").join("\n")).not.toContain("To swap it");
+    });
+
+    /** Declining every replacement changes nothing, and the removal is not offered. */
+    it("should change nothing when every replacement is declined", async () => {
+        const calls: Array<{ intent: string; input: unknown }> = [];
+        const h = await harness({ world: (world) => void (world.retired = [retired]), extra: [subscriptions(calls)] });
+        const prompter = scriptedPrompter([false, false]);
+
+        await h.engine.submit({ intent: "build", input: {} }, { reporter: h.reporter, prompter });
+
+        expect(prompter.asked).toHaveLength(2);
+        expect(calls).toEqual([]);
+    });
+
+    /**
+     * A replacement under the same name (the recipe moved to another repository) takes the old
+     * subscription's place when added, so removing the old one is not offered.
+     */
+    it("should not offer the removal when a same-named replacement took its place", async () => {
+        const calls: Array<{ intent: string; input: unknown }> = [];
+        const moved = { ...retired, replacements: [{ key: "acme/widget", ref: "https://github.com/other/recipes/acme/widget", identity: "github.com/other/recipes" }] };
+        const h = await harness({ world: (world) => void (world.retired = [moved]), extra: [subscriptions(calls)] });
+        const prompter = scriptedPrompter([true]);
+
+        await h.engine.submit({ intent: "build", input: {} }, { reporter: h.reporter, prompter });
+
+        expect(prompter.asked).toEqual(["Subscribe to 'https://github.com/other/recipes/acme/widget' in place of 'acme/widget'?"]);
+        expect(calls).toEqual([{ intent: "subscription.add", input: { ref: "https://github.com/other/recipes/acme/widget", noBuild: true } }]);
+    });
+
+    /** A dry run never asks, even in a terminal. */
+    it("should not ask on a dry run", async () => {
+        const calls: Array<{ intent: string; input: unknown }> = [];
+        const h = await harness({ world: (world) => void (world.retired = [retired]), extra: [subscriptions(calls)] });
+        const prompter = scriptedPrompter([]);
+
+        await h.engine.submit({ intent: "build", input: { dryRun: true } }, { reporter: h.reporter, prompter });
+
+        expect(prompter.asked).toEqual([]);
+        expect(h.reporter.at("warning").join("\n")).toContain("To swap it");
+    });
+});
+
 describe("the compile intent", () => {
     /**
      * compile compiles every target, without preparing or pruning.
      *
-     * sous compile --strict; // -> compiler.compile { strict: true }; no prune, no resolve
+     * sous compile --strict; // -> compiler.compile { strict: true, reportEnd: false }; no prune, no resolve
      */
     it("should compile without preparing or pruning", async () => {
         const h = await harness({
@@ -336,7 +459,7 @@ describe("the compile intent", () => {
         const result = await h.run<CompileCommandResult>("compile", { strict: true });
 
         expect(result.ok).toBe(true);
-        expect(h.world.compileCalls).toEqual([{ strict: true }]);
+        expect(h.world.compileCalls).toEqual([{ strict: true, reportEnd: false }]);
         expect(h.world.pruneCalls).toEqual([]);
         expect(h.world.resolveCalls).toEqual([]);
     });

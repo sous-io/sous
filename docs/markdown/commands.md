@@ -41,6 +41,15 @@ already exists.
 - `--timings` prints how long each step of the run took.
 - `--json`, on the commands that print a listing or a report, prints it as JSON instead.
 
+A table fits the terminal's width, and steps aside its least important columns when the window is too narrow.
+Sent to a pipe or a file, a table keeps every column and follows the `COLUMNS` environment variable when it is
+set; when it is not, the table is laid out 2,000 characters wide, so each row stays on one line for `grep`:
+
+```bash
+sous recipe list | grep workflow
+COLUMNS=120 sous vars list > vars.txt
+```
+
 Sous reports, at the `debug` level, when a step takes longer than its time budget, so the report shows only
 with `--debug` or `--log-level debug`. It goes to standard error, so it never mixes with `--json` output. Time
 spent waiting for you to answer a question does not count. The `budgets` config key changes a budget, and
@@ -254,7 +263,10 @@ and reloads the config when a file is added to or removed from a glob target's f
 
 Before it compiles, a build prepares the project's recipes: it pins any new subscription, restores whatever this
 machine's recipe store is missing, and lists each recipe that has a newer version within its range (it moves no
-pin; see [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions)). The other commands
+pin; see [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions)). It warns about each
+recipe it builds that its repository retired, naming the replacements; in a terminal it offers to subscribe to
+each replacement of a recipe the project subscribes to by name, then to remove the old subscription (see
+[Retired recipes](repositories-consuming.md#retired-recipes)). The other commands
 that build (`init`, `launch`, `prune`, `subscription add` and the like) run this same build.
 
 A build compiles only the recipes whose subscriptions are switched on on this machine. Each one it skips gets a
@@ -265,6 +277,32 @@ $ sous build
 Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).
 Pruned 4 outputs it had written.
 ```
+
+A build opens with its Command Variables (the project, its config file and the flags that change the run) and
+then prints a block for each file it wrote, removed or could not write. A file that was already up to date gets
+no block unless you pass `--debug`, which shows every unchanged file too, with its size in tokens. Every build
+ends with one line counting the files, before `Done.`:
+
+```text
+$ sous build
+$ Command Variables:
+    Project: my-project
+    Config : /home/me/my-project/.sous/sous.config.jsonc
+
+  ▷ SKILL.tpl.md
+    Entry Point: /home/me/my-project/.sous/skills/review/SKILL.tpl.md
+    ✓ /home/me/my-project/.claude/skills/review/SKILL.md (~2,905 tokens)
+
+  Files: 1 written (1 updated), 14 unchanged.
+
+Done.
+```
+
+With `--debug`, an unchanged file reads `⊘ /home/me/my-project/.claude/skills/plan/SKILL.md (unchanged, ~1,240
+tokens)`. The count adds "removed" and "not written" only when there are some, and a dry run says what it
+would do: `Files: 2 would be written (1 new, 1 updated), 13 unchanged.` `init` and `launch` print the same
+blocks and the same line, since they run this build. All of it goes to standard error; with `--json`, standard
+output holds the build's result as data.
 
 A compile error (a missing or circular include, a template that fails to render, a file sous cannot read) fails
 the build, but only after every target is compiled and every error listed. An output whose target had an error is
@@ -411,7 +449,9 @@ problem it finds, asking before each fix. Its checks, in order:
 
 1. The config loads.
 2. The lockfile agrees with the subscriptions (fix: write the lockfile the subscriptions make, keeping every pin
-   their ranges still allow).
+   their ranges still allow). To know what each recipe depends on, sous reads its files, downloading into this
+   machine's recipe store any it lacks, and says which it downloaded. A recipe it still cannot read is a
+   problem with no fix, naming it: a lockfile written then would drop the pins of what it depends on.
 3. Required recipe variables have answers (fix: ask them).
 4. Every migration for this version of sous has run (fix: run them). This check runs even when the config does
    not load, since a migration may be what makes it load again (an option a newer sous removed). When it does,
@@ -427,11 +467,14 @@ problem it finds, asking before each fix. Its checks, in order:
    error is a problem; one at level warn is a warning. No fix.
 8. The files sous wrote are present and unchanged (fix: build).
 
-Plugins add checks of their own. `--dry-run` reports and changes nothing; `--yes` applies every fix without
-asking and takes the default answer to each migration's question; `--answer <name>=<value>` answers one
-question, a migration's or a recipe variable's; `--only <check>` runs one check. It ends with exit code 1 when a
-problem remains. A migration waiting for an answer nobody could give (no terminal, no `--yes`, no `--answer`)
-is listed with the `--answer` that gives it, and does not change the exit code.
+Plugins add checks of their own. `--dry-run` reports and changes nothing in the project (it may download
+recipes into this machine's recipe store, and says so); `--yes` applies every fix without asking and takes the
+default answer to each migration's question; `--answer <name>=<value>` answers one question, a migration's or a
+recipe variable's; `--only <check>` runs one check. It ends with exit code 1 when a problem remains. Migrations
+waiting for an answer nobody could give (no terminal, no `--yes`, no `--answer`) are listed by name, each with
+its questions and the `--answer` that gives each one; a migration that asks nothing waits too, because
+migrations run in order and none runs until every question is answered. They do not change the exit code, and
+the last line says they wait: "Nothing failed, but 3 migrations are waiting for an answer."
 
 A migration brings a project's files in line with a newer version of sous. Each runs once for the project: the
 lockfile records the version of sous whose migrations the project last ran. While one is waiting, every other
@@ -485,7 +528,7 @@ Inspects the built configuration; see [Inspecting and validating](config-inspect
 - `sous config show` prints the built config as JSON, with config expressions evaluated: what sous will do on
   this machine. `--layers` shows each change in order and what made it.
 - `sous config get PATH` prints one value by dot-path. `--layers` shows every file, recipe or plugin that
-  changed it.
+  changed it, each named in full, and each value as pretty-printed JSON, never cut short.
 - `sous config validate` checks the config against its schema, then resolves every variable, which is what
   finds circular and undefined `${var}` references.
 
@@ -554,8 +597,10 @@ sous repo contribute workflow/task-files --finish --title "Clarify the resume st
 Creates a new recipe repository, then runs [`sous init`](#sous-init-directory) in the same directory, so the
 repository is also a sous project whose memories file and `.claude/skills/` are build output. It
 passes `--yes`, `--move-includes`, `--copy-includes`, `--leave-includes`, `--no-build` and `--dry-run` through to
-init. A directory that already holds a sous config keeps it, and init is skipped with a note. See
-[Authoring a repository](repositories-authoring.md).
+init. A directory that already holds a sous config keeps it, and init is skipped with a note. `--host github`
+writes `.github/workflows/sous-release.yml` and `--host gitlab` writes `.gitlab-ci.yml` (default: the host of
+the `origin` remote, else `github`); on GitLab it warns that the release job needs the masked CI/CD variable
+`SOUS_RELEASE_TOKEN`. See [Authoring a repository](repositories-authoring.md).
 
 ```bash
 sous repo init ./my-recipes --name team-recipes --namespace workflow
@@ -565,7 +610,9 @@ sous repo init ./my-recipes --name team-recipes --namespace workflow
 
 Publishes new versions of the repository's recipes: raises their versions, regenerates the index, commits and
 tags. It plans first and asks once, and it needs a git commit identity (`user.name` and `user.email`) in the
-repository. `--check` only validates, and `--ci` is the setting for a merge job.
+repository. `--check` only validates, and `--ci` is the setting for a merge job. A recipe the repository no
+longer lists keeps its published versions in the index, marked retired, with any replacements `sous.repo.yaml`
+names (see [Retire or move a recipe](repositories-authoring.md#retire-or-move-a-recipe)).
 
 ```bash
 sous repo release --recipe workflow/task-files --bump minor --push
@@ -589,7 +636,13 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 
 - `subscription add` (or `sous subscribe`) subscribes, then builds so the recipe's files are on disk. Answer a
   recipe's questions ahead of time with `--answer <name>=<value>` or `--answers-file <path>`, and let it install
-  the sous plugins it requires with `--install-plugins`.
+  the sous plugins it requires with `--install-plugins`. It checks everything before it writes anything: a
+  repository it has to trust is trusted in memory only, every recipe it installs is downloaded, and the recipes'
+  questions are asked (without a terminal, a required question nothing answers fails it). Only then are the
+  trust, the subscription, the lockfile and the answers written, so a failed subscription, a declined question
+  or Ctrl-C leaves the project as it was. Without `@<range>` the subscription accepts any version,
+  so an update may move it to a new major version; the plan shown before the question, and the result, name
+  the range recorded.
 - `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The
   built-in `core` subscription is switched off instead, keeping its pin.
 - `subscription update [REF]` is [`sous update`](#sous-update-ref).
@@ -609,7 +662,8 @@ Browse what the trusted repositories publish, offline.
 
 - `namespace list` lists every namespace and how much of it the project subscribes to.
 - `namespace show REF` lists one namespace's recipes, with their latest and pinned versions.
-- `recipe list` lists every recipe, across every namespace.
+- `recipe list` lists every recipe, across every namespace. A description takes at most three lines, the
+  third ending in `...` when more is left out; `recipe show` prints it whole.
 - `recipe show REF` describes one recipe completely: its versions, dependencies, the questions it asks and where
   its files go, even before anything installs it.
 
@@ -620,11 +674,13 @@ sous recipe show omakase/house
 
 ## lock
 
-Inspects and repairs the project's lockfile, `.sous/sous.lock.json`, without fetching anything.
+Inspects and repairs the project's lockfile, `.sous/sous.lock.json`.
 
 - `lock show` prints what the lockfile pins, and why each recipe is there.
 - `lock rebuild` recomputes the lockfile from scratch from the subscriptions and the cached indexes: the repair
-  for a lockfile damaged by a hand edit or a bad merge.
+  for a lockfile damaged by a hand edit or a bad merge. A recipe whose index does not record what it depends on
+  is downloaded to read its manifest; when one cannot be, nothing is written and the command fails, naming it.
+  `--dry-run` downloads nothing.
 
 ```bash
 sous lock rebuild --dry-run
@@ -638,9 +694,9 @@ Inspects the questions the project's recipes ask, and the answers they hold; see
 - `vars list` lists every variable, with where its value came from.
 - `vars show NAME` shows everything about one variable. `NAME` may also be an environment variable name that
   answers it.
-- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--env-file .env` or
-  `--env-file .env.local` stores every answer of the run in that one file (committed, or this machine only); a
-  secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
+- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--save-shared` stores
+  every answer of the run in `.sous/.env` (committed), and `--save-locally` in `.sous/.env.local` (this machine
+  only); the two cannot be used together. A secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
 
 ```bash
 sous vars show workflow/task-files.apiUrl

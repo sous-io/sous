@@ -127,6 +127,12 @@ export interface CompilationListing {
     targets: number;
     /** What went wrong: a variable no one sets, a glob that matched nothing. */
     problems: CompilationFileProblem[];
+    /**
+     * The targets at or after `targets` whose files a harness's own build listed: those the merge
+     * of the per-harness builds carried from that build (spec S8, "The Merge"). Never in the
+     * config; the compiler adds it when it reads the merged config (`withHarnessFiles`).
+     */
+    fromHarness?: number[];
 }
 
 /**
@@ -480,6 +486,8 @@ export interface CompileResult {
     readonly ok: boolean;
     readonly outputs: CompiledOutput[];
     readonly problems: CompileProblem[];
+    /** The outputs left unwritten: by an error, or because sous did not write the file already there. */
+    readonly notWritten?: string[];
     /** Every file the compile read, as real paths: sources and everything they include. */
     readonly included?: string[];
     readonly durationMs: number;

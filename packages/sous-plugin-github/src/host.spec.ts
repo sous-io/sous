@@ -163,7 +163,7 @@ describe("reading through the github host", () => {
 
         expect(await env.find(repository, ctx)).toEqual({ missing: "GITHUB_TOKEN and GH_TOKEN unset" });
         expect(env.fix?.(repository)).toBe("export GITHUB_TOKEN=<a token that can read the repository>");
-        expect(await readWith(host, "http", request, ctx)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the repository is private" });
+        expect(await readWith(host, "http", request, ctx)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the repository is private", status: 404 });
         expect(await readWith(host, "git", request, ctx)).toEqual({ ok: false, reason: "Permission denied (publickey)" });
     });
 

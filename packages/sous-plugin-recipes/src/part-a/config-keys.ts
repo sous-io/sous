@@ -5,6 +5,7 @@
 
 import { jsonSchema, type ConfigKeyEntity, type JsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 import semver from "semver";
+import { DEFAULT_STRATEGY_MEMORY_SECONDS } from "../part-b/constants.js";
 import { REPO_NAME_PATTERN } from "./util.js";
 
 /** Default size cap of the store: one gibibyte. */
@@ -56,6 +57,12 @@ const store: JsonSchema = {
         maxBytes: { type: "integer", default: DEFAULT_STORE_MAX_BYTES, description: "Size cap past which old entries are collected." },
         freshnessSeconds: { type: "integer", default: DEFAULT_FRESHNESS_SECONDS, description: "How long a fetched index stays fresh." },
         watchPollSeconds: { type: "integer", default: DEFAULT_WATCH_POLL_SECONDS, description: "How often watch mode checks upstream." },
+        strategyMemorySeconds: {
+            type: "integer",
+            default: DEFAULT_STRATEGY_MEMORY_SECONDS,
+            description:
+                "How long, in seconds, a way of reading a repository's index or downloading its recipes that worked stays the one tried first, counted from when it became first. The default, 604800 (seven days), means a repository read through git because its token failed goes back to trying the token first a week later. 0 always tries the host's usual order first; any whole number of seconds is accepted.",
+        },
     },
     additionalProperties: false,
 };
@@ -151,7 +158,7 @@ function subscriptionIssues(subscriptions: Record<string, unknown>): Issue[] {
 function storeIssues(store: Record<string, unknown>): Issue[] {
     const issues: Issue[] = [];
 
-    for (const name of ["maxBytes", "freshnessSeconds", "watchPollSeconds"]) {
+    for (const name of ["maxBytes", "freshnessSeconds", "watchPollSeconds", "strategyMemorySeconds"]) {
         const value = store[name];
 
         if (typeof value === "number" && (!Number.isInteger(value) || (name === "maxBytes" ? value <= 0 : value < 0))) {

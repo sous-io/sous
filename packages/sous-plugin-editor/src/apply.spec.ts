@@ -280,7 +280,7 @@ describe("applyEdits()", () => {
         ];
         const first = await apply(tmp.path, entries);
 
-        expect(first.result.directories.created.map((dir) => path.relative(tmp.path, dir)).sort()).toEqual(["comms", "docs", "docs/context", "docs/work"]);
+        expect(first.result.directories.created.map((dir) => path.relative(tmp.path, dir)).sort()).toEqual([".kw", "comms", "docs", "docs/context", "docs/work"]);
         expect(JSON.parse(read(tmp.path, ".kw/descriptor.json")!)).toEqual({ version: 1 });
 
         write(tmp.path, ".kw/descriptor.json", json({ version: 1, edited: true }));
@@ -298,10 +298,87 @@ describe("applyEdits()", () => {
         expect(fs.existsSync(path.join(tmp.path, "docs/context"))).toBe(false);
         expect(fs.existsSync(path.join(tmp.path, "comms"))).toBe(false);
         expect(fs.existsSync(path.join(tmp.path, "docs/work/note.md"))).toBe(true);
+        expect(fs.existsSync(path.join(tmp.path, ".kw"))).toBe(false);
 
         const descriptor = third.result.files.find((file) => file.file === ".kw/descriptor.json")!;
 
         expect(JSON.parse(fs.readFileSync(descriptor.backups![0]!, "utf8"))).toEqual({ version: 1, edited: true });
+    });
+
+    /**
+     * The missing parent folders of a starter file go with it on a rollback, deepest first, and
+     * the history records them per file (gh-270).
+     *
+     * build 1: ensureFileExists a/b/c/start.json -> a/, a/b/, a/b/c/ created
+     * build 2: nothing declared                  -> the file and all three folders removed
+     */
+    it("should remove the parent folders it created for a starter file", async () => {
+        const starter: TestEntry = { entry: { file: "a/b/c/start.json", ensureFileExists: { content: { version: 1 } } } };
+        const first = await apply(tmp.path, [starter]);
+
+        expect(first.result.directories.created.map((dir) => path.relative(tmp.path, dir))).toEqual(["a", "a/b", "a/b/c"]);
+        expect(JSON.parse(read(tmp.path, ".sous/sous.edits.json")!).createdFolders).toEqual({ "a/b/c/start.json": ["a", "a/b", "a/b/c"] });
+
+        const second = await apply(tmp.path, []);
+
+        expect(fs.existsSync(path.join(tmp.path, "a"))).toBe(false);
+        expect(second.result.directories.removed.map((dir) => path.relative(tmp.path, dir))).toEqual(["a/b/c", "a/b", "a"]);
+        expect(JSON.parse(read(tmp.path, ".sous/sous.edits.json")!).createdFolders).toEqual({});
+    });
+
+    /**
+     * Only the levels Sous created are removed, and only when empty: a folder that was already
+     * there, a folder holding someone's file, and a folder a folder entry still wants all stay.
+     */
+    it("should keep a parent folder that existed, holds other files or is still wanted", async () => {
+        fs.mkdirSync(path.join(tmp.path, "kept"));
+
+        const entries: TestEntry[] = [
+            { entry: { file: "kept/new/start.json", ensureFileExists: { content: {} } } },
+            { entry: { file: "busy/start.json", ensureFileExists: { content: {} } } },
+            { entry: { file: "wanted/inner/start.json", ensureFileExists: { content: {} } } },
+        ];
+
+        await apply(tmp.path, entries);
+        write(tmp.path, "busy/mine.md", "mine");
+        await apply(tmp.path, [{ entry: { ensureDirectoryExists: { paths: ["wanted/inner"] } } }]);
+
+        expect(fs.existsSync(path.join(tmp.path, "kept"))).toBe(true);
+        expect(fs.existsSync(path.join(tmp.path, "kept/new"))).toBe(false);
+        expect(fs.existsSync(path.join(tmp.path, "busy/mine.md"))).toBe(true);
+        expect(fs.existsSync(path.join(tmp.path, "wanted/inner"))).toBe(true);
+        expect(read(tmp.path, "wanted/inner/start.json")).toBeUndefined();
+    });
+
+    /**
+     * A `set` that creates `.claude/settings.json` in a project without `.claude/` leaves no empty
+     * `.claude/` behind when it is undone.
+     */
+    it("should remove the .claude folder a set created settings.json in", async () => {
+        await apply(tmp.path, [{ entry: { file: ".claude/settings.json", set: { path: "env.MODE", value: "strict" } } }]);
+
+        expect(settings().env.MODE).toBe("strict");
+
+        await apply(tmp.path, []);
+
+        expect(fs.existsSync(path.join(tmp.path, ".claude"))).toBe(false);
+    });
+
+    /**
+     * A history written before folders were recorded reads as recording none: the file still goes,
+     * and its folder stays, as before.
+     */
+    it("should read a history without createdFolders as recording no folders", async () => {
+        await apply(tmp.path, [{ entry: { file: "old/start.json", ensureFileExists: { content: {} } } }]);
+
+        const history = JSON.parse(read(tmp.path, ".sous/sous.edits.json")!);
+
+        delete history.createdFolders;
+        write(tmp.path, ".sous/sous.edits.json", json(history));
+        await apply(tmp.path, []);
+
+        expect(read(tmp.path, "old/start.json")).toBeUndefined();
+        expect(fs.existsSync(path.join(tmp.path, "old"))).toBe(true);
     });
 
     /**

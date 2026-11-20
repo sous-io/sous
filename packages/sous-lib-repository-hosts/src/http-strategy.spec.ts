@@ -77,7 +77,8 @@ describe("httpReadStrategy()", () => {
     });
 
     /**
-     * Error statuses become a few words, which differ with a token.
+     * Error statuses become a few words, which differ with a token, and the status is kept so a
+     * refused token (401 or 403) can be told apart.
      *
      * 404 without token -> "404: no sous.index.json at HEAD, or the repository is private"
      */
@@ -89,11 +90,11 @@ describe("httpReadStrategy()", () => {
             return withIt ? withToken.read({ ...request, token }, ctx) : without.read(request, ctx);
         };
 
-        expect(await answer(404, false)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the repository is private" });
-        expect(await answer(404, true)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the token cannot read the repository" });
-        expect(await answer(401, true)).toEqual({ ok: false, reason: "401: the token was refused" });
-        expect(await answer(401, false)).toEqual({ ok: false, reason: "401: the repository is private" });
-        expect(await answer(418, false)).toEqual({ ok: false, reason: "418 Teapot" });
+        expect(await answer(404, false)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the repository is private", status: 404 });
+        expect(await answer(404, true)).toEqual({ ok: false, reason: "404: no sous.index.json at HEAD, or the token cannot read the repository", status: 404 });
+        expect(await answer(401, true)).toEqual({ ok: false, reason: "401: the token was refused", status: 401 });
+        expect(await answer(401, false)).toEqual({ ok: false, reason: "401: the repository is private", status: 401 });
+        expect(await answer(418, false)).toEqual({ ok: false, reason: "418 Teapot", status: 418 });
     });
 
     /**

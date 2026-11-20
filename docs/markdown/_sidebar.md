@@ -82,3 +82,5 @@
   - [0038: A boolean recipe answer is a boolean in Liquid](adrs/0038-boolean-answers.md)
   - [0039: Codex's memories go to a git-ignored `AGENTS.override.md`](adrs/0039-codex-memories.md)
   - [0040: One config build per harness](adrs/0040-one-config-build-per-harness.md)
+  - [0041: A target one harness's build holds reaches that harness](adrs/0041-harness-only-targets.md)
+  - [0042: Retired recipes stay in the index and name their replacements](adrs/0042-retired-recipes.md)

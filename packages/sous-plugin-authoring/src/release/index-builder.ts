@@ -8,6 +8,9 @@
  *    very commit that carries this index.
  * 3. The tags are the backstop. A tagged version missing from the index is rebuilt from its tree, so
  *    deleting the index and regenerating it restores the same catalog.
+ * 4. A recipe the repository no longer lists is retired, never dropped. Every version it published
+ *    stays in the index under `retired`, with the replacements `sous.repo.yaml` names for it, so a
+ *    project whose lockfile pins one still restores on a fresh machine.
  *
  * Each new version also records the range each dependency may take (the declared range, or the same
  * major as a sibling named with no range), how each was declared, and the variables it publishes.
@@ -17,7 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import semver from "semver";
-import type { DependencyKind, IndexDependency, IndexFile, IndexRecipe, IndexVersion } from "@sous-io/sous-plugin-formats/types";
+import type { DependencyKind, IndexDependency, IndexFile, IndexRecipe, IndexReplacement, IndexRetiredRecipe, IndexVersion } from "@sous-io/sous-plugin-formats/types";
 import type { ReleaseProblem } from "../types.js";
 import type { AuthoringTools } from "../tools.js";
 import type { RepoGit } from "../shared/git.js";
@@ -35,7 +38,7 @@ import {
 } from "../shared/refs.js";
 import { INDEX_FILE, toPosix, validateRepo, type RepoValidation, type ValidatedRecipe } from "../shared/repository.js";
 import type { SettledDependency } from "./settle.js";
-import { groupTagsByKey, listRecipeTags, recipeTagKey, tagFor, type RecipeTag } from "./tags.js";
+import { groupTagsByKey, listRecipeTags, tagFor, type RecipeTag } from "./tags.js";
 
 /** A version ready to publish with no tag yet. */
 export interface PendingRelease {
@@ -130,7 +133,7 @@ export async function buildIndex(tools: AuthoringTools, git: RepoGit, options: B
                 continue;
             }
 
-            const rebuilt = await rebuildTaggedVersion(tools, git, tag, recipe, options.settled);
+            const rebuilt = await rebuildTaggedVersion(tools, git, tag, key, recipe.path, options.settled);
 
             problems.push(...rebuilt.problems);
             versions[tag.version] = {
@@ -243,7 +246,9 @@ export async function buildIndex(tools: AuthoringTools, git: RepoGit, options: B
         }
     }
 
-    problems.push(...checkOrphanTags(validation, tags));
+    const retiring = await retiredRecipes(tools, git, { validation, existing, tagsByKey, settled: options.settled });
+
+    problems.push(...retiring.problems);
 
     const index: IndexFile = {
         formatVersion: 1,
@@ -252,6 +257,7 @@ export async function buildIndex(tools: AuthoringTools, git: RepoGit, options: B
         generator: sousVersion,
         namespaces,
         recipes,
+        ...(Object.keys(retiring.retired).length === 0 ? {} : { retired: retiring.retired }),
     };
 
     // The stamp changes every run, so it changes the file only when something else did too.
@@ -320,13 +326,36 @@ export function describeIndexDrift(existing: IndexFile | undefined, rebuilt: Ind
         const after = rebuilt.recipes[key];
 
         if (after === undefined) {
-            lines.push(`the index still publishes '${key}', which this repository does not`);
+            // A recipe the rebuilt index keeps as retired is reported with the retired ones.
+            if (rebuilt.retired?.[key] === undefined) {
+                lines.push(`the index still publishes '${key}', which this repository does not`);
+            }
+
             continue;
         }
 
         for (const version of Object.keys(recipe.versions)) {
             if (!Object.hasOwn(after.versions, version)) {
                 lines.push(`the index still publishes version ${version} of '${key}'`);
+            }
+        }
+    }
+
+    for (const [key, recipe] of Object.entries(rebuilt.retired ?? {})) {
+        const before = existing.retired?.[key];
+
+        if (before === undefined) {
+            lines.push(`the recipe '${key}' is retired, and the index does not record it as retired yet`);
+            continue;
+        }
+
+        if (describeReplacements(before.replacements) !== describeReplacements(recipe.replacements)) {
+            lines.push(`the replacements of the retired recipe '${key}' have changed`);
+        }
+
+        for (const version of Object.keys(recipe.versions)) {
+            if (!Object.hasOwn(before.versions, version)) {
+                lines.push(`version ${version} of the retired recipe '${key}' is missing from the index`);
             }
         }
     }
@@ -671,50 +700,77 @@ function describeDeclared(dependency: DeclaredDependency): string {
 // --- Tags --------------------------------------------------------------------------------------
 
 interface RebuiltVersion {
-    readonly hash: string;
+    /** Missing only when the recipe's folder at the tag could not be found. */
+    readonly hash?: string;
+    /** The recipe's folder the version was rebuilt from. */
+    readonly path?: string;
+    /** The recipe's description at the tag. */
+    readonly summary?: string;
     readonly description: VersionDescription;
     readonly problems: ReleaseProblem[];
 }
 
-/** Rebuilds a tagged version the index lacks, from the tree its tag carries. */
+/**
+ * Rebuilds one tagged version from the repository as it stood at the tag. `knownPath` is the folder
+ * the recipe is read from; without one (a retired recipe the index never recorded), the folder the
+ * repository manifest at the tag lists for it.
+ */
 async function rebuildTaggedVersion(
     tools: AuthoringTools,
     git: RepoGit,
     tag: RecipeTag,
-    recipe: ValidatedRecipe,
+    key: string,
+    knownPath: string | undefined,
     settled?: Map<string, SettledDependency>,
+    section: "recipes" | "retired" = "recipes",
 ): Promise<RebuiltVersion> {
     return git.withTree(tag.tag, ".", async (treeDir) => {
-        const hash = await tools.hash.hashDirectory(path.join(treeDir, ...recipe.path.split("/")));
-        let reason: string;
+        let snapshot: RepoValidation | undefined;
+        let tagged: ValidatedRecipe | undefined;
+        let reason = `The repository manifest at that tag does not list '${key}'.`;
 
         try {
-            const snapshot = await validateRepo(tools, treeDir);
-            const tagged = snapshot.recipes.find((entry) => entry.key === recipe.key);
-
-            if (tagged !== undefined) {
-                const description = describeVersion(
-                    tagged,
-                    declaredDependencies(tools, tagged, snapshot, settled),
-                    siblingState(snapshot),
-                );
-
-                return { hash, description, problems: [] };
-            }
-
-            reason = `The repository manifest at that tag does not list '${recipe.key}'.`;
+            snapshot = await validateRepo(tools, treeDir);
+            tagged = snapshot.recipes.find((entry) => entry.key === key);
         } catch (error) {
             reason = describeError(error);
         }
 
+        const where = `${INDEX_FILE} ${section}['${key}'].versions['${tag.version}']`;
+        const recipePath = knownPath ?? tagged?.path;
+
+        if (recipePath === undefined) {
+            return {
+                description: {},
+                problems: [
+                    {
+                        level: "warning",
+                        recipe: key,
+                        where,
+                        message: `version ${tag.version} is left out of the index, because sous could not find the recipe's folder at the tag '${tag.tag}'.\n  ${reason}`,
+                    },
+                ],
+            };
+        }
+
+        const hash = await tools.hash.hashDirectory(path.join(treeDir, ...recipePath.split("/")));
+        const summary = tagged?.manifest.description === undefined ? {} : { summary: tagged.manifest.description };
+
+        if (snapshot !== undefined && tagged !== undefined) {
+            const description = describeVersion(tagged, declaredDependencies(tools, tagged, snapshot, settled), siblingState(snapshot));
+
+            return { hash, path: recipePath, ...summary, description, problems: [] };
+        }
+
         return {
             hash,
+            path: recipePath,
             description: {},
             problems: [
                 {
                     level: "warning",
-                    recipe: recipe.key,
-                    where: `${INDEX_FILE} recipes['${recipe.key}'].versions['${tag.version}']`,
+                    recipe: key,
+                    where,
                     message:
                         `version ${tag.version} was rebuilt from the tag '${tag.tag}' without its dependencies, because sous ` +
                         `could not read the recipe at that tag.\n  ${reason}`,
@@ -786,35 +842,213 @@ async function checkTaggedMetadata(
     return [];
 }
 
-/** Tags of recipes no longer published: normal after a rename, so a warning. */
-function checkOrphanTags(validation: RepoValidation, tags: readonly RecipeTag[]): ReleaseProblem[] {
-    const known = new Set(validation.recipes.map((recipe) => recipe.key));
-    const orphaned = new Map<string, string[]>();
+// --- Retired recipes ------------------------------------------------------------------------
 
-    for (const tag of tags) {
-        const key = recipeTagKey(tag);
+/** What `retiredRecipes` needs. */
+interface RetiredInput {
+    readonly validation: RepoValidation;
+    readonly existing?: IndexFile;
+    readonly tagsByKey: Map<string, RecipeTag[]>;
+    readonly settled?: Map<string, SettledDependency>;
+}
 
-        if (known.has(key)) {
+/**
+ * Every recipe this repository published once and no longer lists, with every version it
+ * published: the ones the committed index records (under `retired`, or still under `recipes` when
+ * it was retired since), and any other its tags carry, rebuilt from the tag. Each keeps the
+ * replacements `sous.repo.yaml` names for it.
+ */
+async function retiredRecipes(tools: AuthoringTools, git: RepoGit, input: RetiredInput): Promise<{ retired: Record<string, IndexRetiredRecipe>; problems: ReleaseProblem[] }> {
+    const { validation, existing, tagsByKey } = input;
+    const declared = validation.manifest.retired ?? {};
+    const manifestName = relativeTo(validation.rootDir, validation.manifestPath);
+    const live = new Set(validation.recipes.map((recipe) => recipe.key));
+    const problems: ReleaseProblem[] = [];
+    const retired: Record<string, IndexRetiredRecipe> = {};
+    const keys = new Set([...Object.keys(existing?.retired ?? {}), ...Object.keys(existing?.recipes ?? {}), ...tagsByKey.keys(), ...Object.keys(declared)]);
+
+    for (const key of [...keys].sort()) {
+        const where = `${manifestName} retired['${key}']`;
+
+        if (live.has(key)) {
+            if (Object.hasOwn(declared, key)) {
+                problems.push({
+                    level: "error",
+                    recipe: key,
+                    where,
+                    message:
+                        `'${key}' is listed as retired, and 'recipes' still lists its folder. A recipe is either published or ` +
+                        `retired: remove its folder from 'recipes' to retire it, or remove this entry to keep publishing it.`,
+                });
+            }
+
             continue;
         }
 
-        const list = orphaned.get(key);
+        const before = existing?.retired?.[key] ?? existing?.recipes[key];
+        const versions: Record<string, IndexVersion> = { ...(before?.versions ?? {}) };
+        const tags = [...(tagsByKey.get(key) ?? [])].sort((left, right) => semver.compare(left.version, right.version));
+        let recipePath = before?.path;
+        let summary = before?.description;
 
-        if (list === undefined) {
-            orphaned.set(key, [tag.tag]);
-        } else {
-            list.push(tag.tag);
+        // Rule 3 holds for a retired recipe too: every tagged version belongs in the index.
+        for (const tag of tags) {
+            if (Object.hasOwn(versions, tag.version)) {
+                continue;
+            }
+
+            const rebuilt = await rebuildTaggedVersion(tools, git, tag, key, before?.path, input.settled, "retired");
+
+            problems.push(...rebuilt.problems);
+
+            if (rebuilt.hash === undefined) {
+                continue;
+            }
+
+            versions[tag.version] = {
+                hash: rebuilt.hash as IndexVersion["hash"],
+                tag: tag.tag,
+                prerelease: semver.prerelease(tag.version) !== null,
+                ...(await releasedAtOf(git, tag.tag)),
+                ...rebuilt.description,
+            };
+
+            // With nothing recorded before, the newest tag says where the folder was and what it did.
+            if (before === undefined) {
+                recipePath = rebuilt.path;
+                summary = rebuilt.summary;
+            }
         }
+
+        for (const [known, published] of Object.entries(versions)) {
+            if (tags.some((tag) => tag.version === known)) {
+                continue;
+            }
+
+            problems.push({
+                level: "error",
+                recipe: key,
+                where: `${INDEX_FILE} retired['${key}'].versions['${known}']`,
+                message:
+                    `the index keeps version ${known} of the retired recipe '${key}', but the tag '${published.tag}' does not ` +
+                    `exist in this repository. A project whose lockfile pins that version can no longer restore it; restore ` +
+                    `the tag, or remove the version from the index.`,
+            });
+        }
+
+        if (Object.keys(versions).length === 0 || recipePath === undefined) {
+            if (Object.hasOwn(declared, key)) {
+                problems.push({
+                    level: "warning",
+                    recipe: key,
+                    where,
+                    message: `'${key}' is listed as retired, and this repository never published it, so the index records nothing for it.`,
+                });
+            }
+
+            continue;
+        }
+
+        const settled = settleReplacements(tools, key, declared[key]?.replacements ?? [], live, where, input.settled);
+
+        problems.push(...settled.problems);
+        retired[key] = {
+            path: recipePath,
+            ...(summary === undefined ? {} : { description: summary }),
+            ...(settled.replacements.length === 0 ? {} : { replacements: settled.replacements }),
+            versions,
+        };
     }
 
-    return [...orphaned.entries()].map(([key, tagNames]) => ({
-        level: "warning" as const,
-        where: `tags for '${key}'`,
-        message:
-            `this repository carries ${tagNames.length} release ${tagNames.length === 1 ? "tag" : "tags"} for '${key}' ` +
-            `(${tagNames.join(", ")}), which it no longer publishes. That is normal after a recipe is renamed or retired; ` +
-            `the tags are left alone.`,
-    }));
+    return { retired, problems };
+}
+
+/**
+ * The replacements `sous.repo.yaml` names for one retired recipe, each settled to one recipe: in
+ * this repository (which must publish it) or in another one (named by a locator, and recorded with
+ * that repository's identity). Nothing is read upstream for a locator that reads one way.
+ */
+function settleReplacements(
+    tools: AuthoringTools,
+    key: string,
+    written: readonly string[],
+    live: ReadonlySet<string>,
+    where: string,
+    settled: Map<string, SettledDependency> = new Map(),
+): { replacements: IndexReplacement[]; problems: ReleaseProblem[] } {
+    const replacements: IndexReplacement[] = [];
+    const problems: ReleaseProblem[] = [];
+    const refuse = (index: number, message: string): void => {
+        problems.push({ level: "error", recipe: key, where: `${where}.replacements[${index}]`, message });
+    };
+
+    written.forEach((entry, index) => {
+        const declared = entry.trim();
+        const answer = settled.get(declared);
+
+        if (answer !== undefined) {
+            if (answer.keys.length !== 1) {
+                refuse(index, `'${declared}' names ${answer.keys.length === 0 ? "no recipe" : "several recipes"}, and a replacement names exactly one recipe.`);
+            } else {
+                replacements.push({ key: answer.keys[0]!, repo: answer.identity, declared });
+            }
+
+            return;
+        }
+
+        const readings = readingsOf(tools, declared);
+
+        if (readings === undefined || readings.length === 0) {
+            refuse(index, `'${declared}' could not be read as a recipe ref. Write 'namespace/recipe', or a locator naming a recipe in another repository.`);
+
+            return;
+        }
+
+        // Several readings were settled above, or settling reported why it could not.
+        if (readings.length > 1) {
+            return;
+        }
+
+        const reading = readings[0]!;
+
+        if (reading.kind !== "recipe") {
+            refuse(
+                index,
+                `'${declared}' names a ${reading.kind === "namespace" ? "namespace" : "repository"}, and a replacement names one recipe: ` +
+                    `write 'namespace/recipe', or a locator naming a recipe in another repository.`,
+            );
+
+            return;
+        }
+
+        const replacement = keyOf(tools, reading);
+        const location = locationOf(tools, reading);
+
+        if (location !== undefined) {
+            replacements.push({ key: replacement, repo: location.identity, declared });
+
+            return;
+        }
+
+        if (replacement === key) {
+            refuse(index, `'${declared}' names the retired recipe itself.`);
+        } else if (!live.has(replacement)) {
+            refuse(
+                index,
+                `'${declared}' names a recipe this repository does not publish. A replacement in this repository must be a ` +
+                    `recipe listed under 'recipes'; one in another repository is written as a locator.`,
+            );
+        } else {
+            replacements.push({ key: replacement, declared });
+        }
+    });
+
+    return { replacements, problems };
+}
+
+/** The replacements of a retired recipe as one comparable string. */
+function describeReplacements(replacements: IndexRetiredRecipe["replacements"]): string {
+    return (replacements ?? []).map((entry) => `${entry.repo ?? ""} ${entry.key} ${entry.declared}`).join("\n");
 }
 
 function sameExceptStamp(tools: AuthoringTools, left: IndexFile, right: IndexFile): boolean {

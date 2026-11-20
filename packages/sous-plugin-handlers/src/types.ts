@@ -28,7 +28,7 @@ export type { HandlerPurpose } from "@sous-io/sous-plugin-api";
  * `handlers/recipes` contributor adds one for each handler a trusted recipe's manifest lists.
  */
 export interface HandlerEntity {
-    /** Names it in timings and reports. A recipe's: `voltagrid/knowledge-worker/check/checkCommands`. */
+    /** Names it in timings and reports. A recipe's: `voltagrid/knowledge-worker/check/handlers/check.js#checkCommands`. */
     id: string;
     purpose: HandlerPurpose;
     /** The function. Timed by the engine under `entity.method`, as `handler:<id>.handle`. */
@@ -37,6 +37,8 @@ export interface HandlerEntity {
     order?: number;
     /** The recipe that lists it (`namespace/recipe`), for a handler from a manifest. */
     recipe?: string;
+    /** The plugin that added it with `sous.handlers.add`, for a handler from a plugin. */
+    plugin?: string;
     /** Where it came from, for messages: `handlers/prerequisites.js#checkCommands`. */
     source?: string;
 }
@@ -158,6 +160,8 @@ export interface HandlerRun {
     /** The plugin that added it (for a recipe's handler, sous-plugin-handlers). */
     readonly plugin: string;
     readonly recipe?: string;
+    /** Who reported, as each printed line starts: `workflow/github-projects (check: hasGh)`. */
+    readonly label: string;
     readonly reports: readonly HandlerReportEntry[];
     /** Set when it threw; its message is also reported as an error. */
     readonly threw?: string;

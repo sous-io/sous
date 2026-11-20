@@ -1,5 +1,5 @@
 /**
- * Settling, at release time, the dependencies that read more than one way: a GitLab URL with nested
+ * Settling, at release time, the dependencies (and the replacements of retired recipes) that read more than one way: a GitLab URL with nested
  * groups (where does the project path end?) and a browser URL copied from a host's file view (which
  * recipe is that folder?). Each is settled once, by reading the index of every candidate repository
  * through its `repository-host` entity, and keeping the reading whose index publishes what was named.
@@ -9,6 +9,7 @@
  * could be the wrong one. Two readings that both publish it are a tie, and an error.
  */
 
+import path from "node:path";
 import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import type { RefLocation, SousRef } from "@sous-io/sous-plugin-refs/types";
@@ -64,8 +65,19 @@ export async function settleDependencyLocations(tools: AuthoringTools, validatio
         return pending;
     };
 
-    for (const recipe of validation.recipes) {
-        for (const written of [...(recipe.manifest.depends ?? []), ...(recipe.manifest.subscribes ?? [])]) {
+    // Each recipe's dependencies, then the replacements the repository manifest names for each
+    // recipe it retired.
+    const entries: Array<{ recipe: string; where: string; written: readonly string[] }> = [
+        ...validation.recipes.map((recipe) => ({ recipe: recipe.key, where: recipe.path, written: [...(recipe.manifest.depends ?? []), ...(recipe.manifest.subscribes ?? [])] })),
+        ...Object.entries(validation.manifest.retired ?? {}).map(([key, retired]) => ({
+            recipe: key,
+            where: `${path.basename(validation.manifestPath)} retired['${key}']`,
+            written: retired.replacements ?? [],
+        })),
+    ];
+
+    for (const entry of entries) {
+        for (const written of entry.written) {
             const trimmed = written.trim();
 
             if (settled.has(trimmed)) {
@@ -81,7 +93,7 @@ export async function settleDependencyLocations(tools: AuthoringTools, validatio
             try {
                 settled.set(trimmed, await settleOne(tools, readings, indexAt));
             } catch (error) {
-                problems.push({ level: "error", recipe: recipe.key, where: `${recipe.path} ('${trimmed}')`, message: describeError(error) });
+                problems.push({ level: "error", recipe: entry.recipe, where: `${entry.where} ('${trimmed}')`, message: describeError(error) });
             }
         }
     }

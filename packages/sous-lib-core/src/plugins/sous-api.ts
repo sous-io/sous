@@ -25,6 +25,7 @@ import type {
     SousExtensions,
     SousSchema,
 } from "@sous-io/sous-plugin-api";
+import { PluginError } from "@sous-io/sous-plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
 import type { PluginRecord } from "./plugin-registry.js";
 
@@ -138,7 +139,16 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
         handlers: {
             // A handler is a `handler` entity; sous-plugin-handlers defines the kind and runs them.
             add(purpose, definition) {
-                host.addEntity("handler", { ...definition, purpose }, record);
+                // A plugin is not removed or upgraded through a recipe's pin, so these never run.
+                if ((purpose as string) === "uninstall" || (purpose as string) === "migrate") {
+                    throw new PluginError(
+                        record.name,
+                        `The plugin ${record.name} adds a ${purpose} handler (${definition.id}), but a plugin cannot add ${purpose} handlers: Sous runs them only for a recipe. ` +
+                            `Declare the handler in the recipe's manifest, under handlers.${purpose}; it may point at a function the plugin's bundle exports.`,
+                    );
+                }
+
+                host.addEntity("handler", { ...definition, purpose, plugin: record.name }, record);
                 note("handler", `${purpose}: ${definition.id}`);
             },
         },

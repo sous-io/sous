@@ -23,4 +23,21 @@ describe("recipeAnswersSource()", () => {
         expect(source.scoped?.("lib/one", ctx)).toBeUndefined();
         expect(source.scoped?.("lib/two", ctx)).toEqual({ tone: "" });
     });
+
+    /**
+     * Core tells one source from another by its fields that are not functions, so the definitions
+     * must be among them: a source made once the recipes' definitions arrive must differ from the
+     * one made before, or a contributor that read the first (the manifests' conditions) never runs
+     * again (#266).
+     *
+     * recipeAnswersSource([]).definitions        // -> []
+     * recipeAnswersSource([jiraEnabled]).definitions   // -> [jiraEnabled]
+     */
+    it("should carry its definitions as data", () => {
+        const variables = definitionsFromRecipes([pinnedRecipe([definition({ name: "jiraEnabled", type: "boolean" })], [])]);
+        const services = serviceReader({ "variables.names": names });
+
+        expect(recipeAnswersSource([], services).definitions).toEqual([]);
+        expect(recipeAnswersSource(variables, services).definitions).toEqual(variables);
+    });
 });

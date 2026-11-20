@@ -85,10 +85,18 @@ it. This answers "which file or plugin set this?" directly:
 ```text
 $ sous config get subscriptions."tool-usage/automated-browser-tasks".enabled --layers
 conf.d/510-subscriptions.jsonc   (not set)
-conf.d/610-mac.jsonc             { "$if": { "expr": "host.platform == 'darwin'", "then": false } }
+conf.d/610-mac.jsonc             {
+                                   "$if": {
+                                     "expr": "host.platform == 'darwin'",
+                                     "then": false
+                                   }
+                                 }
                                  → false   (host.platform = "darwin")
 result                           false     (settled after 1 pass)
 ```
+
+Each layer is named in full, wrapping onto a second line when the column is too narrow for it, and each
+value is pretty-printed JSON, never cut short.
 
 `--harness <id>` reads the value from that harness's own config build:
 

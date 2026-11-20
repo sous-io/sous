@@ -167,7 +167,7 @@ async function removeSessionFiles(sous) {
 export default definePlugin({
     name: "sous-plugin-knowledge-worker",
     version: "1.0.0",
-    description: "Example: registers handlers for three purposes.",
+    description: "Example: registers handlers for two purposes.",
 
     register(sous) {
         // The "configure" purpose. This is the call plugins already use.
@@ -178,24 +178,33 @@ export default definePlugin({
             id: "knowledge-worker/commands",
             handle: checkCommands,
         });
-
-        // The "uninstall" purpose.
-        sous.handlers.add("uninstall", {
-            id: "knowledge-worker/session-files",
-            handle: removeSessionFiles,
-        });
     },
 });
+
+// The "uninstall" purpose: exported for the recipe's manifest to point at (see below).
+export { removeSessionFiles };
 ```
 
 The handler functions are identical either way: the same function body works whether a manifest points at
 it or a plugin registers it. A plugin may also pass `order` (a number, default `500`; lower runs earlier).
-A recipe's handlers are named `<namespace>/<recipe>/<purpose>/<function>`, such as
-`voltagrid/knowledge-worker/check/checkCommands`.
+A recipe's handlers are named `<namespace>/<recipe>/<purpose>/<file>#<function>`, such as
+`voltagrid/knowledge-worker/check/handlers/prerequisites.js#checkCommands`.
 
-`uninstall` runs only when the recipe or plugin is removed through sous. Removing a plugin by hand (with
+A plugin cannot add `uninstall` or `migrate` handlers: sous runs them only when a recipe is removed or
+moves to a new version, so `sous.handlers.add("uninstall", ...)` and `sous.handlers.add("migrate", ...)`
+stop the plugin from loading with an error naming it. A plugin a recipe ships declares them in the recipe's
+manifest instead, whose entry may point at a function the plugin's bundle exports:
+
+```yaml
+handlers:
+  uninstall:
+    - file: plugin/index.js
+      handler: removeSessionFiles
+```
+
+`uninstall` runs only when the recipe is removed through sous. Removing a plugin by hand (with
 `npm uninstall`, or by deleting a line from the config) is the manual path, and sous does not clean up
-after it. Plugins installed from npm get no `migrate` call yet.
+after it.
 
 ## What a handler receives
 
@@ -218,4 +227,13 @@ project's folder, the reporter, `run` for starting another intent), plus these h
 Paths are relative to the project's folder. Each answer of `isAppAvailable` and `appVersion` is looked
 up once per run, however many handlers ask.
 
-A handler that throws is reported as an error naming it, and the handlers after it still run.
+Every line a handler reports is printed with who reported it in front: the recipe or plugin, then the
+purpose and the handler (a recipe's by its function, a plugin's by its id):
+
+```text
+workflow/github-projects (check: hasGh): the gh command is not installed.
+sous-plugin-knowledge-worker (check: knowledge-worker/commands): jq is not installed.
+```
+
+A handler that throws is reported as an error the same way (`voltagrid/knowledge-worker (uninstall:
+removeSessionFiles): failed: <what it threw>`), and the handlers after it still run.

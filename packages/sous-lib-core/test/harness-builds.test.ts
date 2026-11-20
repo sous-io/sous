@@ -243,4 +243,66 @@ describe("one config build per harness", () => {
 
         expect(built.get("hooks.list")).toEqual([{ name: "always" }, { name: "codex", harness: "codex" }]);
     });
+
+    /**
+     * A target that only one harness's build adds (a recipe's skills folder excluded for every
+     * other harness) reaches the merged config with only that harness's outputs, after the targets
+     * of the build with no harness (#267, ADR 0041).
+     *
+     * claude build: targets [ t, skplug ]   // -> merged targets [ t, skplug (claude output only) ]
+     */
+    it("should carry a target only one harness's build holds, with only that harness's outputs", async () => {
+        const { engine } = makeEngine([
+            keysPlugin("compilation"),
+            harnesses("codex", "claude"),
+            contributorsPlugin("p", [
+                outputsContributor,
+                {
+                    id: "claude-only",
+                    after: ["outputs"],
+                    contribute(config) {
+                        if (config.harness.id === "claude") {
+                            config.atPath("compilation.targets").append({
+                                id: "skplug",
+                                entryPoint: "skplug/SKILL.md",
+                                outputs: [{ destinationDir: "docs" }, { destinationDir: ".claude/skills", harness: "claude" }, { destinationDir: ".codex/skills", harness: "codex" }],
+                            });
+                        }
+                    },
+                },
+            ]),
+        ]);
+
+        const built = await engine.buildConfig();
+
+        expect(built.get("compilation.targets[1]")).toEqual({ id: "skplug", entryPoint: "skplug/SKILL.md", outputs: [{ destinationDir: ".claude/skills", harness: "claude" }] });
+        expect(built.get<unknown[]>("compilation.targets")).toHaveLength(2);
+    });
+
+    /**
+     * A target whose outputs all belong to one harness comes whole from that harness's build: a
+     * memories target's memory list holds a memory a condition on harness.id gives Claude only.
+     */
+    it("should take a target whose outputs all belong to one harness from that harness's build", async () => {
+        const { engine } = makeEngine([
+            keysPlugin("compilation"),
+            harnesses("codex", "claude"),
+            contributorsPlugin("p", [
+                {
+                    id: "memories",
+                    contribute(config) {
+                        const claudeOnly = config.harness.id === "claude" ? " + claude only" : "";
+
+                        config.atPath("compilation").set({
+                            targets: [{ id: "memories/claude", content: `shared${claudeOnly}`, outputs: [{ destinationFile: "CLAUDE.md", harness: "claude" }] }],
+                        });
+                    },
+                },
+            ]),
+        ]);
+
+        const built = await engine.buildConfig();
+
+        expect(built.get("compilation.targets")).toEqual([{ id: "memories/claude", content: "shared + claude only", outputs: [{ destinationFile: "CLAUDE.md", harness: "claude" }] }]);
+    });
 });

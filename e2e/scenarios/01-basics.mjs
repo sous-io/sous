@@ -103,8 +103,10 @@ export default {
       const before = t.sh("find . -path ./node_modules -prune -o -type f -newer .sous/sous.config.jsonc -print | sort").stdout;
       const r = expectExit(t.sous(["build"]));
       const text = r.stderr + r.stdout;
-      expectIncludes(text, "(unchanged)", "second build");
+      // Unchanged files print no block by default; the summary line counts them.
+      assert.match(text, /Files: 0 written, \d+ unchanged\./);
       expectNotIncludes(text, "✓ /", "second build wrote a file");
+      expectNotIncludes(text, "(unchanged", "second build printed an unchanged block without --debug");
       void before;
     });
 

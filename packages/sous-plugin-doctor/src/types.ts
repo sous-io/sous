@@ -30,6 +30,9 @@ export interface DoctorRun {
     readonly configFailed: boolean;
 }
 
+/** One line of a finding's details, or an item with lines of its own under it. */
+export type DoctorDetail = string | { readonly text: string; readonly details: readonly string[] };
+
 /** What a check found. */
 export type DoctorCheckResult =
     | {
@@ -37,6 +40,8 @@ export type DoctorCheckResult =
           readonly status: "ok";
           /** One sentence, when there is something worth saying anyway. */
           readonly summary?: string;
+          /** Things the check did while it looked, such as recipes it downloaded; shown under the check. */
+          readonly notes?: readonly string[];
       }
     | {
           /**
@@ -48,8 +53,13 @@ export type DoctorCheckResult =
           readonly status: "problem" | "warning" | "pending";
           /** One sentence stating what was found. */
           readonly summary: string;
-          /** One line per item found (a missing file, a variable with no answer). */
-          readonly details?: readonly string[];
+          /**
+           * One line per item found (a missing file, a variable with no answer). An item with lines
+           * of its own (a migration and the questions it waits on) is `{ text, details }`.
+           */
+          readonly details?: readonly DoctorDetail[];
+          /** Things the check did while it looked, such as recipes it downloaded; shown under the check. */
+          readonly notes?: readonly string[];
           /**
            * What the fix would do, as a short imperative phrase ("Build the project"), when the
            * check's `fix` can put it right. Without it, nothing is offered.
@@ -57,6 +67,12 @@ export type DoctorCheckResult =
           readonly fix?: string;
           /** How to put it right by hand, when no fix is offered or the fix was declined. */
           readonly hint?: string;
+          /**
+           * For `pending`: what waits, counted, for the closing line ("Nothing failed, but 3
+           * migrations are waiting for an answer."): `{ count: 3, label: "3 migrations" }`. A
+           * pending finding without it counts as `1 check`.
+           */
+          readonly waiting?: { readonly count: number; readonly label: string };
       }
     | {
           /** The check could not run here (no project, no config); says why. */
@@ -147,6 +163,11 @@ export interface DoctorResult {
     readonly checks: readonly DoctorCheckReport[];
     /** How many checks still report a problem. */
     readonly problems: number;
+    /**
+     * How many things wait on an answer only a person can give (migrations with no terminal to
+     * ask in), counted by the checks that end `pending`. They do not change the exit code.
+     */
+    readonly pending: number;
     readonly dryRun: boolean;
 }
 

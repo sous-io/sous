@@ -40,6 +40,7 @@ export default gitlabPlugin;
 
 export { buildGitlabPipeline, gitlabCiFiles, GITLAB_CI_PATH } from "./ci.js";
 export { GLAB } from "./glab.js";
-export { createGitlabHost, gitlabFileUrl, GITLAB_HOST, GITLAB_TOKEN_VARIABLES, readGitlabLocation } from "./host.js";
+export { createGitlabHost, gitlabApi, gitlabFileMetaUrl, gitlabFileUrl, GITLAB_CONTENT_HASH_HEADER, GITLAB_HOST, GITLAB_TOKEN_VARIABLES, readGitlabLocation } from "./host.js";
+export { candidateBasePaths, configuredHost, GITLAB_INSTANCES_FILENAME } from "./instance.js";
 
 export type * from "./types.js";

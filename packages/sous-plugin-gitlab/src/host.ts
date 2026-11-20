@@ -12,6 +12,17 @@
  * ```text
  * https://gitlab.com/api/v4/projects/acme%2Fplatform%2Frecipes/repository/files/sous.index.json/raw?ref=HEAD
  * ```
+ *
+ * A self-managed instance may use a port and a sub-path. The HTTPS port stays in the HTTPS and API
+ * addresses, the SSH URL takes a port only from an SSH URL that names one, and the sub-path
+ * (settled by `GitlabInstances`) goes in front of `/api/v4` and out of the SSH path:
+ *
+ * ```text
+ * https://git.example.com:8443/gitlab/acme/recipes
+ *   API    https://git.example.com:8443/gitlab/api/v4/projects/acme%2Frecipes/...
+ *   HTTPS  https://git.example.com:8443/gitlab/acme/recipes.git
+ *   SSH    git@git.example.com:acme/recipes.git
+ * ```
  */
 
 import {
@@ -23,16 +34,18 @@ import {
     formatHostedLocator,
     gitCredentialTokenSource,
     gitReadStrategy,
+    hostWithoutPort,
     httpReadStrategy,
     invalidRepoUrl,
     readingsAfterRepository,
     splitRepoUrl,
     withoutGitSuffix,
 } from "@sous-io/sous-lib-repository-hosts";
-import type { RepositoryReadRequest } from "@sous-io/sous-plugin-recipes/types";
-import type { LocationReading, WrittenLocation } from "@sous-io/sous-lib-repository-hosts";
+import type { RepositoryReadRequest, RepositoryReadStrategy } from "@sous-io/sous-plugin-recipes/types";
+import type { CanonicalRepository, LocationReading, WrittenLocation } from "@sous-io/sous-lib-repository-hosts";
 import { gitlabCiFiles } from "./ci.js";
 import { GLAB } from "./glab.js";
+import { configuredHost, GitlabInstances, type ConfiguredHost } from "./instance.js";
 import { gitlabProposals } from "./proposals.js";
 import type { GitlabPluginOptions, GitlabRepositoryHost } from "./types.js";
 
@@ -41,6 +54,24 @@ export const GITLAB_HOST = "gitlab.com";
 
 /** The token variables read when the options name none. */
 export const GITLAB_TOKEN_VARIABLES: readonly string[] = ["GITLAB_TOKEN"];
+
+/** The header GitLab names a file's content hash in; it sends no `ETag` for a file. */
+export const GITLAB_CONTENT_HASH_HEADER = "x-gitlab-content-sha256";
+
+/**
+ * The API root of a project's instance, and the project path the API names, the sub-path left out.
+ *
+ * ```ts
+ * gitlabApi({ host: "git.example.com:8443", owner: "gitlab/acme", name: "recipes", basePath: "gitlab", ... });
+ * // { root: "https://git.example.com:8443/gitlab/api/v4", project: "acme/recipes" }
+ * ```
+ */
+export function gitlabApi(repository: CanonicalRepository): { root: string; project: string } {
+    const base = repository.basePath;
+    const owner = base !== undefined && repository.owner.startsWith(`${base}/`) ? repository.owner.slice(base.length + 1) : repository.owner;
+
+    return { root: `https://${repository.host}${base === undefined ? "" : `/${base}`}/api/v4`, project: `${owner}/${repository.name}` };
+}
 
 /**
  * The API address of one file in a project, the whole project path encoded.
@@ -51,10 +82,27 @@ export const GITLAB_TOKEN_VARIABLES: readonly string[] = ["GITLAB_TOKEN"];
  * ```
  */
 export function gitlabFileUrl(request: Pick<RepositoryReadRequest, "repository" | "path" | "ref">): string {
-    const { repository } = request;
-    const project = encodeURIComponent(`${repository.owner}/${repository.name}`);
+    return `${gitlabFileMetaUrl(request).replace(/\?ref=/, "/raw?ref=")}`;
+}
 
-    return `https://${repository.host}/api/v4/projects/${project}/repository/files/${encodeURIComponent(request.path)}/raw?ref=${encodeURIComponent(request.ref)}`;
+/**
+ * The API address of one file's details, answered to a `HEAD` request with its content hash in
+ * `X-Gitlab-Content-Sha256` and no body.
+ *
+ * ```ts
+ * gitlabFileMetaUrl({ repository, path: "sous.index.json", ref: "HEAD" });
+ * // "https://gitlab.com/api/v4/projects/acme%2Frecipes/repository/files/sous.index.json?ref=HEAD"
+ * ```
+ */
+export function gitlabFileMetaUrl(request: Pick<RepositoryReadRequest, "repository" | "path" | "ref">): string {
+    const { root, project } = gitlabApi(request.repository);
+
+    return `${root}/projects/${encodeURIComponent(project)}/repository/files/${encodeURIComponent(request.path)}?ref=${encodeURIComponent(request.ref)}`;
+}
+
+/** A read strategy that settles the repository's sub-path before it reads. */
+function settling(strategy: RepositoryReadStrategy, instances: GitlabInstances): RepositoryReadStrategy {
+    return { ...strategy, read: async (request, ctx) => strategy.read({ ...request, repository: await instances.settle(request.repository, ctx) }, ctx) };
 }
 
 /**
@@ -65,10 +113,16 @@ export function gitlabFileUrl(request: Pick<RepositoryReadRequest, "repository" 
  * ```
  */
 export function createGitlabHost(options: GitlabPluginOptions = {}): GitlabRepositoryHost {
-    const extraHosts = new Set((options.hosts ?? []).map((host) => host.toLowerCase()));
+    // Keyed by the host without its port, so an entry matches a URL with or without one.
+    const configured = new Map<string, ConfiguredHost>((options.hosts ?? []).map((entry) => configuredHost(entry)).map((entry) => [hostWithoutPort(entry.host), entry]));
+    const instances = new GitlabInstances(configured);
     const variables = options.tokenVariables ?? GITLAB_TOKEN_VARIABLES;
 
-    const isGitlab = (host: string) => host === GITLAB_HOST || host.startsWith("gitlab.") || extraHosts.has(host);
+    const isGitlab = (host: string) => {
+        const bare = hostWithoutPort(host);
+
+        return bare === GITLAB_HOST || bare.startsWith("gitlab.") || configured.has(bare);
+    };
 
     return {
         id: "gitlab",
@@ -95,7 +149,14 @@ export function createGitlabHost(options: GitlabPluginOptions = {}): GitlabRepos
                 throw invalidRepoUrl("gitlab", url, GITLAB_HOST);
             }
 
-            return canonicalRepository(parts.host, parts.owner, parts.name);
+            const entry = configured.get(hostWithoutPort(parts.host));
+            // An SSH URL's host has no HTTPS port; the option's entry supplies it.
+            const host = entry !== undefined && hostWithoutPort(entry.host) !== entry.host && parts.host === hostWithoutPort(parts.host) ? entry.host : parts.host;
+
+            return canonicalRepository(host, parts.owner, parts.name, {
+                ...(parts.sshPort === undefined ? {} : { sshPort: parts.sshPort }),
+                ...(entry?.basePath === undefined ? {} : { basePath: entry.basePath }),
+            });
         },
 
         tokenSources: [
@@ -109,20 +170,26 @@ export function createGitlabHost(options: GitlabPluginOptions = {}): GitlabRepos
             }),
         ],
 
+        // GitLab sends no ETag for a file, so a cached index is checked against its content hash.
         readStrategies: [
-            httpReadStrategy({ id: "http-token", label: "HTTP with token", usesToken: true, url: gitlabFileUrl }),
-            httpReadStrategy({ id: "http", label: "HTTP without token", usesToken: false, url: gitlabFileUrl }),
+            httpReadStrategy({ id: "http-token", label: "HTTP with token", usesToken: true, url: gitlabFileUrl, contentHash: { header: GITLAB_CONTENT_HASH_HEADER, url: gitlabFileMetaUrl } }),
+            httpReadStrategy({ id: "http", label: "HTTP without token", usesToken: false, url: gitlabFileUrl, contentHash: { header: GITLAB_CONTENT_HASH_HEADER, url: gitlabFileMetaUrl } }),
             gitReadStrategy(),
-        ],
+        ].map((strategy) => settling(strategy, instances)),
 
-        fetchRecipeTree: (repository, recipePath, tag, destination, ctx) =>
-            fetchRecipeTree({ urls: [repository.httpsUrl, repository.sshUrl], tag, recipePath, destination }, ctx),
+        // A token goes to an HTTPS clone with the user name GitLab accepts for any token.
+        fetchRecipeTree: async (repository, recipePath, tag, destination, ctx, options = {}) => {
+            const settled = await instances.settle(repository, ctx);
+
+            return fetchRecipeTree({ urls: [settled.httpsUrl, settled.sshUrl], tag, recipePath, destination, ...options, tokenUser: "oauth2" }, ctx);
+        },
 
         proposalNoun: "merge request",
         cli: GLAB,
         authStatus: (ctx) => cliAuthStatus(GLAB, ctx),
         ...gitlabProposals(),
         scaffoldFiles: gitlabCiFiles,
+        fileUrl: (repositoryUrl, branch, file) => `${repositoryUrl}/-/blob/${branch}/${file}`,
     };
 }
 

@@ -175,4 +175,100 @@ describe("mergeHarnessBuilds", () => {
 
         expect(mergeHarnessBuilds(base, new Map([["b", b], ["a", a]]), LISTS)).toEqual(mergeHarnessBuilds(base, new Map([["a", a], ["b", b]]), LISTS));
     });
+
+    /**
+     * A target only one harness's build holds (a condition on harness.id excluded its folder from
+     * every other build) is carried with only the outputs marked with that harness: an unmarked
+     * output, such as a `recipes.skills.outputs` directory, and another harness's output are left
+     * behind (ADR 0041).
+     *
+     * claude-code: targets [ a, skplug (outputs: .sous/out, .claude/skills, .agents/skills) ]
+     * // -> merged targets [ a, skplug (outputs: .claude/skills) ]
+     */
+    it("should carry a target only a harness's build holds, with only that harness's outputs", () => {
+        const a = { id: "a", outputs: [{ destinationDir: ".claude/skills", harness: "claude-code" }] };
+        const skplug = (outputs: JsonObject[]): JsonObject => ({ id: "skplug", entryPoint: "skplug/SKILL.md", outputs });
+        const outputs: JsonObject[] = [
+            { destinationDir: ".sous/out" },
+            { destinationDir: ".claude/skills", harness: "claude-code" },
+            { destinationDir: ".agents/skills", harness: "codex" },
+        ];
+
+        expect(merge({ compilation: { targets: [a] } }, { "claude-code": { compilation: { targets: [a, skplug(outputs)] } }, codex: { compilation: { targets: [a] } } })).toEqual({
+            compilation: { targets: [a, skplug([{ destinationDir: ".claude/skills", harness: "claude-code" }])] },
+        });
+    });
+
+    /** A target only a harness's build holds, with no output marked with that harness, is dropped. */
+    it("should drop a carried target left with no outputs", () => {
+        const base: JsonObject = { compilation: { targets: [] } };
+        const claude: JsonObject = { compilation: { targets: [{ id: "x", outputs: [{ destinationDir: "docs" }, { destinationDir: ".agents/skills", harness: "codex" }] }] } };
+
+        expect(merge(base, { "claude-code": claude })).toEqual(base);
+    });
+
+    /**
+     * Carried targets go after the targets of the build with no harness, harnesses in id order; a
+     * target two harnesses' builds hold is carried from each, with each one's own outputs.
+     */
+    it("should put carried targets after the others, harnesses in id order", () => {
+        const both = (id: string): JsonObject => ({
+            id,
+            outputs: [
+                { destinationDir: ".claude/skills", harness: "claude-code" },
+                { destinationDir: ".agents/skills", harness: "codex" },
+            ],
+        });
+        const base: JsonObject = { compilation: { targets: [{ id: "base", outputs: [] }] } };
+        const claude: JsonObject = { compilation: { targets: [{ id: "base", outputs: [] }, both("shared"), both("claude")] } };
+        const codex: JsonObject = { compilation: { targets: [both("codex"), { id: "base", outputs: [] }, both("shared")] } };
+
+        expect((merge(base, { codex, "claude-code": claude }).compilation as JsonObject).targets).toEqual([
+            { id: "base", outputs: [] },
+            { id: "shared", outputs: [{ destinationDir: ".claude/skills", harness: "claude-code" }] },
+            { id: "claude", outputs: [{ destinationDir: ".claude/skills", harness: "claude-code" }] },
+            { id: "codex", outputs: [{ destinationDir: ".agents/skills", harness: "codex" }] },
+            { id: "shared", outputs: [{ destinationDir: ".agents/skills", harness: "codex" }] },
+        ]);
+    });
+
+    /**
+     * A target whose outputs all belong to one harness comes whole from that harness's build, so
+     * what it is made of is that harness's too: a memories target whose memory list (`content`)
+     * holds a memory included for Claude Code only.
+     *
+     * no harness:   memories/claude-code content "shared"
+     * claude-code:  memories/claude-code content "shared + claude only"
+     * // -> merged content "shared + claude only"
+     */
+    it("should take a target whose outputs all belong to one harness whole from that harness's build", () => {
+        const memories = (content: string, vars: JsonObject = {}): JsonObject => ({
+            id: "memories/claude-code",
+            content,
+            ...vars,
+            outputs: [{ destinationFile: ".claude/rules/SOUS-MEMORIES.md", harness: "claude-code" }],
+        });
+        const base: JsonObject = { compilation: { targets: [memories("shared")] } };
+        const claude: JsonObject = { compilation: { targets: [memories("shared + claude only", { _vars: { tool: "Claude Code" } })] } };
+
+        expect(merge(base, { "claude-code": claude, codex: base })).toEqual({
+            compilation: { targets: [memories("shared + claude only", { _vars: { tool: "Claude Code" } })] },
+        });
+    });
+
+    /** A target with outputs for several harnesses, or an unmarked one, keeps what it is made of from the build with no harness. */
+    it("should keep a target with outputs for several harnesses as the build with no harness makes it", () => {
+        const target = (content: string, harnesses: string[]): JsonObject => ({
+            id: "t",
+            content,
+            outputs: harnesses.map((harness): JsonObject => (harness === "" ? { destinationDir: "docs" } : { destinationDir: harness, harness })),
+        });
+
+        expect(merge({ compilation: { targets: [target("base", ["claude-code", "codex"])] } }, { "claude-code": { compilation: { targets: [target("claude", ["claude-code", "codex"])] } } })).toEqual({
+            compilation: { targets: [target("base", ["claude-code", "codex"])] },
+        });
+        expect(merge({ compilation: { targets: [target("base", ["", "claude-code"])] } }, { "claude-code": { compilation: { targets: [target("claude", ["", "claude-code"])] } } })).toEqual({
+            compilation: { targets: [target("base", ["", "claude-code"])] },
+        });
+    });
 });

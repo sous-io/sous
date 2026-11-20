@@ -125,8 +125,10 @@ for different repositories. Keying by identity is what lets them share one cache
 colliding. See [The store on disk](repositories-file-formats.md#the-store-on-disk).
 
 Canonicalizing also produces the two clone URLs sous hands to git, `https://<host>/<owner>/<name>.git`
-and `git@<host>:<owner>/<name>.git`. For the `local` provider the HTTPS slot carries the
-absolute directory, because that is what git is given when a recipe is fetched.
+and `git@<host>:<owner>/<name>.git`. A port in an HTTPS URL stays in the HTTPS URL and never reaches
+the SSH one; an SSH port comes only from an SSH URL that names one (`ssh://git@<host>:2222/...`). For
+the `local` provider the HTTPS slot carries the absolute directory, because that is what git is given
+when a recipe is fetched.
 
 ?> A published manifest names a dependency in another repository by location, such as a locator
 whose scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A
@@ -178,9 +180,24 @@ A token is looked for in these places, in this order, and a missing one is skipp
 A command's output counts as a token only when the command exits `0` and prints exactly one non-empty
 line holding no whitespace.
 
+When the host refuses a token (a `401` or `403`), sous sends the next place's token instead, and
+passes over a token it was already refused (glab hands back `GITLAB_TOKEN` when that is set). When the
+read then works some other way, sous warns once per command, naming where the refused token came from
+and how to fix it:
+
+```text
+GITLAB_TOKEN holds a token gitlab.com refused (401: the token was refused), so sous read
+gitlab.com/acme/private-recipes with HTTP with token, using the token from git credential fill.
+Replace the token in GITLAB_TOKEN with one that can read the repository (export GITLAB_TOKEN=<a
+token with read_repository>), or unset GITLAB_TOKEN.
+```
+
 Sous remembers, per repository, which way worked, in `$SOUS_HOME/cache/read-strategies.json`, and tries it
-first next time; after a failure it forgets it and walks the whole list again. When every way fails, one
-error lists each attempt and why it failed, then names the fixes:
+first for the next seven days, counted from when it became first. After that, the better-ranked ways are
+tried first again, so a repository read through git while its token was broken goes back to HTTP once the
+token works. `store.strategyMemorySeconds` sets the time (`604800`, seven days, by default; `0` always
+tries the usual order first). After a failure sous forgets the remembered way and walks the whole list
+again. When every way fails, one error lists each attempt and why it failed, then names the fixes:
 
 ```text
 Error: could not read gitlab.com/acme/private-recipes.
@@ -190,7 +207,6 @@ Error: could not read gitlab.com/acme/private-recipes.
 Fix one of these:
   export GITLAB_TOKEN=<a token with read_repository>
   set up git access to gitlab.com (an SSH key, or a credential helper)
-A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
 ```
 
 The fixes depend on what the attempts said:
@@ -199,8 +215,8 @@ The fixes depend on what the attempts said:
   that the machine can reach the host, or to set `HTTPS_PROXY`. No token is offered.
 - git reached the repository and said it has no `sous.index.json`: the fix is to check the URL. No
   token is offered, since the repository is not private.
-- A token was found and refused: the fix names where it came from (`GITLAB_TOKEN`, `git credential
-  fill`, `glab`) instead of asking you to set it.
+- A token was found and refused: the attempt and the fix name where it came from (`GITLAB_TOKEN`,
+  `git credential fill`, `glab`) instead of asking you to set it.
 - `gh` or `glab` is installed but printed no token: the fixes include `gh auth login` or
   `glab auth login` for the host.
 
@@ -210,14 +226,32 @@ once, and the error is told once, naming every recipe it stopped.
 The HTTP reads honor `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` (or their lowercase spellings), as
 git does.
 
+A cached index is checked again once its freshness window lapses. GitHub answers that check with
+"not modified" through the index's `ETag`. GitLab sends no `ETag` for a file, so sous keeps the
+`X-Gitlab-Content-Sha256` header GitLab sends instead, asks for that header alone with one `HEAD`
+request, and downloads the index again only when the hash changed.
+
 **A recipe's files** come from git itself: a shallow, blobless, sparse clone at the version's
 tag, fetching only the blobs inside that one recipe folder. That means git's own credentials
 apply, exactly as they would for a manual clone: credential helpers, the SSH agent, proxies and
-`insteadOf` rewrites are all inherited from your git configuration, and sous adds nothing of its
-own. Cloning a working copy with `sous repo link` works the same way.
+`insteadOf` rewrites are all inherited from your git configuration. Cloning a working copy with
+`sous repo link` works the same way.
 
-?> For a private repository, git access (a credential helper or an SSH key) covers both the index
-and the recipe files. A token in the environment makes reading the index faster.
+Sous adds one thing: the token it found for the index (from the environment or the host's command
+line tool) is handed to the HTTPS clone, so a machine with only a token can build. The token travels
+as an `Authorization` header set through git's environment for that one clone
+(`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>`, for
+`http.https://<host>/.extraHeader`); it is never put in a URL, so git never prints it and never writes
+it into the clone's `.git/config`. A token from `git credential fill` is not handed over, because git
+sends that one itself. When the clone with the token fails, the same URL is tried once more without
+it, so a refused token never stops credentials git already had.
+
+The clone tries the HTTPS URL, then the SSH URL. The one that worked is remembered beside the read
+strategy in `read-strategies.json` and tried first for the same seven days (`store.strategyMemorySeconds`),
+so a repository only SSH can reach stops trying HTTPS for every recipe.
+
+?> For a private repository, either git access (a credential helper or an SSH key) or a token covers
+both the index and the recipe files.
 
 ## Proposing a change
 
@@ -228,12 +262,12 @@ remote. Providers differ, and sous says so rather than pretending otherwise:
 | Provider | Tool | Push permission | Forking | Proposal | Following it up |
 |---|---|---|---|---|---|
 | `github` | `gh` | read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | pull request | `gh pr list`, `gh pr view` and `gh pr edit`, matching a fork's pull request by its owner |
-| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request | not done: every run opens a merge request, and `--status` is refused |
+| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request | `glab mr list`, `glab mr view` and `glab mr update`, matching a fork's merge request by its author |
 | `local` | none | not applicable | not applicable | not applicable | not applicable |
 
-**GitLab cannot follow a proposal up yet.** It does not declare `proposals`, so a submission cannot
-look for a merge request that is already open; it says so, pushes, and opens one. When the branch
-already has one, the push updates it and GitLab may refuse the second.
+**GitLab follows a merge request up as GitHub does a pull request.** It declares `proposals`, so a
+submission finds the merge request already open for the branch and updates it instead of opening a
+second, and `sous repo submit --status` reports its state, its pipeline and whether it can be merged.
 
 **GitLab reports "cannot tell" rather than guessing.** Sous has no cheap, reliable way to ask
 whether you may push, and a wrong guess would send you down a fork path this provider cannot
@@ -277,10 +311,49 @@ That block goes at the top level of your primary config or of a `conf.d/` file o
 writes its own entries to the `conf.d/500-repos.jsonc` file it manages. Every key is listed under
 [configuration keys](repositories-file-formats.md#configuration-keys).
 
-Everything downstream then works normally: the index is read from that host's own raw endpoint,
-a token comes from the sources above, and the identity is
-`git.example.com/platform/recipes`. Group paths of any depth are preserved, so
-`group/subgroup/project` stays one repository rather than being mistaken for a namespace.
+Everything downstream then works normally: the index is read from that host's API address, a token
+comes from the sources above, and the identity is `git.example.com/platform/recipes`. Group paths of
+any depth are preserved, so `group/subgroup/project` stays one repository rather than being mistaken
+for a namespace.
+
+The GitLab plugin's `hosts` option names more hosts that are GitLab, so their URLs are recognized
+without a `provider` on each entry. An entry matches a URL with or without a port, and may name the
+HTTPS port and the sub-path GitLab is installed under:
+
+```jsonc
+{
+  "plugins": {
+    "options": {
+      "@sous-io/sous-plugin-gitlab": { "hosts": ["git.example.com:8443/gitlab"] }
+    }
+  }
+}
+```
+
+**A port.** For `https://git.example.com:8443/platform/recipes`, the port stays in the HTTPS clone
+URL and the API address (`https://git.example.com:8443/api/v4/...`), and the SSH URL is
+`git@git.example.com:platform/recipes.git`. An SSH URL with its own port,
+`ssh://git@git.example.com:2222/platform/recipes`, keeps that port in the SSH URL alone; its HTTPS
+address takes the port a `hosts` entry names, or none.
+
+**A sub-path.** A URL alone cannot tell GitLab installed under `/gitlab` from a group named `gitlab`.
+For a path with room for one, sous asks the server once where its API answers
+(`https://<host>/api/v4/version`, then `https://<host>/gitlab/api/v4/version`, and so on), remembers
+the answer for the host in `$SOUS_HOME/cache/gitlab-instances.json`, and says what it found:
+
+```text
+GitLab on git.example.com is installed under a sub-path
+  Host           : git.example.com
+  Installed under: /gitlab
+  API address    : https://git.example.com/gitlab/api/v4
+  SSH clone URL  : git@git.example.com:platform/recipes.git
+  Remembered in  : /home/me/.sous/cache/gitlab-instances.json
+```
+
+The API address and the SSH URL then leave `/gitlab` out of the project path, and the HTTPS clone URL
+keeps it. A sub-path named in a `hosts` entry (`git.example.com/gitlab`) is used as given, and the
+server is never asked. The identity keeps the whole path either way:
+`git.example.com/gitlab/platform/recipes`.
 
 `sous repo submit` is the exception: it runs inside the repository checkout and never reads a
 project's config, so it picks the provider from the `origin` remote URL alone. A host that does not

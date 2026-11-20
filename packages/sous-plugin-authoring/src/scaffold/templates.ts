@@ -32,6 +32,8 @@ export type ScaffoldContext = {
   workflow?: string;
   /** What the host calls a proposal; default "pull request". */
   proposalNoun?: string;
+  /** The suggested `contribute` address, in the host's shape; GitHub's when no host is known. */
+  contributeUrl?: string;
 };
 
 /** The path, relative to the repository root, of the example recipe's folder. */
@@ -64,7 +66,7 @@ description: >-
 # Where to send a change. Shown to anyone whose provider cannot open a proposal
 # for them, so a contributor is never left without a route. Point it at this
 # repository's CONTRIBUTING.md once the repository has a public URL.
-# contribute: https://<host>/<owner>/${context.name}/blob/main/CONTRIBUTING.md
+# contribute: ${context.contributeUrl ?? `https://<host>/<owner>/${context.name}/blob/main/CONTRIBUTING.md`}
 
 # Namespaces group recipes. They are not versioned, and a project may subscribe
 # to a whole namespace, which means every recipe in it, including ones published

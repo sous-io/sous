@@ -53,6 +53,9 @@ export const CORE_RECIPE_PATH = `${PACKAGED_RECIPES_DIRNAME}/${CORE_NAMESPACE}/$
 /** The default freshness window of a fetched index, in seconds. */
 export const DEFAULT_FRESHNESS_SECONDS = 300;
 
+/** How long a remembered read strategy or clone URL stays first by default, in seconds: seven days. */
+export const DEFAULT_STRATEGY_MEMORY_SECONDS = 7 * 24 * 60 * 60;
+
 /** The ids of part B's contributors. */
 export const CONTRIBUTORS = {
     core: "recipes.core",

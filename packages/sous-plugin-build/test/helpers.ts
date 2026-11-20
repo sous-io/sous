@@ -41,6 +41,7 @@ import type {
     ResolvedRecipe,
     ResolveOptions,
     RestoreReport,
+    RetiredRecipe,
     SkippedRecipe,
     StillBuiltRecipe,
 } from "@sous-io/sous-plugin-recipes/types";
@@ -71,8 +72,12 @@ export interface World {
      * version pinned for each holder alone; a resolve keeps what `keep` and `keepPins` name.
      */
     published: Record<string, { repo: string; version: string; namespace: string; requestedBy?: string[]; pins?: Record<string, string> }>;
+    /** The keys every resolve reports as unreadable: their manifests could not be read. */
+    unreadable: string[];
     restoreCalls: Array<{ keys?: readonly string[] }>;
     restoreReport: RestoreReport;
+    /** What `recipes.lock` says its repositories retired. */
+    retired: RetiredRecipe[];
     /** The hash of each repository's cached index, which `withIndexHashes` fills in. */
     indexHashes: Record<string, string>;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
@@ -111,8 +116,10 @@ export function newWorld(root: string): World {
         lockWrites: [],
         resolveCalls: [],
         published: {},
+        unreadable: [],
         restoreCalls: [],
         restoreReport: { restored: [], alreadyPresent: [], failed: [] },
+        retired: [],
         indexHashes: {},
         indexes: { indexes: [], failed: [] },
         indexCalls: 0,
@@ -156,7 +163,7 @@ export function diffLocks(before: Lockfile, after: Lockfile): LockDiff {
         .filter((key) => before.recipes[key] && before.recipes[key]!.version !== after.recipes[key]!.version)
         .map((key) => ({ key, from: before.recipes[key]!.version, to: after.recipes[key]!.version }));
 
-    return { added, removed, updated, reposAdded: [], reposRemoved: [], unchanged: added.length + removed.length + updated.length === 0 };
+    return { added, removed, updated, changed: [], reposAdded: [], reposRemoved: [], unchanged: added.length + removed.length + updated.length === 0 };
 }
 
 /** The stand-in plugins. */
@@ -283,7 +290,7 @@ export function standIns(world: World): PluginDefinition[] {
                     : { pins: Object.entries(published.pins).map(([holder, version]) => ({ holder, version: options.keepPins?.[key]?.[holder] ?? version })) }),
             })) as unknown as ResolvedRecipe[];
 
-            return { resolved, missingRepos: [], unreadable: [], cycles: [] };
+            return { resolved, missingRepos: [], unreadable: [...world.unreadable], cycles: [] };
         };
 
         sous.services.add("recipes.lock", () => ({
@@ -302,6 +309,7 @@ export function standIns(world: World): PluginDefinition[] {
             },
             diff: diffLocks,
             exists: () => true,
+            retired: () => world.retired,
             migratedVersion: () => world.lockfile.migratedVersion,
             setMigratedVersion: async (version: string) => {
                 world.lockfile = { ...world.lockfile, migratedVersion: version };

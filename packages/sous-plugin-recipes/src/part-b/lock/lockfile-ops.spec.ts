@@ -159,6 +159,34 @@ describe("diffLockfiles and describeLockDiff", () => {
         expect(describeLockDiff(diffLockfiles(before, after))).toEqual(["Moving acme/widget down from version 1.0.0 to version 0.1.0"]);
     });
 
+    /**
+     * A pin whose version stayed while what holds it changed is a change too (#291): a lockfile
+     * written without a holder, or with the other kind, is not reported as unchanged.
+     *
+     * diffLockfiles({ w/b: 1.0.0 held by w/a, w/x, depends }, { w/b: 1.0.0 held by w/a, subscribes })
+     * // -> changed: [{ key: "w/b", requestedBy: { from: [w/a, w/x], to: [w/a] }, kind: { from: depends, to: subscribes } }]
+     */
+    it("should report a change of holders or kind on a pin whose version stayed", () => {
+        const before = lock({ "w/b": { repo: "acme", version: "1.0.0", hash: HASH, requestedBy: ["w/x", "w/a"], kind: "depends" } });
+        const after = lock({ "w/b": { repo: "acme", version: "1.0.0", hash: HASH, requestedBy: ["project", "w/a"], kind: "subscribes" } });
+        const diff = diffLockfiles(before, after);
+
+        expect(diff.unchanged).toBe(false);
+        expect(diff.changed).toEqual([{ key: "w/b", version: "1.0.0", requestedBy: { from: ["w/a", "w/x"], to: ["project", "w/a"] }, kind: { from: "depends", to: "subscribes" } }]);
+        expect(describeLockDiff(diff)).toEqual([
+            "Keeping w/b version 1.0.0, now needed by this project, w/a (before: w/a, w/x)",
+            "Keeping w/b version 1.0.0, now pinned as a subscription (before: as a dependency)",
+        ]);
+    });
+
+    /** The same holders in another order are no change. */
+    it("should not report holders listed in another order", () => {
+        const before = lock({ "w/b": { repo: "acme", version: "1.0.0", hash: HASH, requestedBy: ["w/x", "w/a"], kind: "depends" } });
+        const after = lock({ "w/b": { repo: "acme", version: "1.0.0", hash: HASH, requestedBy: ["w/a", "w/x"], kind: "depends" } });
+
+        expect(diffLockfiles(before, after)).toMatchObject({ changed: [], unchanged: true });
+    });
+
     it("should say nothing changed for equal lockfiles", () => {
         const diff = diffLockfiles(emptyLockfile(), emptyLockfile());
 

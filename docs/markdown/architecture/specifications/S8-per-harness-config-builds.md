@@ -137,11 +137,24 @@ as the build with no harness has it.**
 5. An entry marked with a harness that had no build of its own (no plugin registered it) stays as
    the build with no harness has it.
 6. For a path through an array (`compilation.targets[]`), each target of the build with no harness
-   is matched in a harness's build by its `id`, else by its place. A target only a harness's build
-   holds is not carried, since targets are not a `harness-list`.
+   is matched in a harness's build by its `id`, else by its place (ADR 0041):
+    - A target whose outputs are all marked with one harness that had a build comes whole from that
+      harness's build, with only its outputs marked with that harness. What it is made of (a
+      memories target's `content`, its `_vars`) is then that harness's: a memory a condition on
+      `harness.id` gives Claude Code only reaches Claude Code's memories file.
+    - A target only a harness's build holds (a condition on `harness.id` left it out of the build
+      with no harness) is carried, with only its outputs marked with that harness. Unmarked outputs,
+      such as a `recipes.skills.outputs` directory, and outputs marked with another harness are not
+      kept; a target left with no output is dropped. Carried targets go after the targets of the
+      build with no harness, harnesses in id order; a target several harnesses' builds hold is
+      carried once from each, with that harness's outputs.
+
+    The compiler takes a carried target's files from the listing its harness's build made
+    (`compilation.files`), since the build with no harness never listed them.
 7. Variables are never merged. An output taken from a harness's build brings the `_vars` written on
-   it, where they already win over every other level. The root, `compilation` and target `_vars` of
-   the merged config are the build with no harness's.
+   it, where they already win over every other level. The root and `compilation` `_vars` of the
+   merged config are the build with no harness's; a target's are the build with no harness's,
+   except for a target rule 6 takes from a harness's build, which brings its own.
 
 Outputs are marked by the contributors that generate them, which know the harness from the skills
 directory or instructions file they write for:
@@ -260,6 +273,22 @@ only in what happens after the builds finish.
   first guess, like every other budget.
 
 ## Changes
+
+### 2026-11-20: A target one harness's build holds reaches that harness
+
+"The Merge", rules 6 and 7 (ADR 0041, #267). Rule 6 said a target only a harness's build holds is
+not carried, so a recipe's skills folder excluded for every harness but Claude Code reached no one,
+Claude Code included. The user on that rule:
+
+> "I don't understand that statement, at all. Why would that be desirable, ever?"
+>
+>   -- **the user** in an agent session (2026-11-20)
+
+Such a target is now carried with only the outputs marked with its harness, which the user chose
+over carrying every output. A target whose outputs all belong to one harness also comes whole from
+that harness's build, so a memory a condition on `harness.id` gives one harness reaches its
+memories file (agent choice, found while testing the same rule). The compiler takes a carried
+target's files from its harness's listing.
 
 ### 2026-11-18: Built
 

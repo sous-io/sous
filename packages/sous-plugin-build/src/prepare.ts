@@ -17,6 +17,7 @@ export const NO_CHANGE: LockDiff = Object.freeze({
     added: [],
     removed: [],
     updated: [],
+    changed: [],
     reposAdded: [],
     reposRemoved: [],
     unchanged: true,
@@ -34,7 +35,8 @@ export const NOTHING_RESTORED: RestoreReport = Object.freeze({ restored: [], alr
  * 3. restoring what the store is missing, at exactly the pinned versions;
  * 4. checking upstream: a recipe whose repository or subscription prefers newer versions
  *    (`alwaysPull`) moves to the newest version in range; every other newer version is only
- *    reported.
+ *    reported;
+ * 5. finding the pinned recipes their repository retired, from the indexes now cached.
  *
  * A dry run writes nothing and never goes upstream. A failed upstream check is reported and then
  * ignored, because a build must not depend on the network being up. When the lockfile changed, the
@@ -65,14 +67,21 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
     if (unlocked.length > 0) {
         try {
-            const resolved = await resolver.resolveSubscriptions(lock.held(current));
+            // A recipe whose index does not record what it depends on is downloaded to read it;
+            // a dry run downloads nothing.
+            const resolved = await resolver.resolveSubscriptions({ ...lock.held(current), ...(dryRun ? {} : { download: true }) });
 
             warnAboutProblems(resolved, ctx);
 
-            const next = lock.fromResolved(resolved.resolved, current);
+            // A lockfile written without an unread recipe's dependencies would drop their pins (#291).
+            if (resolved.unreadable.length === 0) {
+                const next = lock.fromResolved(resolved.resolved, current);
 
-            locked = await lock.write(next, { dryRun });
-            current = next;
+                locked = await lock.write(next, { dryRun });
+                current = next;
+            } else {
+                ctx.reporter.problem(unreadableNotWritten(resolved.unreadable));
+            }
         } catch (error) {
             const keys = unlocked.map(([key]) => `'${key}'`).join(", ");
 
@@ -104,7 +113,12 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         if (upstream.moved.length > 0) {
             const movedKeys = new Set(upstream.moved.map((change) => change.key));
             try {
-                const resolved = await resolver.resolveSubscriptions(lock.held(current, movedKeys));
+                const resolved = await resolver.resolveSubscriptions({ ...lock.held(current, movedKeys), download: true });
+
+                if (resolved.unreadable.length > 0) {
+                    throw new Error(unreadableNotWritten(resolved.unreadable));
+                }
+
                 const next = lock.fromResolved(resolved.resolved, current);
 
                 locked = mergeDiffs(locked, await lock.write(next));
@@ -131,6 +145,9 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     const skipped = active.skipped();
     const { unanswered, unanswerable } = ctx.services.get("recipe-answers.answers").get();
     const followsSous = builtInPins(subscriptions, current);
+    // 5. A retired recipe skipped on this machine is not built here, so nothing is said about it.
+    const notBuilt = new Set(skipped.map((recipe) => recipe.key));
+    const retired = lock.retired(current).filter((recipe) => !notBuilt.has(recipe.key));
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -141,6 +158,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         unanswered,
         unanswerable,
         ...(followsSous.length === 0 ? {} : { followsSous }),
+        ...(retired.length === 0 ? {} : { retired }),
     };
 
     await ctx.emit("build.prepared", result);
@@ -358,6 +376,11 @@ function warnAboutProblems(resolved: ResolveResult, ctx: Context): void {
     }
 }
 
+/** Why the lockfile was not written: what some recipes depend on could not be read. */
+function unreadableNotWritten(keys: readonly string[]): string {
+    return `The lockfile was not written, because sous could not read what ${keys.length === 1 ? `${keys[0]} depends` : `${keys.join(", ")} depend`} on.`;
+}
+
 /** Two lock diffs as one. */
 export function mergeDiffs(first: LockDiff, second: LockDiff): LockDiff {
     if (first.unchanged) {
@@ -372,6 +395,7 @@ export function mergeDiffs(first: LockDiff, second: LockDiff): LockDiff {
         added: [...first.added, ...second.added],
         removed: [...first.removed, ...second.removed],
         updated: [...first.updated, ...second.updated],
+        changed: [...first.changed, ...second.changed],
         reposAdded: [...new Set([...first.reposAdded, ...second.reposAdded])],
         reposRemoved: [...new Set([...first.reposRemoved, ...second.reposRemoved])],
         unchanged: false,

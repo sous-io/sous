@@ -77,6 +77,27 @@ declares, whose tag that release cuts next. A published version never changes: n
 new version, and a release refuses to publish different content under a version already tagged. A
 lost index is rebuilt from the tags.
 
+## Retiring or Moving a Recipe
+
+A recipe is **retired** when its folder and its line under `recipes` are removed from
+`sous.repo.yaml`. Its tags MUST stay: the next release keeps every version it published in the
+index, under `retired`, so projects whose lockfile pins it keep building on a fresh clone. To offer
+subscribers something else, name replacements in `sous.repo.yaml`:
+
+```yaml
+retired:
+  review/checklist:
+    replacements:
+      - review/checklist-v2                       # a recipe this repository publishes
+      - github://harbor-labs/shared/review/lint   # a recipe in another repository
+```
+
+Zero or more replacements, each a recipe ref as `depends` takes one. A recipe that **moved** to another
+repository is retired here, naming its new home as a replacement. A `retired` entry for a recipe still
+listed under `recipes` is a release error. Subscribers' builds warn about the retired recipe, name the
+replacements and, in a terminal, offer to swap the subscription. The retirement reaches the index with
+the next release that publishes a version.
+
 ## Releasing
 
 `sous repo release` publishes. It refuses to run while anything is uncommitted, or while git
@@ -106,11 +127,13 @@ Two presets matter most:
 
 ## What Happens to a Change
 
-A repository made by `sous repo init` carries `.github/workflows/sous-release.yml`, which runs:
+A repository made by `sous repo init` carries `.github/workflows/sous-release.yml` on GitHub, or
+`.gitlab-ci.yml` on GitLab (whose release job pushes with a masked CI/CD variable named
+`SOUS_RELEASE_TOKEN`, and fails naming it when it is not set). Either one runs:
 
-- on every pull request, `sous repo release --check`;
-- on every push to `main`, `sous repo release --ci --push --yes`, which tags every version that has
-  no tag yet, commits the regenerated index when it changed, and pushes both.
+- on every pull or merge request, `sous repo release --check`;
+- on every push to the default branch, `sous repo release --ci --push --yes`, which tags every
+  version that has no tag yet, commits the regenerated index when it changed, and pushes both.
 
 So a change to a recipe MUST raise that recipe's version in the pull request itself, by editing
 `version` in its `sous.recipe.yaml`: after the merge, `--ci` refuses a recipe whose files changed

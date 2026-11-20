@@ -69,6 +69,11 @@ export interface StoreSettings {
     freshnessSeconds: number;
     /** How often watch mode checks upstream. Default 300. */
     watchPollSeconds: number;
+    /**
+     * How long a read strategy or clone URL that worked stays the one tried first, counted from
+     * when it became first. Default 604800 (seven days).
+     */
+    strategyMemorySeconds: number;
 }
 
 /** Who added a repository or subscription by hand. */
@@ -111,6 +116,24 @@ export interface RepositoryTokenSource {
     fix?(repository: CanonicalRepository): string | undefined;
 }
 
+/** How a recipe's subtree is fetched. */
+export interface RecipeTreeOptions {
+    /** The clone URL that worked last time, tried before the host's usual order. */
+    readonly first?: string;
+    /**
+     * The token sous found for the repository, handed to git for an HTTPS clone in an
+     * `http.<url>.extraHeader` set through the environment of that one command: never in a URL,
+     * never written to disk.
+     */
+    readonly token?: RepositoryToken;
+}
+
+/** What fetching a recipe's subtree did. */
+export interface RecipeTreeFetched {
+    /** The clone URL that worked. */
+    readonly url: string;
+}
+
 /** One file to read from a repository. */
 export interface RepositoryReadRequest {
     readonly repository: CanonicalRepository;
@@ -128,7 +151,12 @@ export interface RepositoryReadRequest {
 export type RepositoryReadOutcome =
     | { readonly ok: true; readonly text: string; readonly ref: string; readonly etag?: string }
     | { readonly ok: true; readonly notModified: true; readonly etag?: string }
-    | { readonly ok: false; readonly reason: string };
+    | {
+          readonly ok: false;
+          readonly reason: string;
+          /** The HTTP status the host answered with, when it answered; a 401 or 403 to a token sends the next token source's token. */
+          readonly status?: number;
+      };
 
 /** One way to read a file, tried in order; a plugin can add its own. */
 export interface RepositoryReadStrategy {
@@ -230,6 +258,11 @@ export interface ScaffoldFile {
     readonly content: string;
     /** Marks it executable. */
     readonly executable?: boolean;
+    /**
+     * What the person must do before the file works, as one or more sentences; `repo init` prints
+     * it as a warning (the GitLab pipeline's `SOUS_RELEASE_TOKEN`).
+     */
+    readonly warning?: string;
 }
 
 /** What a scaffold is for, as a host's CI workflow sees it. */
@@ -258,8 +291,18 @@ export interface RepositoryHostEntity extends RepositoryLocator {
      * Hosts of local paths provide it.
      */
     checkTypedPath?(typed: string, resolved: string, ctx: RepositoryHostContext): void | Promise<void>;
-    /** Fetches one recipe's subtree at one tag into a directory, never the whole repository. */
-    fetchRecipeTree(repository: CanonicalRepository, recipePath: string, tag: string, destination: string, ctx: RepositoryHostContext): Promise<void>;
+    /**
+     * Fetches one recipe's subtree at one tag into a directory, never the whole repository. Returns
+     * the clone URL that worked, when it tried more than one, so the next download tries it first.
+     */
+    fetchRecipeTree(
+        repository: CanonicalRepository,
+        recipePath: string,
+        tag: string,
+        destination: string,
+        ctx: RepositoryHostContext,
+        options?: RecipeTreeOptions,
+    ): Promise<RecipeTreeFetched | void>;
     /** What it calls a proposal: `pull request`, `merge request`. */
     proposalNoun?: string;
     cli?: RepositoryHostCli;
@@ -273,6 +316,12 @@ export interface RepositoryHostEntity extends RepositoryLocator {
     updateProposal?(repository: CanonicalRepository, id: string, update: { title?: string; body?: string }, ctx: RepositoryHostContext): Promise<ProposedChange>;
     /** The CI workflow and other host files a new recipe repository gets (`repo.init`). */
     scaffoldFiles?(options: ScaffoldOptions): ScaffoldFile[];
+    /**
+     * A file's address in the browser, on a branch:
+     * `fileUrl("https://gitlab.com/acme/recipes", "main", "CONTRIBUTING.md")` gives
+     * `https://gitlab.com/acme/recipes/-/blob/main/CONTRIBUTING.md`.
+     */
+    fileUrl?(repositoryUrl: string, branch: string, file: string): string;
 }
 
 // =============================================================================================
@@ -499,6 +548,14 @@ export interface RecipesTrust {
     nameOf(repository: string): string | undefined;
     /** Asks (or, with `yes`, does not ask) to trust repositories, then adds them; asks through `io`. */
     confirm(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<ConfirmTrustResult>;
+    /**
+     * Only the question of `confirm`: asks (or, with `yes` or `dryRun`, does not ask) through `io`,
+     * and throws when trust is declined or cannot be asked. Writes nothing, so a command can trust
+     * in memory (a "what if" config) until everything else has passed, then `record`.
+     */
+    decide(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<void>;
+    /** Only the writing of `confirm`: adds each repository to `conf.d/500-repos.jsonc`; one with no URL is named in `needUrl`. */
+    record(missing: readonly MissingRepo[], options?: { dryRun?: boolean }): Promise<{ added: string[]; needUrl: string[] }>;
 }
 
 // =============================================================================================
@@ -571,6 +628,14 @@ export interface ResolveOptions {
      * newer versions is quiet; resolving what to lock warns.
      */
     quiet?: boolean;
+    /**
+     * `boolean = false`. Downloads into this machine's recipe store every resolved recipe whose
+     * manifest could not be read (its files are not here, and its index does not record what it
+     * depends on), then resolves again, until every manifest is read or nothing more can be
+     * downloaded. The result's `downloaded` lists what was downloaded; a recipe still in
+     * `unreadable` could not be, and `downloadFailures` says why.
+     */
+    download?: boolean;
 }
 
 /** What a resolve found. */
@@ -581,6 +646,14 @@ export interface ResolveResult {
     readonly unreadable: string[];
     /** Dependency cycles, each as the keys around it. */
     readonly cycles: string[][];
+    /**
+     * With `download`: the recipes downloaded into the store to read their manifests, labelled as
+     * a restore labels them (`namespace/recipe`, or `namespace/recipe version 1.0.0 for <holder>`).
+     * The next `recipes.lock` restore reports them as restored.
+     */
+    readonly downloaded?: string[];
+    /** With `download`: why each recipe still in `unreadable` could not be downloaded. */
+    readonly downloadFailures?: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
 }
 
 /** Resolving subscriptions to versions, and keeping only what is reachable. */
@@ -604,11 +677,27 @@ export interface LockChange {
     readonly holder?: string;
 }
 
+/**
+ * A pinned recipe whose version stayed while what holds it changed: who requests it
+ * (`requestedBy`), or whether it is pinned as a subscription or as a dependency (`kind`).
+ */
+export interface LockEntryChange {
+    readonly key: string;
+    /** The version pinned, before and after. */
+    readonly version: string;
+    /** Who requested it before and after, when that changed. */
+    readonly requestedBy?: { readonly from: readonly string[]; readonly to: readonly string[] };
+    /** Why it is pinned, before and after, when that changed. */
+    readonly kind?: { readonly from: DependencyKind; readonly to: DependencyKind };
+}
+
 /** What changed between two lockfiles. */
 export interface LockDiff {
     readonly added: LockChange[];
     readonly removed: LockChange[];
     readonly updated: LockChange[];
+    /** Recipes whose version stayed, while who requests them or why they are pinned changed. */
+    readonly changed: LockEntryChange[];
     readonly reposAdded: string[];
     readonly reposRemoved: string[];
     readonly unchanged: boolean;
@@ -619,6 +708,40 @@ export interface RestoreReport {
     readonly restored: string[];
     readonly alreadyPresent: string[];
     readonly failed: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
+}
+
+/**
+ * A recipe the lockfile pins that its repository retired: it still builds at the pinned version,
+ * and gets no more updates.
+ */
+export interface RetiredRecipe {
+    /** `namespace/recipe`. */
+    readonly key: string;
+    /** The short name of the repository that retired it. */
+    readonly repo: string;
+    /** The version the lockfile pins. */
+    readonly version: string;
+    /** Who holds it: `project` for one of the project's subscriptions, else the recipes that depend on it. */
+    readonly requestedBy: readonly string[];
+    /** The project's switched-on subscription that names it directly, when there is one. */
+    readonly subscription?: string;
+    /** The recipes its repository offers in its place, in the order the repository lists them. */
+    readonly replacements: readonly RetiredReplacement[];
+}
+
+/** One recipe offered in place of a retired one. */
+export interface RetiredReplacement {
+    /** `namespace/recipe`. */
+    readonly key: string;
+    /**
+     * What to subscribe with: `<repository>:<namespace>/<recipe>` when this project has added the
+     * repository publishing it, else the locator the retiring repository wrote.
+     */
+    readonly ref: string;
+    /** The short name this project gives the repository publishing it; absent when the project has not added it. */
+    readonly repo?: string;
+    /** The identity of the repository publishing it (`github.com/acme/recipes`). */
+    readonly identity: string;
 }
 
 /** The lockfile: read, write, diff, restore. Works out a missing identity after parsing. */
@@ -639,6 +762,11 @@ export interface RecipesLock {
     withIndexHashes(lockfile: Lockfile): Lockfile;
     /** Downloads every pinned recipe missing from the store. */
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
+    /**
+     * The pinned recipes whose repository retired them, as the cached indexes say; nothing is read
+     * upstream. `keys` limits it to those recipes (default: every pinned recipe).
+     */
+    retired(lockfile?: Lockfile, keys?: readonly string[]): RetiredRecipe[];
     /** One pinned recipe. */
     get(key: string): LockedRecipe | undefined;
     /**
@@ -1178,7 +1306,10 @@ export interface SubscriptionAddInput extends RecipeChangeFlags, AnswerFlags {
     installPlugins?: boolean;
 }
 
-/** The result of `subscription.add`. It runs `vars.ask` and `build` afterwards through `ctx.run`. */
+/**
+ * The result of `subscription.add`. Its `vars.ask` follow-up holds the questions it asked before
+ * writing (`recipe-answers.asking`); `build` runs afterwards through `ctx.run`.
+ */
 export interface SubscriptionAddResult {
     readonly ref: string;
     /** The key written under `subscriptions`. */
@@ -1189,6 +1320,8 @@ export interface SubscriptionAddResult {
     readonly diff: LockDiff;
     readonly unreadable: string[];
     readonly cycles: string[][];
+    /** The version range the subscription is recorded with; absent means any version. */
+    readonly range?: string;
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
     /** On a dry run: every question the recipes ask, from what their index records. */

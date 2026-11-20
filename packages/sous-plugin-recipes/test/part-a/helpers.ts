@@ -180,7 +180,7 @@ export function memoryLock(lockfile: Lockfile): RecipesLock & { current: Lockfil
             .filter((key) => before.recipes[key] && before.recipes[key]!.version !== after.recipes[key]!.version)
             .map((key) => ({ key, from: before.recipes[key]!.version, to: after.recipes[key]!.version }));
 
-        return { added, removed, updated, reposAdded: [], reposRemoved: [], unchanged: added.length + removed.length + updated.length === 0 };
+        return { added, removed, updated, changed: [], reposAdded: [], reposRemoved: [], unchanged: added.length + removed.length + updated.length === 0 };
     };
     const lock = {
         current: lockfile,
@@ -199,6 +199,7 @@ export function memoryLock(lockfile: Lockfile): RecipesLock & { current: Lockfil
         fromResolved: () => lockfile,
         withIndexHashes: (current: Lockfile) => current,
         restore: async () => ({ restored: [], alreadyPresent: [], failed: [] }),
+        retired: () => [],
         get: (key: string) => lock.current.recipes[key],
         held: (current: Lockfile, except?: Iterable<string>) => heldVersions(current, except),
         exists: () => true,

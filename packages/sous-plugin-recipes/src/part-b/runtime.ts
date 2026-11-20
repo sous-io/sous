@@ -11,8 +11,8 @@ import type {} from "@sous-io/sous-plugin-formats/types";
 import type {} from "@sous-io/sous-plugin-git/types";
 import type { SousHomePaths } from "@sous-io/sous-plugin-host/types";
 import type {} from "@sous-io/sous-plugin-refs/types";
-import type { RepositoryHostContext, RepositoryHostEntity } from "../types.js";
-import { RECIPES_PLUGIN } from "./constants.js";
+import type { RepositoryHostContext, RepositoryHostEntity, StoreSettings } from "../types.js";
+import { DEFAULT_STRATEGY_MEMORY_SECONDS, RECIPES_PLUGIN } from "./constants.js";
 import { IndexCacheCore } from "./index-cache/index-cache.js";
 import { hostFor } from "./support.js";
 
@@ -66,11 +66,17 @@ export class PartBRuntime {
         this.recipeFilesWanted = true;
     }
 
-    /** The recipes downloaded while the config was built and not reported yet; reading them forgets them. */
-    takeFetched(): string[] {
-        const keys = [...this.fetched];
+    /**
+     * The recipes downloaded while the config was built, or by a resolve that read their
+     * manifests, and not reported yet; reading them forgets them. With `among`, only those labels
+     * are read and forgotten.
+     */
+    takeFetched(among?: readonly string[]): string[] {
+        const keys = [...this.fetched].filter((key) => among === undefined || among.includes(key));
 
-        this.fetched.clear();
+        for (const key of keys) {
+            this.fetched.delete(key);
+        }
 
         return keys;
     }
@@ -141,7 +147,9 @@ export class PartBRuntime {
                 strategiesFile: paths.readStrategies,
                 parser: this.services.get("formats.index-file"),
                 hosts: () => this.hosts(),
-                hostContext: () => this.hostContext(),
+                // Reads report what the user should know (a refused token, a GitLab sub-path found).
+                hostContext: () => this.hostContext(this.host.reporter),
+                strategyMemorySeconds: () => this.host.engine.config.get<Partial<StoreSettings>>("store")?.strategyMemorySeconds ?? DEFAULT_STRATEGY_MEMORY_SECONDS,
             });
         }
 

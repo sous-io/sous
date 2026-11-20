@@ -470,7 +470,7 @@ describe("askSummary()", () => {
     });
 });
 
-describe("--env-file", () => {
+describe("--save-locally and --save-shared", () => {
     /** Every answer of the run should go to the chosen file, whatever its recipe prefers. */
     it("should store every answer in the chosen file", async () => {
         const prompter = scriptedPrompter(["https://typed.example.com"]);

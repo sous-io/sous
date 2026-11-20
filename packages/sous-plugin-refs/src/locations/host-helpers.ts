@@ -52,16 +52,29 @@ export function normalizeRepoUrl(url: string): string {
     return value;
 }
 
+/** What {@link splitRepoUrl} takes out of a repository URL. */
+export interface RepositoryUrlParts {
+    /** The host, with the port of an HTTPS URL that names one; an SSH URL's port is never part of it. */
+    host: string;
+    owner: string;
+    name: string;
+    /** The port an `ssh://` URL names. */
+    sshPort?: number;
+}
+
 /**
  * Takes a repository URL apart into host, owner and name. Accepts the HTTPS form, the `scp`-style
  * SSH form (`git@host:owner/name.git`) and `ssh://host/owner/name`. Returns `undefined` rather than
- * throwing, so a host's `matches` can use it.
+ * throwing, so a host's `matches` can use it. An HTTPS port stays on the host; an SSH port is
+ * returned on its own, because the HTTPS address never uses it.
  *
  * ```ts
  * splitRepoUrl("git@github.com:o/r.git"); // -> { host: "github.com", owner: "o", name: "r" }
+ * splitRepoUrl("https://git.example.com:8443/o/r"); // -> { host: "git.example.com:8443", owner: "o", name: "r" }
+ * splitRepoUrl("ssh://git@git.example.com:2222/o/r"); // -> { host: "git.example.com", owner: "o", name: "r", sshPort: 2222 }
  * ```
  */
-export function splitRepoUrl(url: string): { host: string; owner: string; name: string } | undefined {
+export function splitRepoUrl(url: string): RepositoryUrlParts | undefined {
     const normalized = normalizeRepoUrl(url);
 
     if (normalized.length === 0) {
@@ -70,6 +83,7 @@ export function splitRepoUrl(url: string): { host: string; owner: string; name: 
 
     let host: string;
     let repoPath: string;
+    let sshPort: number | undefined;
     const scp = /^(?:([^@\s/]+)@)?([^@\s/:]+):(.+)$/.exec(normalized);
 
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)) {
@@ -81,7 +95,13 @@ export function splitRepoUrl(url: string): { host: string; owner: string; name: 
             return undefined;
         }
 
-        host = parsed.host.toLowerCase();
+        if (/^ssh:$/i.test(parsed.protocol) || /^git\+ssh:$/i.test(parsed.protocol)) {
+            host = parsed.hostname.toLowerCase();
+            sshPort = parsed.port === "" ? undefined : Number(parsed.port);
+        } else {
+            host = parsed.host.toLowerCase();
+        }
+
         repoPath = parsed.pathname.replace(/^\/+/, "");
     } else if (scp !== null) {
         host = scp[2]!.toLowerCase();
@@ -96,17 +116,40 @@ export function splitRepoUrl(url: string): { host: string; owner: string; name: 
         return undefined;
     }
 
-    return { host, owner: segments.slice(0, -1).join("/"), name: segments[segments.length - 1]! };
+    return { host, owner: segments.slice(0, -1).join("/"), name: segments[segments.length - 1]!, ...(sshPort === undefined ? {} : { sshPort }) };
 }
 
-/** The canonical form of a hosted repository. */
-export function buildCanonicalRepository(host: string, owner: string, name: string): CanonicalRepository {
+/** A host without its port: `gitlab.example.com:8443` gives `gitlab.example.com`. */
+export function hostWithoutPort(host: string): string {
+    return host.replace(/:\d+$/, "");
+}
+
+/**
+ * The canonical form of a hosted repository. The HTTPS URL carries the host's port and the whole
+ * path; the SSH URL never carries the HTTPS port, takes an SSH port only from `sshPort`, and leaves
+ * out a `basePath` (the path a self-managed instance is installed under).
+ *
+ * ```ts
+ * buildCanonicalRepository("git.example.com:8443", "gitlab/acme", "recipes", { basePath: "gitlab" });
+ * // httpsUrl "https://git.example.com:8443/gitlab/acme/recipes.git"
+ * // sshUrl   "git@git.example.com:acme/recipes.git"
+ * buildCanonicalRepository("git.example.com", "acme", "recipes", { sshPort: 2222 }).sshUrl;
+ * // "ssh://git@git.example.com:2222/acme/recipes.git"
+ * ```
+ */
+export function buildCanonicalRepository(host: string, owner: string, name: string, options: { sshPort?: number; basePath?: string } = {}): CanonicalRepository {
+    const basePath = options.basePath?.replace(/^\/+|\/+$/g, "") || undefined;
+    const sshOwner = basePath !== undefined && owner.startsWith(`${basePath}/`) ? owner.slice(basePath.length + 1) : owner;
+    const sshHost = hostWithoutPort(host);
+
     return {
         host,
         owner,
         name,
         httpsUrl: `https://${host}/${owner}/${name}.git`,
-        sshUrl: `git@${host}:${owner}/${name}.git`,
+        sshUrl: options.sshPort === undefined ? `git@${sshHost}:${sshOwner}/${name}.git` : `ssh://git@${sshHost}:${options.sshPort}/${sshOwner}/${name}.git`,
+        ...(options.sshPort === undefined ? {} : { sshPort: options.sshPort }),
+        ...(basePath === undefined || sshOwner === owner ? {} : { basePath }),
     };
 }
 

@@ -16,6 +16,7 @@ import {
   formatVersionSchema,
   namespaceNameSchema,
   parseFormat,
+  recipeKeySchema,
   relativePathSchema,
   repoNameSchema,
   submissionsSchema,
@@ -25,6 +26,28 @@ import {
 export const repoNamespaceSchema = extensibleObject({
   /** One-line, plain-language summary of what the namespace holds. */
   description: z.string().optional(),
+});
+
+/**
+ * What the manifest says about one recipe the repository retired. The release
+ * keeps every published version of a recipe no longer listed under `recipes`
+ * in the index, marked retired, whether or not it has an entry here; an entry
+ * names the recipes subscribers are offered in its place.
+ *
+ *     retired:
+ *       acme/widget:
+ *         replacements:
+ *           - acme/gadget
+ *           - https://github.com/other/recipes/tools/widget
+ */
+export const repoRetirementSchema = extensibleObject({
+  /**
+   * Zero or more recipes to offer in its place, each written as a `depends`
+   * entry is: `namespace/recipe` in this repository, or a locator naming a
+   * recipe in another repository. A recipe that moved to another repository
+   * names its new home here.
+   */
+  replacements: z.array(z.string().trim().min(1, "must not be empty")).optional(),
 });
 
 /** Path to a recipe folder, relative to the repo root. */
@@ -77,10 +100,18 @@ export const repoManifestSchema = extensibleObject({
       seen.add(entry);
     });
   }),
+  /**
+   * The recipes this repository retired, keyed `namespace/recipe`, each with
+   * the replacements subscribers are offered. See `repoRetirementSchema`.
+   */
+  retired: z.record(recipeKeySchema, repoRetirementSchema).optional(),
 });
 
 /** A validated repo manifest. */
 export type RepoManifest = z.infer<typeof repoManifestSchema>;
+
+/** What a validated repo manifest says about one retired recipe. */
+export type RepoRetirement = z.infer<typeof repoRetirementSchema>;
 
 /** A validated namespace declaration from a repo manifest. */
 export type RepoNamespace = z.infer<typeof repoNamespaceSchema>;

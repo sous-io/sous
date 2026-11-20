@@ -311,6 +311,82 @@ describe("LockService.restore", () => {
     });
 });
 
+/**
+ * Moves `workflow/alpha` from the served index's `recipes` to its `retired`, as a release does once
+ * the repository stops listing it, with the replacements given.
+ */
+function retireAlpha(replacements: Array<{ key: string; repo?: string; declared: string }> = []): void {
+    const index = repo.index!;
+    const { "workflow/alpha": alpha, ...published } = index.recipes;
+
+    repo.index = {
+        ...index,
+        recipes: { ...published, "workflow/beta": { path: "recipes/workflow/beta", versions: { "1.0.0": { hash, tag: "workflow/beta@1.0.0", prerelease: false } } } },
+        retired: { "workflow/alpha": { ...alpha!, ...(replacements.length === 0 ? {} : { replacements }) } },
+    };
+}
+
+describe("LockService and retired recipes", () => {
+    /**
+     * A fresh machine restores a pin to a recipe its repository retired, because the index keeps
+     * every version it published (#230 item 2, #80).
+     *
+     * lockfile pins workflow/alpha@1.0.0; the index lists it only under `retired`
+     * // -> restore() downloads it
+     */
+    it("should restore a pinned version of a retired recipe on a fresh machine", async () => {
+        retireAlpha();
+        writeLock(pinned());
+
+        const { lock } = await lockService();
+
+        expect(await lock.restore()).toEqual({ restored: ["workflow/alpha"], alreadyPresent: [], failed: [] });
+    });
+
+    /**
+     * `retired()` names each pinned recipe the cached index retired, the subscription naming it, and
+     * each replacement with the ref to subscribe with: qualified by the short name of a repository
+     * the project added, else the locator the repository wrote.
+     */
+    it("should list a retired pin with its subscription and replacements", async () => {
+        retireAlpha([
+            { key: "workflow/beta", declared: "workflow/beta" },
+            { key: "tools/gamma", repo: "fake.test/other/tools", declared: "https://fake.test/other/tools/tools/gamma" },
+        ]);
+        writeLock(pinned());
+
+        const { engine, lock } = await lockService();
+
+        await engine.config.services.get("recipes.index-cache").get("acme");
+
+        expect(lock.retired()).toEqual([
+            {
+                key: "workflow/alpha",
+                repo: "acme",
+                version: "1.0.0",
+                requestedBy: ["project"],
+                subscription: "workflow/alpha",
+                replacements: [
+                    { key: "workflow/beta", ref: "acme:workflow/beta", repo: "acme", identity: IDENTITY },
+                    { key: "tools/gamma", ref: "https://fake.test/other/tools/tools/gamma", identity: "fake.test/other/tools" },
+                ],
+            },
+        ]);
+    });
+
+    /** A recipe reached only through a namespace subscription has no subscription naming it. */
+    it("should name no subscription for a retired recipe a namespace subscription reached", async () => {
+        retireAlpha();
+        writeLock(pinned());
+
+        const { engine, lock } = await lockService(config({ workflow: {} }));
+
+        await engine.config.services.get("recipes.index-cache").get("acme");
+
+        expect(lock.retired()).toEqual([{ key: "workflow/alpha", repo: "acme", version: "1.0.0", requestedBy: ["project"], replacements: [] }]);
+    });
+});
+
 describe("LockService.removeHolder", () => {
     it("should drop the project's hold and what only it held", async () => {
         const { lock } = await lockService();

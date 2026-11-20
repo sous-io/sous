@@ -96,6 +96,7 @@ export type { RefPruneAction, RefPruneRule, RefRuleText, RulePrunerOptions } fro
 export {
     buildCanonicalRepository,
     defaultLocator,
+    hostWithoutPort,
     normalizeRepoUrl,
     readingsAfterRepository,
     splitRepoUrl,

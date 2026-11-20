@@ -19,6 +19,7 @@ import type {
 import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate } from "../update-plan.js";
 import {
     blockOutput,
+    describeRange,
     dryRunOutput,
     finish,
     finishWithFollowUps,
@@ -90,11 +91,12 @@ export function subscriptionAddOutputs(ctx: Pick<Context, "reporter">, result: S
     }
 
     if (result.dryRun) {
+        outputs.push(sentence(`The subscription to '${result.key}' would be recorded with the version range '${describeRange(result.range)}'.`));
         outputs.push(dryRunOutput("Nothing was written. Run the same command without '--dry-run' to install it."));
     } else {
         outputs.push(
             sentence(
-                `The subscription to '${result.key}' is recorded in this project's config, and the exact versions above are recorded in its lockfile.${rebuilt(result) ? "" : " Run 'sous build' to compile what they contribute."}`,
+                `The subscription to '${result.key}' is recorded in this project's config with the version range '${describeRange(result.range)}', and the exact versions above are recorded in its lockfile.${rebuilt(result) ? "" : " Run 'sous build' to compile what they contribute."}`,
             ),
         );
     }

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { fakeProcesses, hostContext, type ProcessAnswer } from "@sous-io/sous-lib-repository-hosts/testing";
 import { buildGitlabPipeline, gitlabCiFiles } from "./ci.js";
@@ -165,5 +166,25 @@ describe("gitlabCiFiles()", () => {
         expect(buildGitlabPipeline()).toContain('$CI_PIPELINE_SOURCE == "merge_request_event"');
         expect(buildGitlabPipeline()).toContain("SOUS_RELEASE_TOKEN");
         expect(host.scaffoldFiles).toBe(gitlabCiFiles);
+        expect(files[0]?.warning).toContain("masked CI/CD variable named SOUS_RELEASE_TOKEN");
+        expect(host.fileUrl?.("https://gitlab.com/acme/recipes", "main", "CONTRIBUTING.md")).toBe("https://gitlab.com/acme/recipes/-/blob/main/CONTRIBUTING.md");
+    });
+
+    /**
+     * The release job checks for SOUS_RELEASE_TOKEN before any commit or tag, and fails naming it
+     * and where to set it (gh-230 item 9).
+     */
+    it("should fail the release job naming SOUS_RELEASE_TOKEN before anything is committed", () => {
+        const release = buildGitlabPipeline().slice(buildGitlabPipeline().indexOf("\nrelease:"));
+        const check = /- \|\n((?: {6}.*\n)+)/.exec(release)?.[1]?.replace(/^ {6}/gm, "") ?? "";
+
+        expect(release.indexOf("SOUS_RELEASE_TOKEN\" ]")).toBeLessThan(release.indexOf("git config"));
+
+        const missing = spawnSync("sh", ["-c", check], { env: {}, encoding: "utf8" });
+
+        expect(missing.status).toBe(1);
+        expect(missing.stderr).toContain("Error: the CI/CD variable SOUS_RELEASE_TOKEN is not set");
+        expect(missing.stderr).toContain("Settings, CI/CD, Variables");
+        expect(spawnSync("sh", ["-c", check], { env: { SOUS_RELEASE_TOKEN: "x" }, encoding: "utf8" }).status).toBe(0);
     });
 });

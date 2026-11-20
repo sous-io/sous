@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BufferedReporter, ItemList, LogLevel, messageText, ReportEntryStyle } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
-import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnanswered, reportUnincludedMemories, skippedLine } from "./report.js";
+import { filesSummaryLine, prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnanswered, reportUnincludedMemories, skippedLine } from "./report.js";
 import type { BuildPrepareResult } from "./types.js";
 import { nestedBuildHeading } from "./build.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
@@ -278,5 +278,63 @@ describe("nestedBuildHeading()", () => {
         expect(nestedBuildHeading(chain("build"))).toBeUndefined();
         expect(nestedBuildHeading(chain("prune"))).toBeUndefined();
         expect(nestedBuildHeading({ chain: undefined })).toBeUndefined();
+    });
+});
+
+describe("filesSummaryLine()", () => {
+    const outputs = [
+        { file: "/p/A.md", action: "created" as const },
+        { file: "/p/B.md", action: "updated" as const },
+        ...Array.from({ length: 13 }, (_, index) => ({ file: `/p/u${index}.md`, action: "unchanged" as const })),
+    ];
+
+    /**
+     * Written files are counted with how many are new and how many updated, then the unchanged.
+     *
+     * filesSummaryLine({ outputs: [created, updated, 13 unchanged], dryRun: false });
+     * // -> "Files: 2 written (1 new, 1 updated), 13 unchanged."
+     */
+    it("should count the written files, new and updated, and the unchanged ones", () => {
+        expect(filesSummaryLine({ outputs, dryRun: false })).toBe("Files: 2 written (1 new, 1 updated), 13 unchanged.");
+    });
+
+    /**
+     * A dry run says what would be written.
+     *
+     * filesSummaryLine({ outputs: [would-create, would-update, 13 unchanged], dryRun: true });
+     * // -> "Files: 2 would be written (1 new, 1 updated), 13 unchanged."
+     */
+    it("should say what a dry run would write", () => {
+        const planned = outputs.map((output) =>
+            output.action === "created" ? { ...output, action: "would-create" as const } : output.action === "updated" ? { ...output, action: "would-update" as const } : output,
+        );
+
+        expect(filesSummaryLine({ outputs: planned, dryRun: true })).toBe("Files: 2 would be written (1 new, 1 updated), 13 unchanged.");
+    });
+
+    /**
+     * A build that changed nothing still says so, with no breakdown in parentheses.
+     *
+     * filesSummaryLine({ outputs: [15 unchanged], dryRun: false });
+     * // -> "Files: 0 written, 15 unchanged."
+     */
+    it("should report a build that changed nothing", () => {
+        const unchanged = Array.from({ length: 15 }, (_, index) => ({ file: `/p/u${index}.md`, action: "unchanged" as const }));
+
+        expect(filesSummaryLine({ outputs: unchanged, dryRun: false })).toBe("Files: 0 written, 15 unchanged.");
+    });
+
+    /**
+     * Removed and not-written files join the line only when there are some, and a file removed and
+     * then written again (a rebuild clears every output first) is not counted as removed.
+     *
+     * filesSummaryLine({ outputs, removed: ["/p/A.md", "/p/OLD.md"], notWritten: ["/p/C.md"], dryRun: false });
+     * // -> "Files: 2 written (1 new, 1 updated), 13 unchanged, 1 removed, 1 not written."
+     */
+    it("should add removed and not-written files only when there are some", () => {
+        expect(filesSummaryLine({ outputs, removed: [], notWritten: [], dryRun: false })).toBe("Files: 2 written (1 new, 1 updated), 13 unchanged.");
+        expect(filesSummaryLine({ outputs, removed: ["/p/A.md", "/p/OLD.md"], notWritten: ["/p/C.md"], dryRun: false })).toBe(
+            "Files: 2 written (1 new, 1 updated), 13 unchanged, 1 removed, 1 not written.",
+        );
     });
 });

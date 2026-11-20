@@ -22,10 +22,31 @@ describe("build.prepare", () => {
 
         expect(result.locked.added).toEqual([{ key: "acme/jira", to: "1.0.0" }]);
         expect(h.world.lockfile.recipes["acme/jira"]?.version).toBe("1.0.0");
-        expect(h.world.resolveCalls[0]).toEqual({ keep: {}, keepPins: {} });
+        expect(h.world.resolveCalls[0]).toEqual({ keep: {}, keepPins: {}, download: true });
 
         await h.run("build.prepare", { offline: true });
         expect(h.engine.config.buildNumber).toBeGreaterThan(before);
+    });
+
+    /**
+     * A new subscription whose recipe's manifest cannot be read is not locked: a lockfile written
+     * then would leave out what it depends on (#291). The build says so.
+     *
+     * subscriptions: { acme: {} }, acme/jira unreadable; // -> no lockfile write, "The lockfile was not written, ..."
+     */
+    it("should not write the lockfile while a recipe cannot be read", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.config = { subscriptions: { acme: {} } };
+                world.published = { "acme/jira": { repo: "acme", namespace: "acme", version: "1.0.0" } };
+                world.unreadable = ["acme/jira"];
+            },
+        });
+        const result = await h.run<BuildPrepareResult>("build.prepare", { offline: true });
+
+        expect(result.locked.unchanged).toBe(true);
+        expect(h.world.lockWrites).toEqual([]);
+        expect(h.reporter.messages.map((entry) => String(entry.message))).toContain("The lockfile was not written, because sous could not read what acme/jira depends on.");
     });
 
     /**
@@ -240,5 +261,24 @@ describe("isLocked()", () => {
         expect(isLocked("acme", { range: "^1" }, lockfile({ "acme/jira": locked("1.4.0"), "acme/x": locked("1.0.0") }))).toBe(true);
         expect(isLocked("acme", {}, lockfile({ "other/x": locked("1.0.0") }))).toBe(false);
         expect(isLocked("acme/jira", {}, lockfile({ "acme/jira": { ...locked("1.0.0"), requestedBy: ["acme/base"] } }))).toBe(false);
+    });
+
+    /**
+     * The retired recipes the lockfile pins are listed, except one skipped on this machine, which is
+     * not built here.
+     *
+     * retired: acme/widget, acme/off (skipped) // -> retired: [acme/widget]
+     */
+    it("should list the retired recipes built here", async () => {
+        const widget = { key: "acme/widget", repo: "acme", version: "0.1.2", requestedBy: ["project"], subscription: "acme/widget", replacements: [] };
+        const h = await harness({
+            world: (world) => {
+                world.retired = [widget, { ...widget, key: "acme/off", subscription: "acme/off" }];
+                world.skipped = [{ key: "acme/off", reason: "subscription-disabled", message: "" }];
+            },
+        });
+        const result = await h.run<BuildPrepareResult>("build.prepare", { offline: true });
+
+        expect(result.retired).toEqual([widget]);
     });
 });

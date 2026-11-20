@@ -1,7 +1,7 @@
 import { ConfigError } from "@sous-io/sous-plugin-api";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildRefs, gitlabHost, type Refs } from "../../test/fixtures.js";
-import { readingsAfterRepository, splitRepoUrl } from "./host-helpers.js";
+import { buildCanonicalRepository, readingsAfterRepository, splitRepoUrl } from "./host-helpers.js";
 import { identitySegments, repositoryIdentity, sameRepositoryIdentity, shortNameFromIdentity } from "./identity.js";
 
 let refs: Refs;
@@ -177,5 +177,60 @@ describe("host helpers", () => {
         expect(splitRepoUrl("https://github.com/only")).toBeUndefined();
         expect(splitRepoUrl("not a url")).toBeUndefined();
         expect(splitRepoUrl("")).toBeUndefined();
+    });
+
+    /**
+     * An HTTPS port stays on the host; an SSH URL's port is returned apart and never joins the host,
+     * so the HTTPS address built from the host never uses it (#212).
+     *
+     * splitRepoUrl("https://git.example.com:8443/o/r")     // -> { host: "git.example.com:8443", owner: "o", name: "r" }
+     * splitRepoUrl("ssh://git@git.example.com:2222/o/r")  // -> { host: "git.example.com", owner: "o", name: "r", sshPort: 2222 }
+     */
+    it("should keep an HTTPS port on the host and an SSH port apart", () => {
+        expect(splitRepoUrl("https://git.example.com:8443/o/r")).toEqual({ host: "git.example.com:8443", owner: "o", name: "r" });
+        expect(splitRepoUrl("https://git.example.com:443/o/r")).toEqual({ host: "git.example.com", owner: "o", name: "r" });
+        expect(splitRepoUrl("ssh://git@git.example.com:2222/g/o/r.git")).toEqual({ host: "git.example.com", owner: "g/o", name: "r", sshPort: 2222 });
+    });
+});
+
+describe("buildCanonicalRepository()", () => {
+    /**
+     * The HTTPS URL carries the HTTPS port; the SSH URL never does.
+     *
+     * buildCanonicalRepository("git.example.com:8443", "o", "r").sshUrl // -> "git@git.example.com:o/r.git"
+     */
+    it("should keep the HTTPS port out of the SSH URL", () => {
+        expect(buildCanonicalRepository("git.example.com:8443", "o", "r")).toEqual({
+            host: "git.example.com:8443",
+            owner: "o",
+            name: "r",
+            httpsUrl: "https://git.example.com:8443/o/r.git",
+            sshUrl: "git@git.example.com:o/r.git",
+        });
+    });
+
+    /**
+     * An SSH port makes an `ssh://` URL; the HTTPS URL is left without it.
+     *
+     * buildCanonicalRepository("git.example.com", "o", "r", { sshPort: 2222 }).sshUrl // -> "ssh://git@git.example.com:2222/o/r.git"
+     */
+    it("should put an SSH port only in the SSH URL", () => {
+        const repository = buildCanonicalRepository("git.example.com", "o", "r", { sshPort: 2222 });
+
+        expect(repository.sshUrl).toBe("ssh://git@git.example.com:2222/o/r.git");
+        expect(repository.httpsUrl).toBe("https://git.example.com/o/r.git");
+        expect(repository.sshPort).toBe(2222);
+    });
+
+    /**
+     * A sub-path stays in the HTTPS URL and leaves the SSH path.
+     *
+     * buildCanonicalRepository("h", "gitlab/acme", "r", { basePath: "gitlab" }).sshUrl // -> "git@h:acme/r.git"
+     */
+    it("should keep a sub-path in the HTTPS URL and out of the SSH URL", () => {
+        const repository = buildCanonicalRepository("git.example.com", "gitlab/acme", "r", { basePath: "/gitlab/" });
+
+        expect(repository).toMatchObject({ httpsUrl: "https://git.example.com/gitlab/acme/r.git", sshUrl: "git@git.example.com:acme/r.git", basePath: "gitlab" });
+        expect(buildCanonicalRepository("h", "acme", "r", { basePath: "gitlab" }).basePath).toBeUndefined();
     });
 });

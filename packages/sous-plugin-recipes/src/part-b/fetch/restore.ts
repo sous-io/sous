@@ -13,7 +13,7 @@ import type { IndexCacheCore } from "../index-cache/index-cache.js";
 import { sweepAbandonedWork } from "../../part-a/store.js";
 import { IndexReadError } from "../index-cache/read-chain.js";
 import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
-import { hostFor, splitStoredKey } from "../support.js";
+import { hostFor, publishedOrRetired, splitStoredKey } from "../support.js";
 
 /** One pinned recipe to download. */
 export type RestoreTarget = EnsureInStoreTarget;
@@ -71,13 +71,14 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
     const indexTarget = { name: target.repo, url: target.url, identity: target.identity, ...(target.provider === undefined ? {} : { provider: target.provider }) };
     const signal = deps.context.signal;
     let lookup = await deps.cache.get(indexTarget, { freshnessSeconds: deps.freshnessSeconds, hosts: deps.hosts, ...(signal ? { signal } : {}) });
-    let recipe = lookup.index.recipes[target.key];
+    // A retired recipe keeps every version it published, so a pin to one restores like any other.
+    let recipe = publishedOrRetired(lookup.index, target.key)?.entry;
     let version = recipe?.versions[target.entry.version];
 
     if (version === undefined && lookup.source === "cache") {
         // The cached index may predate the release; look upstream once.
         lookup = await deps.cache.get(indexTarget, { latest: true, hosts: deps.hosts, ...(signal ? { signal } : {}) });
-        recipe = lookup.index.recipes[target.key];
+        recipe = publishedOrRetired(lookup.index, target.key)?.entry;
         version = recipe?.versions[target.entry.version];
     }
 
@@ -110,7 +111,29 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
     const fetchDir = path.join(work, storeKey.name || "recipe");
 
     try {
-        await host.fetchRecipeTree(host.canonicalize(target.url), recipe.path, version.tag, fetchDir, deps.context);
+        const repository = host.canonicalize(target.url);
+        // The clone URL that worked last goes first, and the token sous found goes to an HTTPS clone (#213).
+        const first = deps.cache.downloadFirst(target.identity);
+        const token = host.tokenSources === undefined || host.tokenSources.length === 0 ? undefined : await deps.cache.downloadToken(target.identity, host, repository, deps.context);
+        let fetched;
+
+        try {
+            fetched = await host.fetchRecipeTree(repository, recipe.path, version.tag, fetchDir, deps.context, {
+                ...(first === undefined ? {} : { first }),
+                ...(token === undefined ? {} : { token }),
+            });
+        } catch (error) {
+            if (error instanceof Error && "attempts" in error) {
+                deps.cache.noteDownload(target.identity, undefined, first);
+            }
+
+            throw error;
+        }
+
+        if (fetched) {
+            deps.cache.noteDownload(target.identity, fetched.url, first);
+        }
+
         await dropSeededCoreCopy(storeKey, target.entry.hash, deps.store);
 
         return await deps.store.put(storeKey, fetchDir, target.entry.hash);

@@ -80,7 +80,7 @@ export function unitsOf(settings: CompilationSettings, env: UnitEnvironment, onl
     }
 
     settings.targets.forEach((target, index) => {
-        if (wanted(index) && index >= (listing?.targets ?? 0)) {
+        if (wanted(index) && index >= (listing?.targets ?? 0) && !(listing?.fromHarness ?? []).includes(index)) {
             problems.push({
                 level: "error",
                 message: `The files of target ${targetName(target, index)} were never listed: it was added after the compiler listed every target's files (by a contributor in a later config stage), so it is not compiled.`,
