@@ -14,7 +14,8 @@ const gitlab = ctx.entities.get("repository-host", "gitlab");
 
 ## Where things are
 
-- `src/host.ts`: the repository host.
+- `src/host.ts`: the repository host: its URLs, API addresses and read strategies.
+- `src/instance.ts`: where a self-managed instance is installed (a port, a sub-path), asked of the server once and remembered.
 - `src/proposals.ts`: opening and following merge requests.
 - `src/ci.ts`: the release pipeline a new repository gets.
 - `src/glab.ts`: calling the `glab` tool.

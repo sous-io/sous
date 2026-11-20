@@ -347,13 +347,15 @@ Error: could not read gitlab.com/acme/private-recipes.
 Fix one of these:
   export GITLAB_TOKEN=<a token with read_repository>
   set up git access to gitlab.com (an SSH key, or a credential helper)
-A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
 ```
 
 Sous tried every way it has to read the repository's index, and each line says why that one failed. Any
-one fix lets sous read the index. Recipe files are a different matter: sous downloads them with git alone,
-so a build needs git access to the host (an SSH key, or a credential helper) even when a token is set. A
-token in the environment only makes reading the index faster. `gh` and `glab` are not needed to read.
+one fix lets sous read the index and download recipe files: sous hands the token it found to git for an
+HTTPS download, so a token alone is enough to build. `gh` and `glab` are not needed to read.
+
+A token the host refused is named by where it came from, on its attempt's line and in the fix. When
+another way then works, the build goes on and warns once that the token was refused; replace the token
+there, or unset the variable.
 The order sous tries, and where it finds a token, are under
 [Private repositories](repositories-providers.md#private-repositories).
 

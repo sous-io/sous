@@ -60,6 +60,8 @@ describe("ensureInStore()", () => {
                 source: "network",
                 index: { recipes: { "ns/r": { path: "recipes/ns/r", versions: { "1.0.0": { tag: "ns/r@1.0.0" } } } } },
             }),
+            downloadFirst: () => undefined,
+            noteDownload: () => undefined,
         } as unknown as IndexCacheCore;
         const host = {
             id: "fake",

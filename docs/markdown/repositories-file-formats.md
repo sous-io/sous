@@ -457,6 +457,8 @@ $SOUS_HOME/
   cache/<repository identity>/<namespace>/<name>/<version>/   .sous.entry.json, then the files
   cache/_indexes/<repository identity>.json                   the cached index
   cache/_indexes/<repository identity>.meta.json              etag, fetchedAt, lastCheckedAt, ref
+  cache/read-strategies.json   per repository: the read strategy and clone URL that worked, and since when
+  cache/gitlab-instances.json  per GitLab host: the sub-path GitLab is installed under ("" at the root)
   repos/            checkouts cloned by 'sous repo link --global'
   sous.links.json   the machine-wide links map
 ```
@@ -512,6 +514,7 @@ store:                     # every value is a default you can change
   maxBytes: 1073741824     # one gigabyte; past it, 'sous repo gc' evicts unpinned entries
   freshnessSeconds: 300    # how long a fetched index stays fresh
   watchPollSeconds: 300    # how often watch mode polls upstream
+  strategyMemorySeconds: 604800  # how long a way of reading or downloading that worked is tried first
 recipes:                   # what each content kind a subscribed recipe publishes does
   skills: { outputs: ["${projectRoot}/.codex/skills"] }   # added to the skills directories agent plugins name
   memories: { first: ["communication/*"], exclude: ["tool-usage/automated-browser-tasks"] }

@@ -578,6 +578,11 @@
           "type": "integer",
           "default": 300,
           "description": "How often watch mode checks upstream."
+        },
+        "strategyMemorySeconds": {
+          "type": "integer",
+          "default": 604800,
+          "description": "How long, in seconds, a way of reading a repository's index or downloading its recipes that worked stays the one tried first, counted from when it became first. The default, 604800 (seven days), means a repository read through git because its token failed goes back to trying the token first a week later. 0 always tries the host's usual order first; any whole number of seconds is accepted."
         }
       },
       "additionalProperties": false

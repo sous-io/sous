@@ -85,6 +85,8 @@ describe("the repos, subscriptions and store config keys", () => {
         expect(problems("store", { maxBytes: 0 }).join("\n")).toContain("maxBytes");
         expect(problems("store", { freshnessSeconds: -1 }).join("\n")).toContain("freshnessSeconds");
         expect(problems("store", { watchPollSeconds: 1.5 }).join("\n")).toContain("watchPollSeconds");
+        expect(problems("store", { strategyMemorySeconds: -1 }).join("\n")).toContain("strategyMemorySeconds");
+        expect(problems("store", { strategyMemorySeconds: 0 })).toEqual([]);
     });
 
     /**

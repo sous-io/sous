@@ -34,6 +34,16 @@ export interface HttpReadStrategyOptions {
     servesCachedCopies?: boolean;
     /** True when only a read that must see the current file uses it (GitHub's API without a token). */
     onlyForCurrentReads?: boolean;
+    /**
+     * For a server that sends no `ETag` but names the file's content hash in a header (GitLab's
+     * `X-Gitlab-Content-Sha256`): the header, and the address a `HEAD` request reads it from. The
+     * hash is kept as the cached copy's ETag, written `<header>:<hash>`, and a later read asks for
+     * the header alone; the same hash answers "not modified" without downloading the file.
+     */
+    contentHash?: {
+        header: string;
+        url(request: RepositoryReadRequest): string;
+    };
 }
 
 /**
@@ -63,16 +73,63 @@ export function httpReadStrategy(options: HttpReadStrategyOptions): ExplainedRea
                 return { ok: false, reason: "no token found" };
             }
 
+            const hashed = options.contentHash === undefined ? undefined : contentHashOf(options.contentHash.header, request.etag);
             const headers: Record<string, string> = {
                 Accept: "application/json",
                 ...options.headers?.(request),
-                ...(request.etag === undefined ? {} : { "If-None-Match": request.etag }),
+                ...(request.etag === undefined || hashed !== undefined ? {} : { "If-None-Match": request.etag }),
             };
             const tokenHeaders = token === undefined ? {} : (options.authorization ?? bearer)(token);
 
-            return readOverHttp(options.url(request), headers, tokenHeaders, request, token !== undefined, ctx);
+            if (options.contentHash !== undefined && hashed !== undefined) {
+                const unchanged = await sameContentHash(options.contentHash, hashed, headers, tokenHeaders, request, ctx);
+
+                if (unchanged) {
+                    return { ok: true, notModified: true, ...(request.etag === undefined ? {} : { etag: request.etag }) };
+                }
+            }
+
+            return readOverHttp(options.url(request), headers, tokenHeaders, request, token !== undefined, ctx, options.contentHash?.header);
         },
     };
+}
+
+/**
+ * The content hash a cached copy's ETag holds, when it was written by a strategy with a
+ * `contentHash` header: `x-gitlab-content-sha256:ab12...` gives `ab12...`.
+ */
+function contentHashOf(header: string, etag: string | undefined): string | undefined {
+    const prefix = `${header.toLowerCase()}:`;
+
+    return etag !== undefined && etag.toLowerCase().startsWith(prefix) ? etag.slice(prefix.length) : undefined;
+}
+
+/**
+ * Whether the file's content hash, read with one `HEAD` request, is still the cached copy's. Any
+ * other answer (an error status, no header, no connection) is `false`, and the file is downloaded.
+ */
+async function sameContentHash(
+    contentHash: NonNullable<HttpReadStrategyOptions["contentHash"]>,
+    cached: string,
+    headers: Record<string, string>,
+    tokenHeaders: Record<string, string>,
+    request: RepositoryReadRequest,
+    ctx: RepositoryHostContext,
+): Promise<boolean> {
+    try {
+        const response = await ctx.services.get("host.http").request({
+            url: contentHash.url(request),
+            method: "HEAD",
+            headers: { ...headers, ...tokenHeaders },
+            redirect: "manual",
+            label: `check ${request.path} on ${request.repository.host}`,
+            ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
+        });
+
+        return response.status >= 200 && response.status < 300 && response.headers[contentHash.header.toLowerCase()] === cached;
+    } catch {
+        return false;
+    }
 }
 
 /** `Authorization: Bearer <token>`. */
@@ -92,6 +149,7 @@ async function readOverHttp(
     request: RepositoryReadRequest,
     withToken: boolean,
     ctx: RepositoryHostContext,
+    contentHashHeader?: string,
 ): Promise<RepositoryReadOutcome> {
     const http = ctx.services.get("host.http");
     const origin = new URL(url).origin;
@@ -119,7 +177,7 @@ async function readOverHttp(
         }
 
         if (response.status >= 200 && response.status < 300) {
-            return { ok: true, text: await response.text(), ref: request.ref, ...etagOf(response) };
+            return { ok: true, text: await response.text(), ref: request.ref, ...etagOf(response, contentHashHeader) };
         }
 
         if (response.status >= 300 && response.status < 400) {
@@ -137,17 +195,26 @@ async function readOverHttp(
             continue;
         }
 
-        return { ok: false, reason: describeStatus(response, request, withToken) };
+        return { ok: false, reason: describeStatus(response, request, withToken), status: response.status };
     }
 
     return { ok: false, reason: `more than ${MAX_REDIRECTS} redirects` };
 }
 
-/** The ETag of a response, as an object to spread. */
-function etagOf(response: HttpResponse): { etag?: string } {
+/**
+ * The ETag of a response, as an object to spread. A response with no `ETag` but with the content
+ * hash header gives that hash, written `<header>:<hash>`, so a later read can check it.
+ */
+function etagOf(response: HttpResponse, contentHashHeader?: string): { etag?: string } {
     const etag = response.headers["etag"];
 
-    return etag === undefined ? {} : { etag };
+    if (etag !== undefined) {
+        return { etag };
+    }
+
+    const hash = contentHashHeader === undefined ? undefined : response.headers[contentHashHeader.toLowerCase()];
+
+    return hash === undefined || hash.length === 0 ? {} : { etag: `${contentHashHeader!.toLowerCase()}:${hash}` };
 }
 
 /**

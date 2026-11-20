@@ -69,6 +69,11 @@ export interface StoreSettings {
     freshnessSeconds: number;
     /** How often watch mode checks upstream. Default 300. */
     watchPollSeconds: number;
+    /**
+     * How long a read strategy or clone URL that worked stays the one tried first, counted from
+     * when it became first. Default 604800 (seven days).
+     */
+    strategyMemorySeconds: number;
 }
 
 /** Who added a repository or subscription by hand. */
@@ -111,6 +116,24 @@ export interface RepositoryTokenSource {
     fix?(repository: CanonicalRepository): string | undefined;
 }
 
+/** How a recipe's subtree is fetched. */
+export interface RecipeTreeOptions {
+    /** The clone URL that worked last time, tried before the host's usual order. */
+    readonly first?: string;
+    /**
+     * The token sous found for the repository, handed to git for an HTTPS clone in an
+     * `http.<url>.extraHeader` set through the environment of that one command: never in a URL,
+     * never written to disk.
+     */
+    readonly token?: RepositoryToken;
+}
+
+/** What fetching a recipe's subtree did. */
+export interface RecipeTreeFetched {
+    /** The clone URL that worked. */
+    readonly url: string;
+}
+
 /** One file to read from a repository. */
 export interface RepositoryReadRequest {
     readonly repository: CanonicalRepository;
@@ -128,7 +151,12 @@ export interface RepositoryReadRequest {
 export type RepositoryReadOutcome =
     | { readonly ok: true; readonly text: string; readonly ref: string; readonly etag?: string }
     | { readonly ok: true; readonly notModified: true; readonly etag?: string }
-    | { readonly ok: false; readonly reason: string };
+    | {
+          readonly ok: false;
+          readonly reason: string;
+          /** The HTTP status the host answered with, when it answered; a 401 or 403 to a token sends the next token source's token. */
+          readonly status?: number;
+      };
 
 /** One way to read a file, tried in order; a plugin can add its own. */
 export interface RepositoryReadStrategy {
@@ -258,8 +286,18 @@ export interface RepositoryHostEntity extends RepositoryLocator {
      * Hosts of local paths provide it.
      */
     checkTypedPath?(typed: string, resolved: string, ctx: RepositoryHostContext): void | Promise<void>;
-    /** Fetches one recipe's subtree at one tag into a directory, never the whole repository. */
-    fetchRecipeTree(repository: CanonicalRepository, recipePath: string, tag: string, destination: string, ctx: RepositoryHostContext): Promise<void>;
+    /**
+     * Fetches one recipe's subtree at one tag into a directory, never the whole repository. Returns
+     * the clone URL that worked, when it tried more than one, so the next download tries it first.
+     */
+    fetchRecipeTree(
+        repository: CanonicalRepository,
+        recipePath: string,
+        tag: string,
+        destination: string,
+        ctx: RepositoryHostContext,
+        options?: RecipeTreeOptions,
+    ): Promise<RecipeTreeFetched | void>;
     /** What it calls a proposal: `pull request`, `merge request`. */
     proposalNoun?: string;
     cli?: RepositoryHostCli;

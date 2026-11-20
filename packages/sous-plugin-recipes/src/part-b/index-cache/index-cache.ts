@@ -30,12 +30,14 @@ import type {
     RepoEntry,
     RepositoryHostContext,
     RepositoryHostEntity,
+    RepositoryToken,
 } from "../../types.js";
+import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 import { ensureInStore } from "../fetch/restore.js";
 import { DEFAULT_FRESHNESS_SECONDS } from "../constants.js";
 import { hostFor, identitySegments, messageOf } from "../support.js";
 import { shouldCheckUpstream } from "./freshness.js";
-import { IndexReadError, readThroughChain, StrategyMemoryFile } from "./read-chain.js";
+import { DEFAULT_STRATEGY_MEMORY_SECONDS, findToken, IndexReadError, readThroughChain, stillFirst, StrategyMemoryFile } from "./read-chain.js";
 
 /** The file every index is read from. */
 export const INDEX_FILE_NAME = "sous.index.json";
@@ -67,6 +69,8 @@ export interface IndexCacheCoreOptions {
     readonly hosts: () => readonly RepositoryHostEntity[];
     /** What a host's methods get. */
     readonly hostContext: () => RepositoryHostContext;
+    /** How long a remembered read strategy or clone URL stays first (`store.strategyMemorySeconds`). Default seven days. */
+    readonly strategyMemorySeconds?: () => number;
     readonly now?: () => Date;
 }
 
@@ -103,6 +107,12 @@ export class IndexCacheCore {
     private readonly staleNoticed = new Set<string>();
     /** Upstream reads under way, by identity and whether they are `latest` reads. */
     private readonly inFlight = new Map<string, Promise<CacheLookup>>();
+    /** Refused tokens already warned about in this process. */
+    private readonly warnedTokens = new Set<string>();
+    /** The token each repository's index was read with in this process, and the values its host refused. */
+    private readonly readTokens = new Map<string, { token?: RepositoryToken; refused: readonly string[] }>();
+    /** The token each repository's downloads use in this process, looked up once. */
+    private readonly downloadTokens = new Map<string, Promise<RepositoryToken | undefined>>();
 
     constructor(private readonly options: IndexCacheCoreOptions) {
         this.memory = new StrategyMemoryFile(options.strategiesFile);
@@ -112,6 +122,57 @@ export class IndexCacheCore {
     /** The directory cached indexes live in. */
     get directory(): string {
         return this.options.directory;
+    }
+
+    /** How long a remembered read strategy or clone URL stays first, in seconds. */
+    memorySeconds(): number {
+        try {
+            return this.options.strategyMemorySeconds?.() ?? DEFAULT_STRATEGY_MEMORY_SECONDS;
+        } catch {
+            return DEFAULT_STRATEGY_MEMORY_SECONDS;
+        }
+    }
+
+    /** The clone URL a repository's downloads try first, while it is remembered. */
+    downloadFirst(identity: string): string | undefined {
+        const download = this.memory.read()[identity]?.download;
+
+        return download !== undefined && stillFirst(download.since, this.now(), this.memorySeconds()) ? download.url : undefined;
+    }
+
+    /**
+     * Records how a download went: the clone URL that worked (kept first from when it first became
+     * first), or, with `undefined`, that none did.
+     */
+    noteDownload(identity: string, url: string | undefined, triedFirst: string | undefined): void {
+        if (url === undefined) {
+            this.memory.rememberDownload(identity, undefined);
+
+            return;
+        }
+
+        const previous = this.memory.read()[identity]?.download;
+        const timestamp = this.now().toISOString();
+        const since = previous !== undefined && previous.url === url && triedFirst === url ? previous.since : timestamp;
+
+        this.memory.rememberDownload(identity, { url, lastSuccess: timestamp, since });
+    }
+
+    /**
+     * The token a repository's recipe downloads hand to git: the one its index was read with in
+     * this process, else the first a token source finds that the host has not refused.
+     */
+    downloadToken(identity: string, host: RepositoryHostEntity, repository: CanonicalRepository, ctx: RepositoryHostContext): Promise<RepositoryToken | undefined> {
+        let pending = this.downloadTokens.get(identity);
+
+        if (pending === undefined) {
+            const read = this.readTokens.get(identity);
+
+            pending = read?.token !== undefined ? Promise.resolve(read.token) : findToken({ host, repository }, ctx, read?.refused ?? []).catch(() => undefined);
+            this.downloadTokens.set(identity, pending);
+        }
+
+        return pending;
     }
 
     /** Installs an overlay only when none is installed yet. */
@@ -379,8 +440,10 @@ export class IndexCacheCore {
             },
             this.memory,
             signal === undefined ? context : { ...context, signal },
-            this.now,
+            { now: this.now, memorySeconds: this.memorySeconds(), warned: this.warnedTokens },
         );
+
+        this.readTokens.set(target.identity, { ...(outcome.token === undefined ? {} : { token: outcome.token }), refused: outcome.refusedTokens ?? [] });
 
         if ("notModified" in outcome) {
             return { notModified: true, strategy: outcome.strategy, ...(outcome.etag === undefined ? {} : { etag: outcome.etag }) };
