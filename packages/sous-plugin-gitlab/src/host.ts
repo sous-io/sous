@@ -123,6 +123,7 @@ export function createGitlabHost(options: GitlabPluginOptions = {}): GitlabRepos
         authStatus: (ctx) => cliAuthStatus(GLAB, ctx),
         ...gitlabProposals(),
         scaffoldFiles: gitlabCiFiles,
+        fileUrl: (repositoryUrl, branch, file) => `${repositoryUrl}/-/blob/${branch}/${file}`,
     };
 }
 

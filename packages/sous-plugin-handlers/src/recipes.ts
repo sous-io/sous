@@ -64,9 +64,9 @@ export function recipeDeclarationsContributor(): ContributorDefinition {
     };
 }
 
-/** The id of a recipe's handler: `voltagrid/knowledge-worker/check/checkCommands`. */
+/** The id of a recipe's handler, naming its file: `voltagrid/knowledge-worker/check/handlers/check.js#checkCommands`. */
 export function recipeHandlerId(declaration: RecipeHandlerDeclaration): string {
-    return `${declaration.recipe}/${declaration.purpose}/${declaration.handler}`;
+    return `${declaration.recipe}/${declaration.purpose}/${declaration.file}#${declaration.handler}`;
 }
 
 /**
@@ -99,7 +99,6 @@ export function recipeHandlersContributor(): ContributorDefinition {
         contribute(config) {
             const recipes = new Map(handlerRecipes(config).map((recipe) => [recipe.id, recipe]));
             const declarations = config.atPath(RECIPE_HANDLERS_KEY).get<RecipeHandlerDeclaration[]>() ?? [];
-            const used = new Map<string, number>();
             const seen = new Set<string>();
 
             for (const declaration of declarations) {
@@ -125,13 +124,8 @@ export function recipeHandlersContributor(): ContributorDefinition {
                     continue;
                 }
 
-                const base = recipeHandlerId(declaration);
-                const count = (used.get(base) ?? 0) + 1;
-
-                used.set(base, count);
-
                 const entity: HandlerEntity = {
-                    id: count === 1 ? base : `${base}#${count}`,
+                    id: recipeHandlerId(declaration),
                     purpose: declaration.purpose,
                     recipe: recipe.id,
                     source: `${declaration.file}#${declaration.handler}`,

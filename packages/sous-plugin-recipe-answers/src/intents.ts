@@ -17,7 +17,6 @@ import {
 } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
-import { resolveEnvFile } from "./env-file.js";
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
@@ -122,17 +121,25 @@ function storeFor(ctx: Context): AnswerStore {
     };
 }
 
+/**
+ * The env file every answer of the run goes to: `--save-locally` picks `.sous/.env.local`,
+ * `--save-shared` picks `.sous/.env`, neither leaves each answer to its own file, and both is an error.
+ */
+function chosenEnvFile(input: VarsAskInput): EnvFileKind | undefined {
+    if (input.saveLocally === true && input.saveShared === true) {
+        throw new ConfigError("--save-locally and --save-shared cannot be used together: each names a different file for every answer of the run.");
+    }
+
+    return input.saveLocally === true ? "local" : input.saveShared === true ? "shared" : undefined;
+}
+
 /** `vars.ask`. */
 export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<IntentOutputs<VarsAskResult>> {
     const dryRun = input.dryRun === true;
     const hidden = hiddenValue(ctx.services);
 
     const store = storeFor(ctx);
-    const root = ctx.project?.root ?? ctx.cwd ?? ".";
-    const envFile =
-        input.envFile === undefined
-            ? undefined
-            : resolveEnvFile(input.envFile, { shared: store.envPath("shared"), local: store.envPath("local") }, root, ctx.cwd ?? root);
+    const envFile = chosenEnvFile(input);
 
     const reportSettings = (): void =>
         ctx.reporter.variables([
@@ -319,7 +326,8 @@ export const varsIntents: IntentDefinition[] = [
                 dryRun: { type: "boolean", default: false, description: "Report what would be asked and written, without writing anything" },
                 answer: { type: "array", items: { type: "string" }, description: "Answer a variable ahead of its question, as <name>=<value>" },
                 answersFile: { type: "string", description: "Read answers from a YAML, JSON or .env file of name: value pairs" },
-                envFile: { type: "string", description: "Write every answer of this run to this env file: .sous/.env (committed) or .sous/.env.local (this machine only)" },
+                saveLocally: { type: "boolean", default: false, description: "Store every answer of this run in .sous/.env.local, which is gitignored and stays on this machine" },
+                saveShared: { type: "boolean", default: false, description: "Store every answer of this run in .sous/.env, which is committed and shared with everyone on the project" },
                 yes: { type: "boolean", default: false, description: "Answer yes to storing a secret or machine-specific answer in the committed .sous/.env" },
             },
             additionalProperties: false,
@@ -338,7 +346,7 @@ export const varsIntents: IntentDefinition[] = [
                 "sous vars ask --file ./questions.yaml",
                 "sous vars ask --answer apiUrl=https://api.example.com",
                 "sous vars ask --answers-file ./answers.yaml",
-                "sous vars ask --env-file .env.local",
+                "sous vars ask --save-locally",
             ],
             // `within` is how subscribing asks for the recipes it installed; not a flag for people.
             flags: { within: { hidden: true }, yes: { short: "y", aliases: ["force"] } },

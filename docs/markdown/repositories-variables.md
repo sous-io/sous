@@ -273,7 +273,8 @@ lists them and asks which one, and `--accept-first` takes the first.
 | `sous vars ask --all` | Asks every variable again, including the ones already answered |
 | `sous vars ask --accept-first` | When the name matches several things, takes the first one listed |
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
-| `sous vars ask --env-file <file>` | Stores every answer of the run in `.sous/.env` (committed) or `.sous/.env.local` (this machine only); any spelling that names one is accepted, and a secret or machine-specific variable sent to the committed file needs a yes (`--yes`) |
+| `sous vars ask --save-locally` | Stores every answer of the run in `.sous/.env.local` (gitignored, this machine only) |
+| `sous vars ask --save-shared` | Stores every answer of the run in `.sous/.env` (committed); a secret or machine-specific variable sent there needs a yes (`--yes`). It cannot be used with `--save-locally` |
 | `sous vars ask --answer <name>=<value>` | Answers one question ahead of time; repeat it for each answer |
 | `sous vars ask --answers-file <path>` | Reads answers from a YAML or JSON file of `name: value` pairs |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything; with no terminal, it lists the questions it would ask instead of failing |

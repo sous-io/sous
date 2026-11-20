@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { parseDocument } from "@sous-io/sous-lib-documents";
-import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
+import { BufferedReporter, isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostEntity, ScaffoldOptions } from "@sous-io/sous-plugin-recipes/types";
 import type { RepoInitInput } from "../types.js";
 import { git, initRepo, makeTmpDir, type TmpDir } from "../../test/support/git-repo.js";
@@ -33,10 +33,20 @@ function workflowHost(seen: ScaffoldOptions[] = []): RepositoryHostEntity {
   };
 }
 
+/** A GitLab host stand-in: its pipeline needs a token, and its file addresses have `/-/blob/`. */
+function gitlabHost(): RepositoryHostEntity {
+  return {
+    ...workflowHost(),
+    id: "gitlab",
+    scaffoldFiles: () => [{ path: ".gitlab-ci.yml", content: "stages:\n  - check\n", warning: "The release job needs SOUS_RELEASE_TOKEN." }],
+    fileUrl: (repositoryUrl: string, branch: string, file: string) => `${repositoryUrl}/-/blob/${branch}/${file}`,
+  };
+}
+
 /** Scaffolds with the stand-ins, as the intent does. */
-function scaffoldRepo(input: RepoInitInput & { sousVersion: string; now?: Date }, hosts: RepositoryHostEntity[] = []) {
+function scaffoldRepo(input: RepoInitInput & { sousVersion: string; now?: Date }, hosts: RepositoryHostEntity[] = [], reporter = new BufferedReporter()) {
   const { sousVersion, now, ...rest } = input;
-  return scaffold(testTools({ sousVersion, hosts }), rest, { cwd: process.cwd(), ...(now === undefined ? {} : { now }) });
+  return scaffold(testTools({ sousVersion, hosts, reporter }), rest, { cwd: process.cwd(), ...(now === undefined ? {} : { now }) });
 }
 
 /** The version recorded in scaffolded indexes; any valid semver will do. */
@@ -217,6 +227,25 @@ describe("scaffoldRepo()", () => {
     expect(seen).toEqual([{ name: "my-recipes", namespace: "my-recipes", sousVersion: SOUS_VERSION }]);
     expect(fs.readFileSync(path.join(target, ".github/workflows/sous-release.yml"), "utf8")).toContain("pull_request");
     expect(fs.readFileSync(path.join(target, "README.md"), "utf8")).toContain("`.github/workflows/sous-release.yml`");
+  });
+
+  /**
+   * On GitLab: the host's file warns as a warning, the scaffolded `contribute` comment uses the
+   * host's address shape, and the output ends with the files written, with no "What to do next"
+   * section (gh-230 item 9, gh-159).
+   */
+  it("should warn with the host's file warning and suggest a contribute address in the host's shape", async () => {
+    const reporter = new BufferedReporter();
+    const tools = testTools({ sousVersion: SOUS_VERSION, hosts: [gitlabHost()], reporter });
+
+    await scaffold(tools, { directory: target, host: "gitlab" }, { cwd: process.cwd() });
+
+    expect(reporter.at("warning")).toEqual(["The release job needs SOUS_RELEASE_TOKEN."]);
+    expect(fs.readFileSync(path.join(target, "sous.repo.yaml"), "utf8")).toContain(
+      "# contribute: https://<host>/<owner>/my-recipes/-/blob/main/CONTRIBUTING.md",
+    );
+    expect(tools.results.map((output) => output.title)).not.toContain("What to do next");
+    expect(tools.results.at(-1)?.title).toBe("Creating a recipe repository");
   });
 
   /** With no --host, the host reading the directory's origin remote scaffolds its files. */

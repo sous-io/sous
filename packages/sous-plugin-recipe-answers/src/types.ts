@@ -271,8 +271,10 @@ export interface VarsAskInput extends ProvidedAnswerInputs {
     /** A definitions file. */
     file?: string;
     dryRun?: boolean;
-    /** The env file every answer of this run is written to, as the person spelled it. */
-    envFile?: string;
+    /** Store every answer of this run in `.sous/.env.local`. */
+    saveLocally?: boolean;
+    /** Store every answer of this run in `.sous/.env`. */
+    saveShared?: boolean;
     /** Answers yes to storing a secret or machine-specific answer in the committed env file. */
     yes?: boolean;
 }

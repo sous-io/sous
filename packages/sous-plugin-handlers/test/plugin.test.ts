@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { IntentOutputs, jsonSchema } from "@sous-io/sous-plugin-api";
+import { IntentOutputs, jsonSchema, PluginError } from "@sous-io/sous-plugin-api";
 import type { DoctorCheckResult } from "@sous-io/sous-plugin-doctor";
 import { checkHandlersCheck } from "../src/doctor-check.js";
 import type { HandlerRunResult } from "../src/types.js";
@@ -56,8 +56,23 @@ describe("check handlers from plugins", () => {
 
         expect(result).toMatchObject({ purpose: "check", errors: 1, warnings: 1, failed: true });
         expect(outputs.exitCode).toBe(1);
-        expect(reporter.at("error")).toContain("ran a/needs-jq");
-        expect(reporter.at("warning")).toContain("ran a/likes-pandoc");
+        expect(reporter.at("error")).toContain("sous-plugin-a (check: a/needs-jq): ran a/needs-jq");
+        expect(reporter.at("warning")).toContain("sous-plugin-a (check: a/likes-pandoc): ran a/likes-pandoc");
+    });
+
+    /**
+     * A plugin cannot add `uninstall` or `migrate` handlers: Sous runs them only for a recipe, so
+     * `sous.handlers.add` throws a `PluginError` naming the plugin and the manifest route (gh-288).
+     */
+    it.each(["uninstall", "migrate"])("should refuse a plugin's %s handler, naming the plugin and the recipe manifest", async (purpose) => {
+        const engine = () =>
+            makeEngine(tmp.path, state, [reporting("sous-plugin-a", [{ purpose, id: "a/cleanup" }])]).engine.buildConfig();
+        const error = await Promise.resolve().then(engine).catch((thrown: unknown) => thrown);
+
+        expect(error).toBeInstanceOf(PluginError);
+        expect(error).toMatchObject({ plugin: "sous-plugin-a" });
+        expect((error as Error).message).toContain(`The plugin sous-plugin-a adds a ${purpose} handler (a/cleanup)`);
+        expect((error as Error).message).toContain(`recipe's manifest, under handlers.${purpose}`);
     });
 
     /**
@@ -74,7 +89,7 @@ describe("check handlers from plugins", () => {
 
         expect(result).toMatchObject({ errors: 1, ignoredErrors: 1, failed: false });
         expect(reporter.at("error")).toEqual([]);
-        expect(reporter.at("warning").join("\n")).toMatch(/ran a\/needs-jq.*ignored/);
+        expect(reporter.at("warning")).toEqual(["sous-plugin-a (check: a/needs-jq): ran a/needs-jq (a failed check, ignored)"]);
     });
 
     /**
@@ -99,7 +114,7 @@ describe("check handlers from plugins", () => {
 
         expect(ranIds(result)).toEqual(["a/broken", "b/after-broken"]);
         expect(result.ran[0]?.threw).toBe("no network");
-        expect(reporter.at("error").join("\n")).toMatch(/beforeBuild handler a\/broken failed: no network/);
+        expect(reporter.at("error")).toEqual(["sous-plugin-a (beforeBuild: a/broken): failed: no network"]);
         expect(engine.timings.get("entity.method:handler:a/broken.handle")?.count).toBe(1);
         expect(engine.timings.get("entity.method:handler:b/after-broken.handle")?.count).toBe(1);
     });
@@ -133,7 +148,7 @@ describe("the order handlers run in", () => {
 
         const result = await run<HandlerRunResult>(engine, reporter, "handlers.afterBuild");
 
-        expect(ranIds(result)).toEqual(["a/early", "b/1", "b/2", "a/1", "z/last/afterBuild/two", "z/last/afterBuild/one", "a/first/afterBuild/one"]);
+        expect(ranIds(result)).toEqual(["a/early", "b/1", "b/2", "a/1", "z/last/afterBuild/h.js#two", "z/last/afterBuild/h.js#one", "a/first/afterBuild/h.js#one"]);
     });
 });
 
@@ -144,7 +159,7 @@ describe("handlers from a recipe's manifest", () => {
      *
      * handlers: { check: [{ file: "handlers/prerequisites.js", handler: "checkCommands" }] }
      * // -> recipes.handlers: [{ recipe: "voltagrid/knowledge-worker", purpose: "check", ... }]
-     * // -> handler entity "voltagrid/knowledge-worker/check/checkCommands"
+     * // -> handler entity "voltagrid/knowledge-worker/check/handlers/prerequisites.js#checkCommands"
      */
     it("should add the manifest's handlers to the config and run the named exports", async () => {
         state.recipes = [
@@ -170,9 +185,32 @@ describe("handlers from a recipe's manifest", () => {
 
         const result = await run<HandlerRunResult>(engine, reporter, "handlers.check");
 
-        expect(ranIds(result)).toEqual(["voltagrid/knowledge-worker/check/checkCommands"]);
+        expect(ranIds(result)).toEqual(["voltagrid/knowledge-worker/check/handlers/prerequisites.js#checkCommands"]);
         expect(result).toMatchObject({ errors: 0, warnings: 1, failed: false });
-        expect(reporter.at("warning")).toContain("sous-test-no-such-command is not installed.");
+        expect(reporter.at("warning")).toContain("voltagrid/knowledge-worker (check: checkCommands): sous-test-no-such-command is not installed.");
+    });
+
+    /**
+     * Two handler files of one recipe exporting the same function name are two handlers, each id
+     * naming its file, with no counter (gh-288).
+     */
+    it("should name the file in the id of each of two same-named handlers", async () => {
+        const handlerFile = "export function check(sous) { sous.report.info('ran'); }\n";
+
+        state.recipes = [
+            recipe(tmp.path, "a/r", {
+                files: { "one.js": handlerFile, "two.js": handlerFile },
+                handlers: { check: [{ file: "one.js", handler: "check" }, { file: "two.js", handler: "check" }] },
+            }),
+        ];
+
+        const { engine, reporter } = makeEngine(tmp.path, state);
+        await engine.buildConfig();
+
+        const result = await run<HandlerRunResult>(engine, reporter, "handlers.check");
+
+        expect(ranIds(result)).toEqual(["a/r/check/one.js#check", "a/r/check/two.js#check"]);
+        expect(engine.timings.get("entity.method:handler:a/r/check/two.js#check.handle")?.count).toBe(1);
     });
 
     /**
@@ -210,7 +248,7 @@ describe("handlers from a recipe's manifest", () => {
         const result = await run<HandlerRunResult>(engine, reporter, "handlers.check");
 
         expect(result.failed).toBe(true);
-        expect(reporter.at("error").join("\n")).toMatch(/a\/r lists the handler missing in h\.js, which does not export a function by that name/);
+        expect(reporter.at("error")).toEqual(["a/r (check: missing): failed: The recipe a/r lists the handler missing in h.js, which does not export a function by that name."]);
     });
 });
 
@@ -300,7 +338,7 @@ describe("what a handler receives", () => {
         await withEditor.engine.buildConfig();
         await run(withEditor.engine, withEditor.reporter, "handlers.afterBuild");
 
-        expect(withEditor.reporter.at("info")).toContain("editing CLAUDE.md");
+        expect(withEditor.reporter.at("info")).toContain("sous-plugin-a (afterBuild: a/edit): editing CLAUDE.md");
     });
 });
 
@@ -333,6 +371,24 @@ describe("configure handlers", () => {
 
         expect(built.get("recipes.declared")).toEqual({ root: tmp.path, seen: "value" });
     });
+
+    /** What a `configure` handler reports, and a `configure` handler that throws, name who reported (gh-288). */
+    it("should name the recipe and the handler on every line it reports", async () => {
+        state.recipes = [
+            recipe(tmp.path, "acme/tool", {
+                files: { "c.js": "export function noted(sous) { sous.report.warn('noted'); }\nexport function broken() { throw new Error('boom'); }\n" },
+                handlers: { configure: [{ file: "c.js", handler: "noted" }, { file: "c.js", handler: "broken" }] },
+            }),
+        ];
+
+        const { engine, reporter } = makeEngine(tmp.path, state);
+        await engine.buildConfig().catch(() => undefined);
+
+        const lines = [...reporter.at("warning"), ...reporter.at("error")].join("\n");
+
+        expect(lines).toContain("acme/tool (configure: noted): noted");
+        expect(lines).toContain("acme/tool (configure: broken): failed: boom");
+    });
 });
 
 describe("migrate, uninstall and check on subscribing", () => {
@@ -357,7 +413,7 @@ describe("migrate, uninstall and check on subscribing", () => {
         await run(engine, reporter, "subscription.update");
         await engine.buildConfig();
 
-        expect(reporter.at("info").filter((line) => line.startsWith("migrated"))).toEqual(["migrated from 1.0.0 to 2.0.0"]);
+        expect(reporter.at("info").filter((line) => line.includes("migrated"))).toEqual(["acme/tool (migrate: migrate): migrated from 1.0.0 to 2.0.0"]);
     });
 
     /**
@@ -373,10 +429,10 @@ describe("migrate, uninstall and check on subscribing", () => {
         await engine.buildConfig();
 
         await run(engine, reporter, "subscription.remove", { dryRun: true });
-        expect(reporter.at("info").filter((line) => line.startsWith("uninstalled"))).toEqual([]);
+        expect(reporter.at("info").filter((line) => line.includes("uninstalled"))).toEqual([]);
 
         await run(engine, reporter, "subscription.remove");
-        expect(reporter.at("info").filter((line) => line.startsWith("uninstalled"))).toEqual([`uninstalled ${tmp.path}`]);
+        expect(reporter.at("info").filter((line) => line.includes("uninstalled"))).toEqual([`acme/tool (uninstall: removeSessionFiles): uninstalled ${tmp.path}`]);
     });
 
     /**
@@ -392,7 +448,7 @@ describe("migrate, uninstall and check on subscribing", () => {
 
         await run(engine, reporter, "subscription.add", { noBuild: true });
 
-        expect(reporter.at("warning")).toContain("checked on subscribing");
+        expect(reporter.at("warning")).toContain("acme/tool (check: check): checked on subscribing");
     });
 });
 
@@ -411,7 +467,7 @@ describe("the check handlers doctor check", () => {
      * The check runs the check handlers without printing, and reports their errors as a problem and
      * their warnings as a warning, one line each.
      *
-     * check: a (error), b (warn)  // -> problem, details ["a/needs-jq: ran a/needs-jq", "a/likes-pandoc: ..."]
+     * check: a (error), b (warn)  // -> problem, details ["sous-plugin-a (check: a/needs-jq): ran a/needs-jq", ...]
      */
     it("should report errors as a problem and warnings as a warning, printing nothing", async () => {
         const { engine, reporter } = makeEngine(tmp.path, state, [
@@ -425,7 +481,7 @@ describe("the check handlers doctor check", () => {
 
         const found = await run<DoctorCheckResult>(engine, reporter, "test.doctor");
 
-        expect(found).toMatchObject({ status: "problem", details: ["a/needs-jq: ran a/needs-jq", "a/likes-pandoc: ran a/likes-pandoc"] });
+        expect(found).toMatchObject({ status: "problem", details: ["sous-plugin-a (check: a/needs-jq): ran a/needs-jq", "sous-plugin-a (check: a/likes-pandoc): ran a/likes-pandoc"] });
         expect(reporter.at("error")).toEqual([]);
         expect(reporter.at("warning")).toEqual([]);
     });

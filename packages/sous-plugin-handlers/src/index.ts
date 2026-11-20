@@ -32,6 +32,7 @@ export const handlerSchema: SousSchema<HandlerEntity, HandlerEntity> = (() => {
             purpose: { enum: [...HANDLER_PURPOSES], description: "What it is for." },
             order: { type: "number", description: "Lower runs earlier within the purpose. Default 500." },
             recipe: { type: "string", description: "The recipe that lists it, for a handler from a manifest." },
+            plugin: { type: "string", description: "The plugin that added it, for a handler from a plugin." },
             source: { type: "string", description: "Where it came from: the file and export." },
         },
     });

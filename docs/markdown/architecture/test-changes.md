@@ -1997,3 +1997,28 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should compile only the targets that read a changed file" (`targets.test.ts`): the target naming the missing `@later.md` is compiled and its output holds `@later.md`, instead of reporting "Include not found".
 - **Replaced** the `looksLikeIncludeLine` and `isIncludeLine` cases in `sous-plugin-compiler/src/paths.spec.ts` with cases for `importPath`, `isIncludableFile`, `isSousIncludeForm` and the new `isIncludeLine`; `looksLikeIncludeLine` and `INCLUDE_LINE_PATTERN` are gone.
 - **New** `sous-plugin-compiler/src/markdown.spec.ts` (the rows of the comparison with Claude Code), `sous-plugin-compiler/src/globs.spec.ts` (the 21-row order table), "includes anywhere in Markdown text" and "should leave a glob's binary matches out" in `includes.test.ts`, and "should order a recipe's memories like a glob include" in `sous-plugin-memories/src/listing.spec.ts`.
+
+### `vars ask --save-locally` and `--save-shared` replace `--env-file` (sous-plugin-recipe-answers; gh-263, gh-230 item 11)
+
+- **Removed** `sous-plugin-recipe-answers/src/env-file.spec.ts` ("resolveEnvFile()"), with the resolver it tested.
+  - **Why:** Node 22 and later claim `--env-file` anywhere on their command line, so the flag never reached sous; two switches name the two files instead, and nothing is left to resolve.
+- **Changed** the `describe("--env-file")` block of `src/ask.spec.ts` is now `describe("--save-locally and --save-shared")`; its tests are unchanged.
+- **Changed** `e2e/scenarios/04-variables.mjs`: "--env-file .sous/.env.local writes the answer to the machine-local file" is now "--save-locally writes the answer to the machine-local file", and "an --env-file that is not one of the two allowed files fails naming both" is now "--save-locally and --save-shared together fail naming both".
+- **New** "should store every answer in the file a save switch names" (`test/plugin.test.ts`).
+
+### A rolled-back file takes the folders Sous created for it (sous-plugin-editor; gh-270)
+
+- **Changed** "should create starter files and folders and roll them back safely" (`src/apply.spec.ts`): `directories.created` also lists `.kw`, the folder created to hold `.kw/descriptor.json`, and the rollback removes `.kw`.
+  - **Why:** a new file's missing parent folders are now created, recorded and rolled back like a declared folder's.
+- **New** in `src/apply.spec.ts`: "should remove the parent folders it created for a starter file", "should keep a parent folder that existed, holds other files or is still wanted", "should remove the .claude folder a set created settings.json in" and "should read a history without createdFolders as recording no folders".
+
+### Plugin uninstall and migrate handlers refused; report lines and ids name their source (sous-plugin-handlers; gh-288)
+
+- **Changed** in `test/plugin.test.ts`: every expected report line now starts with who reported it (`sous-plugin-a (check: a/needs-jq): ran a/needs-jq`, `acme/tool (migrate: migrate): migrated from 1.0.0 to 2.0.0`), a thrown error reads `<who>: failed: <error>`, and a recipe handler's id includes its file (`z/last/afterBuild/h.js#two`). The `migrate` and `uninstall` tests filter lines with `includes` instead of `startsWith`.
+  - **Why:** report lines name the recipe or plugin and the handler, and ids name the file, as #288 asked.
+- **New** in `test/plugin.test.ts`: "should refuse a plugin's uninstall handler..." and "...migrate handler...", "should name the file in the id of each of two same-named handlers", and "should name the recipe and the handler on every line it reports" (configure).
+
+### `repo init` on GitLab: the token warning, the contribute address, no "What to do next" (sous-plugin-authoring, sous-plugin-gitlab; gh-230 item 9, gh-159)
+
+- **New** "should warn with the host's file warning and suggest a contribute address in the host's shape" (`sous-plugin-authoring/src/scaffold/scaffold.spec.ts`).
+- **Changed** "should write a pipeline that checks merge requests and releases the default branch" (`sous-plugin-gitlab/src/proposals.spec.ts`): it also expects the file's `SOUS_RELEASE_TOKEN` warning and the host's `fileUrl` shape. **New** "should fail the release job naming SOUS_RELEASE_TOKEN before anything is committed", which runs the job's check with and without the variable.

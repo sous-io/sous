@@ -554,8 +554,10 @@ sous repo contribute workflow/task-files --finish --title "Clarify the resume st
 Creates a new recipe repository, then runs [`sous init`](#sous-init-directory) in the same directory, so the
 repository is also a sous project whose memories file and `.claude/skills/` are build output. It
 passes `--yes`, `--move-includes`, `--copy-includes`, `--leave-includes`, `--no-build` and `--dry-run` through to
-init. A directory that already holds a sous config keeps it, and init is skipped with a note. See
-[Authoring a repository](repositories-authoring.md).
+init. A directory that already holds a sous config keeps it, and init is skipped with a note. `--host github`
+writes `.github/workflows/sous-release.yml` and `--host gitlab` writes `.gitlab-ci.yml` (default: the host of
+the `origin` remote, else `github`); on GitLab it warns that the release job needs the masked CI/CD variable
+`SOUS_RELEASE_TOKEN`. See [Authoring a repository](repositories-authoring.md).
 
 ```bash
 sous repo init ./my-recipes --name team-recipes --namespace workflow
@@ -638,9 +640,9 @@ Inspects the questions the project's recipes ask, and the answers they hold; see
 - `vars list` lists every variable, with where its value came from.
 - `vars show NAME` shows everything about one variable. `NAME` may also be an environment variable name that
   answers it.
-- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--env-file .env` or
-  `--env-file .env.local` stores every answer of the run in that one file (committed, or this machine only); a
-  secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
+- `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--save-shared` stores
+  every answer of the run in `.sous/.env` (committed), and `--save-locally` in `.sous/.env.local` (this machine
+  only); the two cannot be used together. A secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).
 
 ```bash
 sous vars show workflow/task-files.apiUrl

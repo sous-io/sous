@@ -74,17 +74,16 @@ export default {
       expectIncludes(t.read(".sous/.env"), "SOUS_VAR_CREATE_ISSUES=always", ".sous/.env");
     });
 
-    await t.step("--env-file .sous/.env.local writes the answer to the machine-local file", () => {
-      const r = t.sous(["vars", "ask", "--non-interactive", "--var", "sendMessages", "--answer", "sendMessages=always", "--env-file", ".sous/.env.local"]);
+    await t.step("--save-locally writes the answer to the machine-local file", () => {
+      const r = t.sous(["vars", "ask", "--non-interactive", "--var", "sendMessages", "--answer", "sendMessages=always", "--save-locally"]);
       assert.equal(r.code, 0, r.stderr);
       expectIncludes(t.read(".sous/.env.local"), "SOUS_VAR_SEND_MESSAGES=always", ".sous/.env.local");
     });
 
-    await t.step("an --env-file that is not one of the two allowed files fails naming both", () => {
-      const r = t.sous(["vars", "ask", "--non-interactive", "--var", "sendMessages", "--answer", "sendMessages=always", "--env-file", "other.env"]);
+    await t.step("--save-locally and --save-shared together fail naming both", () => {
+      const r = t.sous(["vars", "ask", "--non-interactive", "--var", "sendMessages", "--answer", "sendMessages=always", "--save-locally", "--save-shared"]);
       assert.notEqual(r.code, 0);
-      expectIncludes(r.stderr, ".sous/.env", "stderr");
-      expectIncludes(r.stderr, ".sous/.env.local", "stderr");
+      expectIncludes(r.stderr, "--save-locally and --save-shared cannot be used together", "stderr");
     });
 
     await t.step("an answer from the shell environment shows up as its source", () => {
