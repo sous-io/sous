@@ -1,94 +1,10 @@
-## CLI Conventions (every command, every prompt, every output)
+## CLI Conventions
 
-These bind every command, flag, question, table and file sous writes. Where the code already
-holds the mechanism, use it rather than building a second one beside it.
-
-- **Help describes precisely the thing it names, in one sentence.** No cross-references to other
-  commands, no tips, no "see also". Command OUTPUT shows facts about what happened; it never
-  ends in a footer hinting at some other command the reader might want.
-- **Names read like speech, and a small fixed set of choices gets one switch per choice.** Strip
-  the punctuation from a command or flag and it should sound like something one person would say
-  to another: `--move-includes`, `--copy-includes` and `--leave-includes` (help names the default),
-  never `--included-files <move|leave>`. A convention may force an exception, such as a `--no-`
-  form, but natural phrasing is always the aim. The user, 2026-11-15: "if I remove the special
-  characters, operators, and all of that, from <x>, does it sound like something a person would
-  say to another person? \"included files leave\" ... umm ... no. `--move-includes` ... yes."
-- **Topics are singular** (`repo`, `subscription`, `config`); `vars` is the deliberate plural.
-  Every topic accepts both spellings, with the alternate hidden (`BUILT_IN_GROUPS` in
-  `packages/sous-plugin-cli/src/groups.ts`, whose `aliases` hold the hidden spelling).
-- **One confirmation flag family, from the shared flag options** (`yesFlag` and `yesFlagNoTrust` in
-  `packages/sous-plugin-recipes/src/part-a/intents/schema.ts`; the command line reads `-y` and `-f` in
-  `packages/sous-plugin-cli/src/flags.ts`): `--yes`
-  with `-y` is the primary spelling, `--force` and `-f` are aliases of it, and `--trust` is
-  added where trust is the question. Aliases render as a suffix on the primary's help line;
-  never declare a second flag.
-- **Only `sous repo release` edits a version number, and only in the repository it is run in.**
-  It raises a changed recipe whose version still equals its last tag; `--bump` chooses how far
-  (a patch step by default) and `--no-bump`, which `--ci` implies, makes an unraised change an
-  error instead. The rule lives in `buildReleasePlan` (`packages/sous-plugin-authoring/src/release/plan.ts`).
-- **Every command that takes a reference resolves it through `packages/sous-plugin-refs/src/`.**
-  `RefsResolver.resolve` (`createRefsResolver`, `resolver.ts`) reads what a word on the command line names (over the kinds a
-  command accepts: repository, namespace, recipe, variable, environment variable name), and
-  `RefsPicker` (`createRefsPicker`, `picker.ts`) settles which meaning a run proceeds with (one match, a question,
-  `--accept-first`, or the shared non-interactive failure). Any level of qualification is
-  accepted up to the fully qualified name, and so is a location (a URL, an SSH remote, a
-  provider-scheme locator, a URL copied from the browser). Matching tries the exact spelling
-  first, then ignores case; a name that still matches several things is a question. The
-  listing order is the contract. What a reference resolved to is reported by the picker with
-  `reporter.resolvedReference(reason, facts)`, which the terminal draws (`formatResolvedReference`,
-  `packages/sous-plugin-cli/src/views/ref-report.ts`) as the facts in a key and value list, then one
-  sentence saying why that candidate won.
-  Never resolve a name by walking an index or a definition list in a command.
-- **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
-  (`canPrompt` and `whyCannotPrompt` in `packages/sous-plugin-cli/src/terminal-prompter.ts`). Fail instead, naming both the question that could not be asked and
-  the flag that would have answered it, and print the command's help under the error. All of it
-  goes to stderr, so piped stdout stays clean.
-- **Informed consent, never prevention.** Warn with facts the user can verify, confirm, then do
-  what the user asked for. Never state what a user intended.
-- **Machine-written config layers are `.jsonc`** with a header comment saying what the file
-  holds and who writes it, edited by key so comments, key order and formatting survive
-  (`managedHeader` and `ConfdManagedImpl` in `packages/sous-plugin-confd/src/managed.ts`). Users may edit them too. Where strict JSON makes a comment
-  property unavoidable, the key is `//`.
-- **Every directory sous creates for itself carries `README.md`, `AGENTS.md` and `CLAUDE.md`**
-  (`createDirectories` in `packages/sous-plugin-host/src/directories.ts`, with `KNOWN_READMES` in
-  `readmes.ts`); rendered output directories carry none of the three.
-- **Variable definitions require `description` and `example`.** The description says, in full
-  sentences, what the setting is for, what the default does, and what else is acceptable; the
-  prompt itself stays one plain question.
-- **One ref resolver, told where the ref came from**: `RefsParser` (`createRefsParser`, `packages/sous-plugin-refs/src/parser/parser.ts`)
-  reads every form and returns every reading, and the `RefPrunerEntity` (`packages/sous-plugin-refs/src/pruners/pruners.ts`) for the ref's `RefSource` (the
-  place it was written) drops what that place refuses, saying what to write instead. Never
-  parse a ref, or split a key, anywhere else (`splitRecipeKey` and `namespaceOfKey` in
-  `packages/sous-plugin-recipes/src/part-a/catalog.ts` take stored
-  keys apart). A ref is stored and printed as its published identity (namespace and recipe),
-  never as a folder path. Any spelling that settles to one identity is accepted, including a
-  folder path or a pasted browser URL; host-specific readings belong to each provider's
-  `readLocation`.
-- **A result is returned, never printed; everything else is reported, never formatted.** An intent
-  returns `IntentOutputs` built from payloads (`VariableSet`, `Table`, ...;
-  `packages/sous-plugin-api/src/outputs.ts`; ADR 0022); while it runs it reports through the level and
-  style methods (`BaseReporter`, `packages/sous-plugin-api/src/reporter.ts`; ADR 0021). No caller writes
-  a glyph, pads a label, indents a line or joins lines with "\n". The CLI knows no domain: there are
-  no per-intent views.
-- **How each payload, style and result looks is decided once, in `TerminalReporter`**
-  (`packages/sous-plugin-cli/src/terminal/render-entry.ts`): aligned label and value blocks with
-  details muted, the responsive table renderer (`packages/sous-plugin-cli/src/views/table.ts`: per-column
-  priorities, identifiers truncate, prose wraps, a non-TTY run never drops a column), one wrap
-  (`wrapText`), the real `BULLET` character, and one palette (`packages/sous-plugin-cli/src/views/style.ts`):
-  a warning is bright yellow with its sharpest words in orange; a note (an explanation that is
-  neither warning nor error) is bright teal; an error is bright red and is always preceded by the
-  literal `Error: `, so it stays findable with color off.
-- **A result goes to stdout; everything else goes to stderr** (progress, warnings, errors, the
-  banner, questions), at every level. Under `--json`, stdout holds only `outputs.toPlain()`. The
-  user, 2026-10-30: "I'm fine following the convention that results go to stdout and everything
-  else goes to stderr."
-- **Prefer a list over a paragraph.** Facts belong in a key and value list with one short sentence
-  after it, not in a sentence with the facts buried inside it.
-- **A question has room around it**: two blank lines above the "Question N of M" header, and two
-  blank lines under the input line, so a question never sits on the terminal's last row
-  (`TerminalPrompter`, `packages/sous-plugin-cli/src/terminal-prompter.ts`). The keys a prompt answers to
-  are named by a legend under the input line, in the style `@inquirer/select` uses
-  (`↑↓ navigate • ⏎ select`); never a bracketed hint above it.
+Load `about-sous-cli-conventions` before changing a command, flag, prompt, output or reference
+argument. The rules most often broken: help is one sentence naming exactly its thing; names read
+like speech, and one fixed choice gets one switch (`--move-includes`, never an enum flag); a
+result goes to stdout and everything else to stderr; never prompt without a terminal; where the
+code already holds a mechanism, use it instead of building a second one.
 
 ## Tests
 
