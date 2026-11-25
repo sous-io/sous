@@ -18,7 +18,8 @@ set -euo pipefail
 # either rebuilt below (node_modules, dist, the agent files) or personal to one checkout.
 COPY_FROM_MAIN_CHECKOUT=(
   # The machine's answers to sous variables (GitHub login, branch prefix, task file folder).
-  # `sous build` cannot ask for them without a terminal, so without this file the build fails.
+  # Without this file `sous build` still succeeds, but it only warns about the unanswered
+  # variables and leaves them empty in the compiled skills.
   ".sous/.env.local"
 )
 
