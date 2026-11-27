@@ -52,12 +52,31 @@ export function compilationTargetId(target: Pick<MemoryTargetEntity, "id">): str
  * written in place.
  *
  * ```ts
- * defaultFormat([{ path: "/store/a/one/memories/m.md" }, { path: "/store/b/two/memories/n.md" }]);
+ * defaultFormat([{ path: "/store/a/one/memories/m.md" }, { path: "/store/b/two/memories/n.md" }], globs.toPosix);
  * // -> "@/store/a/one/memories/m.md\n\n@/store/b/two/memories/n.md"
  * ```
  */
-export function defaultFormat(memories: readonly Pick<Memory, "path" | "content">[]): string {
-    return memories.map((memory) => (memory.content === undefined ? `@${memory.path}` : inlineMemory(memory.content, memory.path))).join("\n\n");
+export function defaultFormat(memories: readonly Pick<Memory, "path" | "content">[], toPosix: ToPosix): string {
+    return memories
+        .map((memory) => (memory.content === undefined ? includeReference(memory.path, toPosix) : inlineMemory(memory.content, memory.path)))
+        .join("\n\n");
+}
+
+/** Writes a path with `/` separators: `host.globs.toPosix`. */
+export type ToPosix = (file: string) => string;
+
+/**
+ * A file as an `@` reference that the compiler and Claude Code read whole on every platform: `/`
+ * separators, and each space escaped as `\ `. Both read a reference only up to the first space or
+ * the first `\` that does not escape a space, so `@D:\p\MEMORIES.tpl.md` would name only `D:`.
+ *
+ * ```ts
+ * includeReference("D:\\Projects\\hub\\MEMORIES.tpl.md", globs.toPosix); // on Windows: "@D:/Projects/hub/MEMORIES.tpl.md"
+ * includeReference("/home/jane doe/m.md", globs.toPosix);               // "@/home/jane\\ doe/m.md"
+ * ```
+ */
+export function includeReference(file: string, toPosix: ToPosix): string {
+    return `@${toPosix(file).replaceAll(" ", "\\ ")}`;
 }
 
 /**
@@ -121,12 +140,15 @@ export interface MemoriesSource {
     readonly selected: readonly Memory[];
     /** Whether a file exists. Default: `fs.existsSync`. */
     readonly exists?: (file: string) => boolean;
+    /** Writes a path with `/` separators: `host.globs.toPosix`. */
+    readonly toPosix: ToPosix;
 }
 
 /**
  * The template content for one memory target, or `undefined` when nothing could be in it (no
  * source file, no file to prepend, no project memories and no recipe memories). Every path is
- * written absolute, as found on disk, so the include reads the file this check found.
+ * written absolute, as found on disk, so the include reads the file this check found, in the form
+ * `includeReference` gives (`/` separators on Windows too).
  *
  * ```ts
  * // project /p, no .sous/MEMORIES.tpl.md; .sous/memories/project.tpl.md; recipe memory /store/a/one/memories/m.md
@@ -145,19 +167,23 @@ export function memoriesContent(target: Pick<MemoryTargetEntity, "prependWith">,
         const file = diskPath(target.prependWith, source.project);
 
         if (file !== undefined && exists(file)) {
-            parts.push(`@${file}`);
+            parts.push(includeReference(file, source.toPosix));
         }
     }
 
-    if (exists(path.join(source.project.sousDir, MEMORIES_SOURCE))) {
-        parts.push(`@${path.join(source.project.sousDir, MEMORIES_SOURCE)}`);
+    const memoriesSource = path.join(source.project.sousDir, MEMORIES_SOURCE);
+
+    if (exists(memoriesSource)) {
+        parts.push(includeReference(memoriesSource, source.toPosix));
     } else {
-        if (holdsMarkdown(path.join(source.project.sousDir, PROJECT_MEMORIES_DIR))) {
-            parts.push(`@${path.join(source.project.sousDir, PROJECT_MEMORIES_DIR)}/**/*.md`);
+        const projectMemories = path.join(source.project.sousDir, PROJECT_MEMORIES_DIR);
+
+        if (holdsMarkdown(projectMemories)) {
+            parts.push(`@${source.toPosix(projectMemories)}/**/*.md`);
         }
 
         if (source.selected.length > 0) {
-            parts.push(defaultFormat(source.selected));
+            parts.push(defaultFormat(source.selected, source.toPosix));
         }
     }
 
@@ -247,7 +273,7 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
             });
 
             for (const target of targets) {
-                const compilation = compilationTargetFor(target, { project, selected }, plugin);
+                const compilation = compilationTargetFor(target, { project, selected, toPosix: globs.toPosix }, plugin);
 
                 if (compilation) {
                     config.atPath(["compilation", "targets"]).appendValue(compilation);
