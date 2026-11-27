@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/sous-plugin-migrations",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Migrations: the steps that bring a project's files in line with a newer version of sous, and the notice that some are waiting.",
   "type": "module",
   "license": "Apache-2.0",
