@@ -22,6 +22,21 @@ describe("TerminalPrompter", () => {
         await expect(p.askChoice({ message: "Which?", choices: [{ label: "a", value: 1 }] })).rejects.toThrow(NonInteractiveError);
     });
 
+    /** Each question starts with a blank line, so it stands apart from the output above it; a re-ask does not. */
+    it("should write a blank line before each question, but not before a re-ask", async () => {
+        const value = prompter("main\n");
+        const choice = prompter("3\n1\n");
+        const confirm = prompter("maybe\ny\n");
+
+        await value.prompter.askValue({ message: "Name?" });
+        await choice.prompter.askChoice({ message: "Which?", choices: [{ label: "a", value: 1 }, { label: "b", value: 2 }] });
+        await confirm.prompter.confirm({ message: "Go?" });
+
+        expect(value.written.join("")).toBe("\nName? ");
+        expect(choice.written.join("")).toBe("\nWhich?\n  1. a\n  2. b\nPick a number: Pick a number from 1 to 2.\nPick a number: ");
+        expect(confirm.written.join("")).toBe("\nGo? [y/n] Answer yes or no.\nGo? [y/n] ");
+    });
+
     /** askValue returns the answer, or the default for an empty one, asking again while invalid. */
     it("should ask for a value, use the default, and ask again when invalid", async () => {
         expect(await prompter("main\n").prompter.askValue({ message: "Name?" })).toBe("main");
@@ -55,7 +70,7 @@ describe("TerminalPrompter", () => {
         stdin.write("abc1234\u007f\r");
 
         expect(await answer).toBe("abc123");
-        expect(written.join("")).toBe("What is the token? *******\b \b\n");
+        expect(written.join("")).toBe("\nWhat is the token? *******\b \b\n");
         expect(written.join("")).not.toContain("abc123");
         expect(written.join("")).not.toContain("hidden-default");
         expect(modes).toEqual([true, false]);
