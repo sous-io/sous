@@ -2083,3 +2083,9 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should write a skill excluded for every other harness into Claude Code's skills only" (`sous/test/integration/harness-only-targets.test.ts`): the project's config also holds the skills target `sous init` writes (no `id`), and the gated skill ships a `SKILL.tpl.md`, a reference and a script; the test expects all three in `.claude/skills/skplug/`.
   - **Why:** a target without an `id` was matched by its place among all targets, so the project's own target could take one of the gated skill's files for itself.
 - **New** "should match a target without an id only with a target without an id" (`sous-lib-core/src/config/harness-merge.spec.ts`).
+
+### Memory include lines are written with `/` separators (sous-plugin-memories; gh-305)
+
+- **Changed** "should write a recipe's inline memory in place" (`sous-plugin-memories/test/plugin.test.ts`) and "should list inline content and write it in place" (`sous-plugin-memories/src/listing.spec.ts`): `defaultFormat` takes the function that writes a path with `/` separators (`host.globs.toPosix`), so both pass one.
+  - **Why:** on Windows the memories plugin wrote `@D:\...\MEMORIES.tpl.md`, which the compiler reads only up to the first `\`, so the memories source was never compiled.
+- **New** in `sous-plugin-memories/src/targets.spec.ts`: "should write a Windows path with forward slashes", "should escape each space", "should write the project's source with forward slashes on Windows" and "should write each recipe memory with forward slashes and escaped spaces on Windows".

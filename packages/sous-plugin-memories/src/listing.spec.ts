@@ -63,7 +63,7 @@ describe("inline memories", () => {
         const { selected } = select([one]);
 
         expect(selected.map((memory) => [memory.name, memory.content])).toEqual([["brief.md", "Be brief."]]);
-        expect(defaultFormat(selected)).toBe("{% raw %}Be brief.{% endraw %}");
+        expect(defaultFormat(selected, standInGlobs.toPosix)).toBe("{% raw %}Be brief.{% endraw %}");
     });
 });
 

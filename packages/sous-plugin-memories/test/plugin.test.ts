@@ -113,7 +113,7 @@ describe("memory targets", () => {
      * { $inline: "Be brief.", path: "memories/brief.md" } -> "{% raw %}Be brief.{% endraw %}"
      */
     it("should write a recipe's inline memory in place", () => {
-        expect(defaultFormat([{ path: "/store/a/one/memories/brief.md", content: "Be brief." }])).toBe("{% raw %}Be brief.{% endraw %}");
+        expect(defaultFormat([{ path: "/store/a/one/memories/brief.md", content: "Be brief." }], (file) => file)).toBe("{% raw %}Be brief.{% endraw %}");
     });
 
     /**

@@ -401,7 +401,7 @@ function finalPlace(scan: ImportScan, fates: Map<string, IncludeFate>, file: str
 
 /** A path for Claude Code, read from the compiled file at the project root. */
 function fromRoot(root: string, file: string): string {
-    return inside(root, file) ? posix(path.relative(root, file)) : file;
+    return posix(inside(root, file) ? path.relative(root, file) : file);
 }
 
 /** Whether sous would read a line as a malformed include, which fails the build. */
@@ -456,7 +456,7 @@ export function rewriteReferences(
             if (isMarkdown(reference.token)) {
                 const place = finalPlace(scan, fates, target);
                 const moved = place !== target;
-                const rewritten = moved ? posix(path.relative(path.dirname(dest), place)) : inside(scan.root, target) ? `#project/${posix(path.relative(scan.root, target))}` : target;
+                const rewritten = moved ? posix(path.relative(path.dirname(dest), place)) : inside(scan.root, target) ? `#project/${posix(path.relative(scan.root, target))}` : posix(target);
 
                 lines[reference.line] = `@${rewritten}`;
                 continue;
