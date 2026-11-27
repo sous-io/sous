@@ -32,6 +32,7 @@ export class TerminalPrompter implements Prompter {
 
     async askValue(question: ValueQuestion): Promise<string> {
         this.refuseUnlessInteractive(question);
+        this.setApart();
 
         for (;;) {
             const suffix = question.default !== undefined && question.secret !== true ? ` (${question.default})` : "";
@@ -51,6 +52,7 @@ export class TerminalPrompter implements Prompter {
 
         const lines = question.choices.map((choice, index) => `  ${index + 1}. ${choice.label}${choice.description ? `: ${choice.description}` : ""}`);
 
+        this.setApart();
         this.output.write(`${question.message}\n${lines.join("\n")}\n`);
 
         for (;;) {
@@ -71,6 +73,8 @@ export class TerminalPrompter implements Prompter {
         this.refuseUnlessInteractive(question);
 
         const hint = question.default === true ? "[Y/n]" : question.default === false ? "[y/N]" : "[y/n]";
+
+        this.setApart();
 
         for (;;) {
             const answer = (await this.ask(`${question.message} ${hint} `, question)).trim().toLowerCase();
@@ -95,6 +99,14 @@ export class TerminalPrompter implements Prompter {
         if (!this.interactive) {
             throw new NonInteractiveError(question.message, question.answeredBy, this.reason === undefined ? {} : { details: [`Why: ${this.reason}.`] });
         }
+    }
+
+    /**
+     * Writes a blank line before a question, so it stands apart from the output above it, as the CLI
+     * did before the refactor. A re-ask after an invalid answer gets none: it follows its own hint.
+     */
+    private setApart(): void {
+        this.output.write("\n");
     }
 
     /** Writes the prompt and waits for the next line; one reader serves every question. */

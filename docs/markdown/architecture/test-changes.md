@@ -2089,3 +2089,9 @@ All in `packages/sous-plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022
 - **Changed** "should write a recipe's inline memory in place" (`sous-plugin-memories/test/plugin.test.ts`) and "should list inline content and write it in place" (`sous-plugin-memories/src/listing.spec.ts`): `defaultFormat` takes the function that writes a path with `/` separators (`host.globs.toPosix`), so both pass one.
   - **Why:** on Windows the memories plugin wrote `@D:\...\MEMORIES.tpl.md`, which the compiler reads only up to the first `\`, so the memories source was never compiled.
 - **New** in `sous-plugin-memories/src/targets.spec.ts`: "should write a Windows path with forward slashes", "should escape each space", "should write the project's source with forward slashes on Windows" and "should write each recipe memory with forward slashes and escaped spaces on Windows".
+
+### Each question starts with a blank line (sous-plugin-cli; gh-307)
+
+- **Changed** "should mask the value for a secret" (`sous-plugin-cli/src/terminal-prompter.spec.ts`): the written output starts with a blank line.
+  - **Why:** every question now starts with a blank line, so it stands apart from the output above it, as it did before the refactor.
+- **New** "should write a blank line before each question, but not before a re-ask" (`sous-plugin-cli/src/terminal-prompter.spec.ts`).
